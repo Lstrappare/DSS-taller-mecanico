@@ -29,13 +29,13 @@ struct PersonalView: View {
         VStack(alignment: .leading) {
             // --- Cabecera ---
             HStack {
-                Text("Staff Management")
+                Text("Gestión de personal")
                     .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
                 Spacer()
                 Button {
                     modalMode = .add // Abre el modal en modo "Add"
                 } label: {
-                    Label("Add Staff", systemImage: "plus")
+                    Label("Añadir personal", systemImage: "plus")
                         .font(.headline).padding(.vertical, 10).padding(.horizontal)
                         .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
                 }
@@ -43,7 +43,7 @@ struct PersonalView: View {
             }
             .padding(.bottom, 20)
             
-            Text("Manage your team members")
+            Text("Gestiona tu equipo de trabajo del taller.")
                 .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
             
             // --- Lista del Personal (Actualizada) ---
@@ -67,12 +67,27 @@ struct PersonalView: View {
                             }
                             Spacer()
                             VStack(alignment: .trailing, spacing: 8) {
-                                                            // Muestra Disponibilidad y Horario
-                                                            Text(mecanico.estaDisponible ? "Disponible" : "Ocupado")
-                                                                .font(.headline)
-                                                                .foregroundColor(mecanico.estaDisponible ? .green : .red)
                                                             
-                                                            // ¡LÍNEA CORREGIDA!
+                                                            // --- LÓGICA DE 3 ESTADOS ---
+                                                            if mecanico.estaEnHorario {
+                                                                // Si está en turno, revisa si está ocupado
+                                                                if mecanico.estaDisponible {
+                                                                    Text("Disponible")
+                                                                        .font(.headline)
+                                                                        .foregroundColor(.green)
+                                                                } else {
+                                                                    Text("Ocupado (En Servicio)")
+                                                                        .font(.headline)
+                                                                        .foregroundColor(.red)
+                                                                }
+                                                            } else {
+                                                                // Si no está en turno, no importa nada más
+                                                                Text("Fuera de Turno")
+                                                                    .font(.headline)
+                                                                    .foregroundColor(.gray)
+                                                            }
+                                                            // --- FIN DE LA LÓGICA ---
+                                                            
                                                             Text("Turno: \(mecanico.horaEntrada) - \(mecanico.horaSalida)")
                                                                 .font(.body).foregroundColor(.gray)
                                                         }
@@ -204,13 +219,13 @@ fileprivate struct PersonalFormView: View {
                     guardarCambios()
                 }
                 .buttonStyle(.plain).padding()
-                .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
+                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(8)
             }
             .padding(.top, 30)
         }
         .padding(40)
-        .frame(minWidth: 500, minHeight: 600)
         .background(Color("MercedesBackground"))
+        .cornerRadius(15)
         .preferredColorScheme(.dark)
         .textFieldStyle(PlainTextFieldStyle())
         .padding()
