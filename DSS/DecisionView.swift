@@ -2,183 +2,133 @@ import SwiftUI
 import SwiftData
 import LocalAuthentication
 
+// --- Modelo para la Recomendación (Resultado del "Cerebro") ---
+// Usamos esto para guardar el resultado de la IA antes de aceptarlo
+struct RecomendacionDSS {
+    var servicio: Servicio
+    var mecanicoRecomendado: Personal?
+    var costoTotalProductos: Double
+    var rentabilidadEstimada: Double
+    var advertencia: String? // Ej. "No hay mecánicos disponibles"
+}
+
+
+// --- VISTA PRINCIPAL (EL "CEREBRO") ---
 struct DecisionView: View {
     @Environment(\.modelContext) private var modelContext
     
-    // --- Variables de AppStorage ---
-    @AppStorage("user_password") private var userPassword = ""
-    @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
+    // --- Conexión a la Navegación (¡Arregla el error!) ---
+    @Binding var seleccion: Vista?
     
-    // --- Estados para la IA (Simulada) ---
-    @State private var queryUsuario: String = ""
+    // --- Consultas a la Base de Datos ---
+    @Query private var servicios: [Servicio]
+    @Query private var personal: [Personal]
+    @Query private var productos: [Producto]
+
+    // --- States de la UI ---
+    @State private var servicioSeleccionadoID: Servicio.ID?
     @State private var estaCargando = false
-    @State private var decisionRecomendada: String?
-    @State private var razonamiento: String?
-
-    // --- Estados para la Decisión Manual ---
-    @State private var isCustomDecisionUnlocked = false
-    @State private var customDecisionText = ""
-
-    // --- Estados para el Modal de Autenticación ---
-    @State private var showingAuthModal = false
-    @State private var passwordAttempt = ""
-    @State private var authError = ""
+    
+    // Aquí guardamos el resultado de la IA
+    @State private var recomendacion: RecomendacionDSS?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 25) {
                 
-                // --- 1. Cabecera (Como el mockup) ---
+                // --- 1. Cabecera ---
                 Text("Toma de Decisiones")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
+                Text("Genera recomendaciones de asignación basadas en tus datos")
+                    .font(.title3).foregroundColor(.gray)
                 
-                Text("Recomendaciones e información de negocio impulsadas por IA")
-                    .font(.title3)
-                    .foregroundColor(.gray)
-                
-                // --- 2. Tarjeta de Consulta (Como el mockup) ---
+                // --- 2. Tarjeta de Consulta (¡NUEVO PICKER!) ---
                 VStack(alignment: .leading, spacing: 15) {
                     HStack {
                         Image(systemName: "wand.and.stars")
-                            .font(.title2)
-                            .foregroundColor(Color("MercedesPetrolGreen"))
-                        Text("¿Qué quieres hacer hoy?")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
+                            .font(.title2).foregroundColor(Color("MercedesPetrolGreen"))
+                        Text("¿Qué servicio quieres asignar?")
+                            .font(.title2).fontWeight(.bold).foregroundColor(.white)
                     }
                     
-                    Text("Describe tu desafío o meta de negocio y obtén recomendaciones basadas en datos")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
+                    Text("Selecciona un servicio de tu catálogo para encontrar al mejor mecánico disponible y calcular costos.")
+                        .font(.subheadline).foregroundColor(.gray)
                     
-                    Text("Tu Consulta")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding(.top, 10)
-                    
-                    ZStack(alignment: .topLeading) {
-                        TextEditor(text: $queryUsuario)
-                            .frame(minHeight: 150)
-                            .font(.body)
-                            .background(Color.clear)
-                            .cornerRadius(10)
-                        
-                        if queryUsuario.isEmpty {
-                            Text("ej. ¿Debo contratar más personal? ¿Qué productos debo almacenar? ¿Cómo puedo incrementar ingresos?")
-                                .font(.body)
-                                .foregroundColor(.gray.opacity(0.6))
-                                .padding(.top, 8)
-                                .padding(.leading, 5)
-                                .allowsHitTesting(false)
+                    // --- El Picker de Servicios ---
+                    Picker("Selecciona un Servicio", selection: $servicioSeleccionadoID) {
+                        Text("Selecciona un servicio...").tag(nil as Servicio.ID?)
+                        ForEach(servicios) { servicio in
+                            Text(servicio.nombre).tag(servicio.id as Servicio.ID?)
                         }
                     }
+                    .pickerStyle(.menu) // Estilo desplegable
+                    .padding(.top, 10)
                 }
                 .padding(20)
                 .background(Color("MercedesCard"))
                 .cornerRadius(15)
 
                 
-                // --- 3. Botones (Como el mockup) ---
+                // --- 3. Botones ---
                 HStack(spacing: 15) {
+                    // Botón de Generar Reporte
                     Button {
-                        generarDecision()
+                        generarRecomendacion()
                     } label: {
                         Label("Generar Reporte", systemImage: "doc.text.fill")
-                            .font(.headline)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity)
-                            .background(Color("MercedesPetrolGreen"))
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
+                            .font(.headline).padding(.vertical, 10).frame(maxWidth: .infinity)
+                            .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
                     }
                     .buttonStyle(.plain)
-                    
-                    Button {
-                        showingAuthModal = true
-                    } label: {
-                        Label("Escribir Decisión Personalizada", systemImage: "pencil")
-                            .font(.headline)
-                            .padding(.vertical, 10)
-                            .frame(maxWidth: .infinity)
-                            .background(Color("MercedesCard"))
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                    }
-                    .buttonStyle(.plain)
+                    // Deshabilitado si no hay servicio seleccionado
+                    .disabled(servicioSeleccionadoID == nil || estaCargando)
                 }
 
                 
-                // --- 4. Área de Resultados de IA (si existen) ---
+                // --- 4. Área de Resultados (¡AHORA ES REAL!) ---
                 if estaCargando {
                     ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                } else if let decision = decisionRecomendada, let razon = razonamiento {
+                        .frame(maxWidth: .infinity).padding()
+                } else if let rec = recomendacion {
+                    // ¡Mostramos el resultado del "Cerebro"!
                     VStack(alignment: .leading, spacing: 15) {
-                        Text("Recommended Decision").font(.title2).fontWeight(.bold)
-                        Text("Best Decision:").font(.headline).foregroundColor(Color("MercedesPetrolGreen"))
-                        Text(decision)
-                        Text("Reasoning:").font(.headline).foregroundColor(Color("MercedesPetrolGreen"))
-                        Text(razon)
+                        Text("Recomendación de Asignación")
+                            .font(.title2).fontWeight(.bold)
                         
+                        // Advertencia (si algo salió mal)
+                        if let advertencia = rec.advertencia {
+                            Text("⚠️ ADVERTENCIA: \(advertencia)")
+                                .font(.headline).foregroundColor(.yellow)
+                        }
+                        
+                        // Mecánico
+                        Text("Mecánico Recomendado:").font(.headline).foregroundColor(Color("MercedesPetrolGreen"))
+                        Text(rec.mecanicoRecomendado?.nombre ?? "Ninguno Disponible")
+                        
+                        // Costos
+                        Text("Costo de Piezas (Inventario):").font(.headline).foregroundColor(Color("MercedesPetrolGreen"))
+                        Text("$\(rec.costoTotalProductos, specifier: "%.2f")")
+                        
+                        // Rentabilidad
+                        Text("Rentabilidad Estimada (Mano de obra):").font(.headline).foregroundColor(Color("MercedesPetrolGreen"))
+                        Text("$\(rec.rentabilidadEstimada, specifier: "%.2f")")
+                        
+                        // El "Gatillo"
                         Button {
-                            guardarDecision(titulo: decision, razon: razon, query: queryUsuario)
+                            aceptarDecision(rec)
                         } label: {
-                            Label("Accept & Record Decision", systemImage: "checkmark.circle.fill")
-                                .font(.headline)
-                                .padding(.vertical, 10)
-                                .frame(maxWidth: .infinity)
-                                .background(Color.gray.opacity(0.4))
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
+                            Label("Aceptar y Empezar Trabajo", systemImage: "checkmark.circle.fill")
+                                .font(.headline).padding(.vertical, 10).frame(maxWidth: .infinity)
+                                .background(Color.gray.opacity(0.4)).foregroundColor(.white).cornerRadius(8)
                         }
                         .buttonStyle(.plain)
                         .padding(.top)
+                        // Deshabilitar si no se pudo recomendar un mecánico
+                        .disabled(rec.mecanicoRecomendado == nil)
                     }
                     .padding(20)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color("MercedesCard"))
-                    .cornerRadius(10)
-                }
-                
-                // --- 5. Área de Decisión Manual (si está desbloqueada) ---
-                if isCustomDecisionUnlocked {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Write Your Own Decision")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        
-                        Text("Debe de ser lo más específico posible, ya que esta información será reutilizada para futuras decisiones.")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                            .italic()
-                            .padding(.bottom, 5)
-
-                        TextEditor(text: $customDecisionText)
-                            .frame(minHeight: 150)
-                            .font(.body)
-                            .background(Color("MercedesCard"))
-                            .cornerRadius(10)
-                        
-                        Button {
-                            guardarDecision(titulo: "Decisión Manual", razon: customDecisionText, query: "N/A (Manual)")
-                        } label: {
-                            Label("Record This Decision", systemImage: "square.and.arrow.down")
-                                .font(.headline)
-                                .padding(.vertical, 10)
-                                .frame(maxWidth: .infinity)
-                                .background(Color("MercedesPetrolGreen"))
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(20)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color("MercedesCard").opacity(0.5))
                     .cornerRadius(10)
                 }
                 
@@ -186,145 +136,119 @@ struct DecisionView: View {
             }
             .padding(30)
         }
-        // --- 6. El Modal de Autenticación ---
-        .sheet(isPresented: $showingAuthModal) {
-            authModalView(isTouchIDEnabled: isTouchIDEnabled)
-        }
+        // Ya no necesitamos la lógica de "Escribir Decisión Personalizada" aquí
+        // (La quitamos para simplificar este flujo)
     }
     
-    // --- Vista para el Modal de Autenticación ---
-    @ViewBuilder
-    func authModalView(isTouchIDEnabled: Bool) -> some View {
-        ZStack {
-            Color("MercedesBackground").ignoresSafeArea()
-            
-            VStack(spacing: 20) {
-                Text("Verificación Requerida")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                
-                Text("Autoriza para registrar una decisión manual.")
-                    .font(.title3)
-                    .foregroundColor(.gray)
-                    .padding(.bottom)
-                
-                // --- ESTE ES EL BLOQUE CORRECTO ---
-                if isTouchIDEnabled {
-                    Button {
-                        Task { await authenticateWithTouchID() }
-                    } label: {
-                        Label("Usar Huella (Touch ID)", systemImage: "touchid")
-                            .font(.headline).padding().frame(maxWidth: .infinity)
-                            .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
-                    }.buttonStyle(.plain)
-                        
-                    Text("o").foregroundColor(.gray)
-                }
-                
-                // --- EL BLOQUE DUPLICADO FUE ELIMINADO ---
-                
-                // Opción 2: Contraseña
-                Text("Usa la contraseña con la que te registraste:")
-                    .font(.headline)
-                
-                SecureField("Contraseña", text: $passwordAttempt)
-                    .padding(12)
-                    .background(Color("MercedesCard"))
-                    .cornerRadius(8)
-                
-                if !authError.isEmpty {
-                    Text(authError)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                }
-                
-                Button {
-                    authenticateWithPassword()
-                } label: {
-                    Label("Autorizar con Contraseña", systemImage: "lock.fill")
-                        .font(.headline)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.gray.opacity(0.4))
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(40)
-        }
-        .frame(minWidth: 500, minHeight: 450)
-        .preferredColorScheme(.dark)
-        .onAppear {
-            authError = ""
-            passwordAttempt = ""
-        }
-    }
     
-    // --- Lógica de la Vista ---
+    // --- LÓGICA DEL "CEREBRO" ---
     
-    func generarDecision() {
-        isCustomDecisionUnlocked = false
-        decisionRecomendada = nil
-        razonamiento = nil
-        estaCargando = true
+    func generarRecomendacion() {
+        guard let servicioID = servicioSeleccionadoID else { return }
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            decisionRecomendada = "Invertir en la nueva máquina de diagnóstico."
-            razonamiento = "Basado en el análisis de costos, la máquina de $80,000 reduce el tiempo de inspección a la mitad. Esto permite duplicar la capacidad de diagnóstico."
+        // 1. Encuentra el Servicio (la "receta")
+        guard let servicio = servicios.first(where: { $0.id == servicioID }) else {
+            print("Error: No se encontró el servicio")
+            return
+        }
+        
+        estaCargando = true
+        recomendacion = nil
+        
+        // Simulamos una pequeña carga
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            
+            // --- LÓGICA DEL DSS ---
+            
+            // 2. Encuentra Candidatos (Personal)
+            let candidatos = personal.filter { mec in
+                            mec.estaDisponible &&      // ¿No está en otro servicio?
+                            mec.estaEnHorario &&       // ¿Está EN TURNO ahora mismo? (¡TU IDEA!)
+                            mec.especialidades.contains(servicio.especialidadRequerida) && // ¿Sabe hacerlo?
+                            mec.nivelHabilidad.rawValue >= servicio.nivelMinimoRequerido.rawValue // ¿Tiene el nivel?
+                        }
+            
+            // 3. Elige al mejor (por ahora, el primero que encuentre)
+            // (En V2, aquí elegirías por costo por hora o nivel)
+            let mecanicoElegido = candidatos.first
+            
+            // 4. Calcula Costos (Productos)
+            var costoTotalProductos: Double = 0.0
+            for nombreProducto in servicio.productosRequeridos {
+                if let producto = productos.first(where: { $0.nombre == nombreProducto }) {
+                    costoTotalProductos += producto.costo
+                }
+            }
+            
+            // 5. Calcula Rentabilidad
+            let rentabilidad = servicio.precioAlCliente // (Por ahora, solo la mano de obra)
+            
+            // 6. Prepara la recomendación
+            var advertencia: String? = nil
+            if mecanicoElegido == nil {
+                advertencia = "No se encontraron mecánicos disponibles que cumplan los requisitos."
+            }
+            if costoTotalProductos == 0 && !servicio.productosRequeridos.isEmpty {
+                advertencia = (advertencia ?? "") + " No se encontraron algunos productos en el inventario."
+            }
+            
+            recomendacion = RecomendacionDSS(
+                servicio: servicio,
+                mecanicoRecomendado: mecanicoElegido,
+                costoTotalProductos: costoTotalProductos,
+                rentabilidadEstimada: rentabilidad,
+                advertencia: advertencia
+            )
+            
             estaCargando = false
         }
     }
     
-    // Nueva Lógica de Autenticación
     
-    func authenticateWithTouchID() async {
-        let context = LAContext()
-        let reason = "Autoriza con tu huella para registrar una decisión manual."
-
-        do {
-            if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
-                let success = try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
-                
-                if success {
-                    await MainActor.run {
-                        isCustomDecisionUnlocked = true
-                        showingAuthModal = false
-                        decisionRecomendada = nil
-                        razonamiento = nil
-                        queryUsuario = ""
-                    }
+    // --- LÓGICA DEL "GATILLO" ---
+    
+    func aceptarDecision(_ rec: RecomendacionDSS) {
+        guard let mecanico = rec.mecanicoRecomendado else { return }
+        
+        // 1. Crear el "Ticket" (ServicioEnProceso)
+        let nuevoServicio = ServicioEnProceso(
+            nombreServicio: rec.servicio.nombre,
+            dniMecanicoAsignado: mecanico.dni,
+            nombreMecanicoAsignado: mecanico.nombre,
+            horaInicio: Date(),
+            duracionHoras: rec.servicio.duracionHoras,
+            productosConsumidos: rec.servicio.productosRequeridos
+        )
+        modelContext.insert(nuevoServicio)
+        
+        // 2. Ocupar al Mecánico
+        mecanico.estaDisponible = false
+        
+        // 3. Restar del Inventario
+        for nombreProducto in rec.servicio.productosRequeridos {
+            if let producto = productos.first(where: { $0.nombre == nombreProducto }) {
+                if producto.cantidad > 0 {
+                    producto.cantidad -= 1 // Resta 1 unidad
+                } else {
+                    print("Advertencia: Se usó \(producto.nombre) pero el stock ya era 0.")
                 }
             }
-        } catch {
-            await MainActor.run {
-                authError = "Huella no reconocida. Intenta con tu contraseña."
-            }
         }
-    }
-    
-    func authenticateWithPassword() {
-        if passwordAttempt == userPassword {
-            isCustomDecisionUnlocked = true
-            showingAuthModal = false
-            decisionRecomendada = nil
-            razonamiento = nil
-            queryUsuario = ""
-        } else {
-            authError = "Contraseña incorrecta. Intenta de nuevo."
-            passwordAttempt = ""
-        }
-    }
-    
-    func guardarDecision(titulo: String, razon: String, query: String) {
-        guard !titulo.isEmpty, !razon.isEmpty else { return }
-        let registro = DecisionRecord(fecha: Date(), titulo: titulo, razon: razon, queryUsuario: query)
+        
+        // 4. Guardar en el Historial de Decisiones
+        let registro = DecisionRecord(
+            fecha: Date(),
+            titulo: "Iniciando: \(rec.servicio.nombre)",
+            razon: "Asignado a \(mecanico.nombre). Costo piezas: $\(rec.costoTotalProductos)",
+            queryUsuario: "Asignación de Servicio"
+        )
         modelContext.insert(registro)
         
-        queryUsuario = ""
-        decisionRecomendada = nil
-        razonamiento = nil
-        customDecisionText = ""
-        isCustomDecisionUnlocked = false
+        // 5. Limpiar la UI y Navegar
+        recomendacion = nil
+        servicioSeleccionadoID = nil
+        
+        // ¡Navega a la nueva página!
+        seleccion = .serviciosEnProceso
     }
 }

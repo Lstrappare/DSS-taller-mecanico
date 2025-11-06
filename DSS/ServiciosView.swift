@@ -108,6 +108,8 @@ fileprivate struct ServicioFormView: View {
     @State private var nivelMinimoRequerido: NivelHabilidad = .aprendiz
     @State private var precioString = ""
     
+    @State private var duracionString = "1.0"
+    
     // State para el selector de productos
     @State private var productosSeleccionados: Set<String> = []
     
@@ -135,6 +137,7 @@ fileprivate struct ServicioFormView: View {
             _especialidadRequerida = State(initialValue: servicio.especialidadRequerida)
             _nivelMinimoRequerido = State(initialValue: servicio.nivelMinimoRequerido)
             _precioString = State(initialValue: "\(servicio.precioAlCliente)")
+            _duracionString = State(initialValue: "\(servicio.duracionHoras)")
             _productosSeleccionados = State(initialValue: Set(servicio.productosRequeridos))
         }
     }
@@ -147,7 +150,17 @@ fileprivate struct ServicioFormView: View {
             // --- Formulario ---
             TextField("Service Name (ej. Cambio de Frenos)", text: $nombre).disabled(servicioAEditar != nil)
             TextField("Descripción", text: $descripcion)
-            TextField("Precio al Cliente (Mano de Obra)", text: $precioString)
+            
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("Precio Mano de Obra").font(.caption).foregroundColor(.gray)
+                    TextField("Precio", text: $precioString)
+                }
+                VStack(alignment: .leading) {
+                    Text("Duración Estimada (Horas)").font(.caption).foregroundColor(.gray)
+                    TextField("ej. 2.5", text: $duracionString) // <-- CAMPO AÑADIDO
+                }
+            }
             
             Divider()
             
@@ -214,13 +227,13 @@ fileprivate struct ServicioFormView: View {
                     guardarCambios()
                 }
                 .buttonStyle(.plain).padding()
-                .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
+                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(8)
             }
             .padding(.top, 30)
         }
         .padding(40)
-        .frame(minWidth: 500, minHeight: 700) // Modal alto
         .background(Color("MercedesBackground"))
+        .cornerRadius(15)
         .preferredColorScheme(.dark)
         .textFieldStyle(PlainTextFieldStyle())
         .padding()
@@ -242,10 +255,14 @@ fileprivate struct ServicioFormView: View {
     // --- Lógica del Formulario ---
     
     func guardarCambios() {
-        guard let precio = Double(precioString), !nombre.isEmpty, !especialidadRequerida.isEmpty else {
-            print("Error: Campos inválidos")
-            return
-        }
+            // Validamos también la duración
+            guard let precio = Double(precioString),
+                  let duracion = Double(duracionString), // <-- VALIDACIÓN AÑADIDA
+                  !nombre.isEmpty,
+                  !especialidadRequerida.isEmpty else {
+                print("Error: Campos inválidos")
+                return
+            }
         
         let productosArray = Array(productosSeleccionados)
         
@@ -256,6 +273,7 @@ fileprivate struct ServicioFormView: View {
             servicio.nivelMinimoRequerido = nivelMinimoRequerido
             servicio.precioAlCliente = precio
             servicio.productosRequeridos = productosArray
+            servicio.duracionHoras = duracion
         } else {
             // MODO AÑADIR
             let nuevoServicio = Servicio(
@@ -264,7 +282,8 @@ fileprivate struct ServicioFormView: View {
                 especialidadRequerida: especialidadRequerida,
                 nivelMinimoRequerido: nivelMinimoRequerido,
                 productosRequeridos: productosArray,
-                precioAlCliente: precio
+                precioAlCliente: precio,
+                duracionHoras: duracion
             )
             modelContext.insert(nuevoServicio)
         }

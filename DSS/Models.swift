@@ -1,6 +1,10 @@
 import Foundation
 import SwiftData
 
+import Foundation
+import SwiftData
+
+// (El enum NivelHabilidad no cambia)
 enum NivelHabilidad: String, CaseIterable, Codable {
     case aprendiz = "Aprendiz"
     case tecnico = "Técnico"
@@ -9,33 +13,53 @@ enum NivelHabilidad: String, CaseIterable, Codable {
 
 @Model
 class Personal {
-    @Attribute(.unique) var dni: String // El DNI debe ser único
-    
+    @Attribute(.unique) var dni: String
     var nombre: String
     var email: String
     
-    // El horario que pediste.
-    var horario: String
+    // --- CAMBIO AQUÍ ---
+    // Reemplazamos 'horario: String' por esto:
+    var horaEntrada: Int // Formato 24h (ej. 9)
+    var horaSalida: Int  // Formato 24h (ej. 18)
     
-    // El Nivel de Habilidad que pediste.
     var nivelHabilidad: NivelHabilidad
-    
-    // "Especialidad" ahora es "Especialidades" (plural)
     var especialidades: [String]
     
-    // El estado de disponibilidad que ya tenías
+    // 'estaDisponible' ahora significa "No está ocupado en OTRO servicio"
     var estaDisponible: Bool
 
+    // --- NUEVA PROPIEDAD "INTELIGENTE" ---
+    // ¡Aquí está la magia que pediste!
+    // Esto se calcula en tiempo real.
+    var estaEnHorario: Bool {
+        let calendario = Calendar.current
+        let ahora = Date()
+        
+        // Obtiene el día de la semana (1=Domingo, 2=Lunes, ... 7=Sábado)
+        let diaDeSemana = calendario.component(.weekday, from: ahora)
+        // Obtiene la hora actual (0-23)
+        let horaActual = calendario.component(.hour, from: ahora)
+        
+        // Revisa si es un día laboral (Lunes a Sábado)
+        let esDiaLaboral = (2...7).contains(diaDeSemana)
+        // Revisa si la hora actual está DENTRO del turno
+        let esHoraLaboral = (horaEntrada..<horaSalida).contains(horaActual)
+        
+        return esDiaLaboral && esHoraLaboral
+    }
+
     init(nombre: String, email: String, dni: String,
-         horario: String = "L-V 9:00-18:00",
+         horaEntrada: Int = 9,  // Valor por defecto
+         horaSalida: Int = 18, // Valor por defecto
          nivelHabilidad: NivelHabilidad = .aprendiz,
-         especialidades: [String] = [], // Inicia vacío
+         especialidades: [String] = [],
          estaDisponible: Bool = true)
     {
         self.nombre = nombre
         self.email = email
         self.dni = dni
-        self.horario = horario
+        self.horaEntrada = horaEntrada // <-- CAMBIADO
+        self.horaSalida = horaSalida   // <-- CAMBIADO
         self.nivelHabilidad = nivelHabilidad
         self.especialidades = especialidades
         self.estaDisponible = estaDisponible
@@ -88,13 +112,17 @@ class Servicio {
     
     // --- Costos ---
     var precioAlCliente: Double // Cuánto le cobras al cliente por el servicio (sin incluir piezas)
+    
+    // -- Cuántas horas tarda el servicio --
+    var duracionHoras: Double
 
     init(nombre: String,
          descripcion: String = "",
          especialidadRequerida: String,
          nivelMinimoRequerido: NivelHabilidad = .aprendiz,
          productosRequeridos: [String] = [],
-         precioAlCliente: Double)
+         precioAlCliente: Double,
+         duracionHoras: Double = 1.0)
     {
         self.nombre = nombre
         self.descripcion = descripcion
@@ -102,6 +130,7 @@ class Servicio {
         self.nivelMinimoRequerido = nivelMinimoRequerido
         self.productosRequeridos = productosRequeridos
         self.precioAlCliente = precioAlCliente
+        self.duracionHoras = duracionHoras
     }
 }
 
@@ -120,3 +149,49 @@ class DecisionRecord {
     }
 }
 
+@Model
+class ServicioEnProceso {
+    @Attribute(.unique) var id: UUID // ID único para la orden de trabajo
+    
+    var nombreServicio: String
+    var dniMecanicoAsignado: String   // Para saber a quién liberar
+    var nombreMecanicoAsignado: String // Para mostrar en la UI
+    
+    var horaInicio: Date
+    var horaFinEstimada: Date
+    
+    // Guardamos qué productos se usaron, para un futuro historial
+    var productosConsumidos: [String]
+
+    init(nombreServicio: String,
+         dniMecanicoAsignado: String,
+         nombreMecanicoAsignado: String,
+         horaInicio: Date,
+         duracionHoras: Double, // Lo leeremos del 'Servicio'
+         productosConsumidos: [String])
+    {
+        self.id = UUID() // Genera un nuevo ID único
+        self.nombreServicio = nombreServicio
+        self.dniMecanicoAsignado = dniMecanicoAsignado
+        self.nombreMecanicoAsignado = nombreMecanicoAsignado
+        self.horaInicio = horaInicio
+        
+        // Calcula la hora de fin
+        let segundosDeDuracion = duracionHoras * 3600
+        self.horaFinEstimada = horaInicio.addingTimeInterval(segundosDeDuracion)
+        
+        self.productosConsumidos = productosConsumidos
+    }
+    
+    // --- Propiedades Calculadas (para la UI) ---
+    
+    // Devuelve cuántos segundos quedan
+    var tiempoRestanteSegundos: Double {
+        return max(0, horaFinEstimada.timeIntervalSinceNow)
+    }
+    
+    // Devuelve 'true' si el temporizador ya llegó a cero
+    var estaCompletado: Bool {
+        return tiempoRestanteSegundos == 0
+    }
+}

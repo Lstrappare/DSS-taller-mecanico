@@ -4,7 +4,7 @@ import SwiftData
 // 1. AÑADE .configuracion
 //    RENOMBRA .person/.inventario/.servicios
 enum Vista: Hashable { // Añadimos Hashable para el DisclosureGroup
-    case inicio, consultaNegocio, decisiones, historial
+    case inicio, consultaNegocio, decisiones, historial, serviciosEnProceso
     case operaciones_personal, operaciones_inventario, operaciones_servicios
     case configuracion
 }
@@ -18,19 +18,20 @@ struct ContentView: View {
         NavigationSplitView {
             List(selection: $seleccion) {
                 
-                Text("BUSINESS")
+                Text("TALLER")
                     .font(.caption).foregroundColor(.gray).padding(.top)
 
                 Label("Inicio", systemImage: "gauge.medium")
                     .tag(Vista.inicio)
                 
-                Label("Consulta de Negocio", systemImage: "bubble.left.and.bubble.right.fill")
-                    .tag(Vista.consultaNegocio)
-                
+                // DECISIONES
                 Text("DECISIONES")
                     .font(.caption).foregroundColor(.gray).padding(.top)
                 
-                Label("Toma de Decisiones", systemImage: "brain.head.profile")
+                Label("Asistente estratégico", systemImage: "bubble.left.and.bubble.right.fill")
+                    .tag(Vista.consultaNegocio)
+                
+                Label("Asignar servicios", systemImage: "brain.head.profile")
                     .tag(Vista.decisiones)
                 
                 Label("Historial de Decisiones", systemImage: "clock.arrow.circlepath")
@@ -46,6 +47,11 @@ struct ContentView: View {
                     
                     Label("Gestión de Servicios", systemImage: "wrench.and.screwdriver.fill")
                         .tag(Vista.operaciones_servicios)
+                
+                Text("PROCESOS")
+                    .font(.caption).foregroundColor(.gray).padding(.top)
+                Label("Servicios en Proceso", systemImage: "timer")
+                    .tag(Vista.serviciosEnProceso)
                 
                 Text("CUENTA")
                     .font(.caption).foregroundColor(.gray).padding(.top)
@@ -84,9 +90,13 @@ struct ContentView: View {
                     ServiciosView()
                 //
                 case .decisiones:
-                    DecisionView()
+                    DecisionView(seleccion: $seleccion)
+                    
                 case .historial:
                     HistorialView()
+                    
+                case .serviciosEnProceso: // <-- NUEVO CASE
+                    EnProcesoView()
                 // Caso de Configuración
                 case .configuracion:
                     AccountSettingsView()

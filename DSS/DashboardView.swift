@@ -32,7 +32,7 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 30) {
                 
                 // --- Cabecera de Bienvenida ---
-                Text("Bienvenido, a \(firstName)")
+                Text("Bienvenido, \(firstName)")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
@@ -199,7 +199,7 @@ struct QuickActionsCard: View {
             Button {
                 seleccion = .decisiones
             } label: {
-                Label("Tomar una Decisión", systemImage: "brain.head.profile")
+                Label("Asignar Servicios", systemImage: "brain.head.profile")
                     .font(.headline)
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
