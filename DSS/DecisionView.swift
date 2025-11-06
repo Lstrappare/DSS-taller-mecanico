@@ -37,9 +37,9 @@ struct DecisionView: View {
             VStack(alignment: .leading, spacing: 25) {
                 
                 // --- 1. Cabecera ---
-                Text("Toma de Decisiones")
+                Text("Asignar servicios")
                     .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
-                Text("Genera recomendaciones de asignación basadas en tus datos")
+                Text("Asigna a tu al mejor personal para ejecutar los servicios.")
                     .font(.title3).foregroundColor(.gray)
                 
                 // --- 2. Tarjeta de Consulta (¡NUEVO PICKER!) ---

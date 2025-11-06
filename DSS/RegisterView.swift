@@ -40,7 +40,7 @@ struct RegisterView: View {
             VStack(spacing: 20) {
                 Image(systemName: "car.fill").font(.system(size: 40)).foregroundColor(Color("MercedesPetrolGreen"))
                 Text("Sistema de soporte de deciciones").font(.title).fontWeight(.bold).foregroundColor(.white)
-                Text("Crear Cuenta de Administrador del taller.").font(.body).foregroundColor(.gray).padding(.bottom, 20)
+                Text("Crear Cuenta de Administrador del Taller.").font(.body).foregroundColor(.gray).padding(.bottom, 20)
                 
                 VStack(alignment: .leading, spacing: 15) {
                     TextField("Full Name", text: $fullName)

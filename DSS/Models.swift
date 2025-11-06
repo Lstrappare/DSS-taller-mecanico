@@ -195,3 +195,21 @@ class ServicioEnProceso {
         return tiempoRestanteSegundos == 0
     }
 }
+
+@Model
+class ChatMessage {
+    @Attribute(.unique) var id: UUID
+    var conversationID: UUID // Para agrupar los mensajes
+    
+    var date: Date
+    var content: String
+    var isFromUser: Bool
+    
+    init(conversationID: UUID, content: String, isFromUser: Bool) {
+        self.id = UUID()
+        self.conversationID = conversationID
+        self.date = Date()
+        self.content = content
+        self.isFromUser = isFromUser
+    }
+}

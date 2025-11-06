@@ -15,7 +15,8 @@ struct TallerDSSApp: App {
             Producto.self,
             Servicio.self,
             DecisionRecord.self,
-            ServicioEnProceso.self
+            ServicioEnProceso.self,
+            ChatMessage.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
