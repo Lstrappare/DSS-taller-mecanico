@@ -4,11 +4,22 @@ import SwiftData
 import Foundation
 import SwiftData
 
-// (El enum NivelHabilidad no cambia)
-enum NivelHabilidad: String, CaseIterable, Codable {
-    case aprendiz = "Aprendiz"
-    case tecnico = "Técnico"
-    case maestro = "Maestro Mecánico"
+enum Rol: String, CaseIterable, Codable {
+    case jefeDeTaller = "Jefe de Taller"
+    case adminFinanzas = "Administración / Finanzas"
+    case atencionCliente = "Atención al Cliente"
+    case mecanicoMotor = "Mecánico de Motor y Transmisión"
+    case mecanicoFrenos = "Mecánico de Frenos/Eléctrico"
+    case ayudante = "Ayudante"
+}
+
+// --- ¡NUEVO! ---
+// El nuevo estado de disponibilidad
+enum EstadoEmpleado: String, CaseIterable, Codable {
+    case disponible = "Disponible"
+    case ocupado = "Ocupado (En Servicio)"
+    case descanso = "En Descanso"
+    case ausente = "Ausente (Faltó)"
 }
 
 @Model
@@ -17,52 +28,52 @@ class Personal {
     var nombre: String
     var email: String
     
-    // --- CAMBIO AQUÍ ---
-    // Reemplazamos 'horario: String' por esto:
     var horaEntrada: Int // Formato 24h (ej. 9)
     var horaSalida: Int  // Formato 24h (ej. 18)
     
-    var nivelHabilidad: NivelHabilidad
+    // --- ¡CAMPOS ACTUALIZADOS! ---
+    var rol: Rol
+    var estado: EstadoEmpleado // Reemplaza a 'estaDisponible'
+    
     var especialidades: [String]
     
-    // 'estaDisponible' ahora significa "No está ocupado en OTRO servicio"
-    var estaDisponible: Bool
-
-    // --- NUEVA PROPIEDAD "INTELIGENTE" ---
-    // ¡Aquí está la magia que pediste!
-    // Esto se calcula en tiempo real.
+    // --- Lógica "Inteligente" ---
+    
+    // 1. Revisa si está en turno
     var estaEnHorario: Bool {
         let calendario = Calendar.current
         let ahora = Date()
-        
-        // Obtiene el día de la semana (1=Domingo, 2=Lunes, ... 7=Sábado)
         let diaDeSemana = calendario.component(.weekday, from: ahora)
-        // Obtiene la hora actual (0-23)
         let horaActual = calendario.component(.hour, from: ahora)
         
-        // Revisa si es un día laboral (Lunes a Sábado)
-        let esDiaLaboral = (2...7).contains(diaDeSemana)
-        // Revisa si la hora actual está DENTRO del turno
+        let esDiaLaboral = (2...7).contains(diaDeSemana) // Lunes a Sábado
         let esHoraLaboral = (horaEntrada..<horaSalida).contains(horaActual)
         
         return esDiaLaboral && esHoraLaboral
     }
+    
+    // 2. Propiedad final para el DSS
+    // (Esta es la que usará el "cerebro")
+    var isAsignable: Bool {
+        // Solo se puede asignar si está EN TURNO y su estado es "Disponible"
+        return estaEnHorario && (estado == .disponible)
+    }
 
     init(nombre: String, email: String, dni: String,
-         horaEntrada: Int = 9,  // Valor por defecto
-         horaSalida: Int = 18, // Valor por defecto
-         nivelHabilidad: NivelHabilidad = .aprendiz,
-         especialidades: [String] = [],
-         estaDisponible: Bool = true)
+         horaEntrada: Int = 9,
+         horaSalida: Int = 18,
+         rol: Rol = .ayudante, // Default
+         estado: EstadoEmpleado = .disponible, // Default
+         especialidades: [String] = [])
     {
         self.nombre = nombre
         self.email = email
         self.dni = dni
-        self.horaEntrada = horaEntrada // <-- CAMBIADO
-        self.horaSalida = horaSalida   // <-- CAMBIADO
-        self.nivelHabilidad = nivelHabilidad
+        self.horaEntrada = horaEntrada
+        self.horaSalida = horaSalida
+        self.rol = rol
+        self.estado = estado
         self.especialidades = especialidades
-        self.estaDisponible = estaDisponible
     }
 }
 
@@ -107,29 +118,27 @@ class Servicio {
     @Attribute(.unique) var nombre: String
     var descripcion: String
     
+    // --- ¡CAMPOS ACTUALIZADOS! ---
     var especialidadRequerida: String
-    var nivelMinimoRequerido: NivelHabilidad
+    var rolRequerido: Rol // Reemplaza a 'nivelMinimoRequerido'
     
-    // --- ¡ESTE ES EL CAMBIO! ---
-    // Reemplazamos [String] por [Ingrediente]
     var ingredientes: [Ingrediente]
-    
     var precioAlCliente: Double
     var duracionHoras: Double
 
     init(nombre: String,
          descripcion: String = "",
          especialidadRequerida: String,
-         nivelMinimoRequerido: NivelHabilidad = .aprendiz,
-         ingredientes: [Ingrediente] = [], // <-- CAMBIADO
+         rolRequerido: Rol, // <-- CAMBIADO
+         ingredientes: [Ingrediente] = [],
          precioAlCliente: Double,
          duracionHoras: Double = 1.0)
     {
         self.nombre = nombre
         self.descripcion = descripcion
         self.especialidadRequerida = especialidadRequerida
-        self.nivelMinimoRequerido = nivelMinimoRequerido
-        self.ingredientes = ingredientes // <-- CAMBIADO
+        self.rolRequerido = rolRequerido // <-- CAMBIADO
+        self.ingredientes = ingredientes
         self.precioAlCliente = precioAlCliente
         self.duracionHoras = duracionHoras
     }

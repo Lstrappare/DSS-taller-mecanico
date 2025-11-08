@@ -1,11 +1,3 @@
-//
-//  EnProcesoView.swift
-//  DSS
-//
-//  Created by Jose Cisneros on 05/11/25.
-//
-
-
 import SwiftUI
 import SwiftData
 internal import Combine
@@ -13,7 +5,7 @@ internal import Combine
 // --- VISTA PRINCIPAL DE "EN PROCESO" ---
 struct EnProcesoView: View {
     
-    // Consulta todos los servicios activos, ordenados por cuándo terminan
+    // Consulta todos los servicios activos
     @Query(sort: \ServicioEnProceso.horaFinEstimada) private var serviciosActivos: [ServicioEnProceso]
 
     var body: some View {
@@ -21,7 +13,7 @@ struct EnProcesoView: View {
             // --- Cabecera ---
             Text("Servicios en Proceso")
                 .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
-            Text("Monitor de trabajos activos en el taller.")
+            Text("Monitor de trabajos activos en el taller")
                 .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
             
             // --- Cuadrícula de Tickets ---
@@ -48,11 +40,11 @@ struct EnProcesoView: View {
 }
 
 
-// --- TARJETA DE "TICKET" INDIVIDUAL (CON TEMPORIZADOR) ---
+// --- TARJETA DE "TICKET" INDIVIDUAL (¡ACTUALIZADA!) ---
 struct ServicioEnProcesoCard: View {
     @Environment(\.modelContext) private var modelContext
     
-    // Necesitamos la lista de Personal para encontrar al mecánico y liberarlo
+    // Necesitamos la lista de Personal para encontrar al mecánico
     @Query private var personal: [Personal]
     
     let servicio: ServicioEnProceso
@@ -63,7 +55,6 @@ struct ServicioEnProcesoCard: View {
 
     init(servicio: ServicioEnProceso) {
         self.servicio = servicio
-        // Inicializa el estado con el tiempo restante del objeto
         _segundosRestantes = State(initialValue: servicio.tiempoRestanteSegundos)
     }
 
@@ -90,7 +81,7 @@ struct ServicioEnProcesoCard: View {
             }
             .frame(maxWidth: .infinity)
             
-            // --- Botón de "Terminar Ahora" (Tu idea) ---
+            // --- Botón de "Terminar Ahora" ---
             Button {
                 completarServicio()
             } label: {
@@ -119,25 +110,27 @@ struct ServicioEnProcesoCard: View {
         }
     }
     
-    // --- Lógica de Completar Servicio ---
+    // --- Lógica de Completar Servicio (¡ACTUALIZADA!) ---
     func completarServicio() {
-        // 1. Detener el temporizador para evitar trabajo extra
+        // 1. Detener el temporizador
         timer.upstream.connect().cancel()
         
         // 2. Buscar al mecánico por su DNI
         if let mecanico = personal.first(where: { $0.dni == servicio.dniMecanicoAsignado }) {
-            // 3. Liberarlo
-            mecanico.estaDisponible = true
+            
+            // 3. ¡AQUÍ ESTÁ LA CORRECCIÓN!
+            // Lo ponemos de vuelta en "Disponible"
+            mecanico.estado = .disponible
+            
         } else {
             print("Error: No se encontró al mecánico con DNI \(servicio.dniMecanicoAsignado)")
         }
         
         // 4. Borrar el "ticket" de la base de datos
-        // (Usamos un 'try?' para ignorar errores si el objeto ya fue borrado)
         try? modelContext.delete(servicio)
     }
 
-    // --- Helper para formatear 3600s en "01:00:00" ---
+    // --- Helper para formatear tiempo ---
     func formatearTiempo(segundos: Double) -> String {
         let horas = Int(segundos) / 3600
         let minutos = (Int(segundos) % 3600) / 60

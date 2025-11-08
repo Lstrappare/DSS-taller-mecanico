@@ -2,8 +2,7 @@ import SwiftUI
 import SwiftData
 import LocalAuthentication
 
-// --- AÑADE ESTA LÍNEA ---
-// Un ID constante y único para TODO el chat estratégico
+// ID Constante para el chat
 private let strategicConversationID = UUID()
 
 struct ConsultaView: View {
@@ -14,18 +13,14 @@ struct ConsultaView: View {
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
 
     // --- DATOS DEL TALLER (Para la IA) ---
-    // ¡La IA ahora puede "leer" todo esto!
     @Query private var personal: [Personal]
     @Query private var productos: [Producto]
     @Query private var servicios: [Servicio]
     @Query private var historial: [DecisionRecord]
 
     // --- States del Chat ---
-    @State private var conversationID = UUID() // ID para esta sesión de chat
-    
-    // El @Query se filtra por el ID de la conversación actual
+    @State private var conversationID: UUID
     @Query(sort: \ChatMessage.date) private var conversation: [ChatMessage]
-    
     @State private var inputText = ""
     @State private var estaCargandoIA = false
     
@@ -36,11 +31,9 @@ struct ConsultaView: View {
     @State private var passwordAttempt = ""
     @State private var authError = ""
     
-    // --- Constructor para el Filtro del @Query ---
+    // --- Constructor (Filtra por el ID Constante) ---
     init() {
-        // ¡Usa el ID constante que acabamos de crear!
         _conversationID = State(initialValue: strategicConversationID)
-
         _conversation = Query(
             filter: #Predicate { $0.conversationID == strategicConversationID },
             sort: \.date
@@ -54,14 +47,16 @@ struct ConsultaView: View {
             VStack(alignment: .leading) {
                 Text("Asistente Estratégico")
                     .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
-                Text("Chat con IA. El historial se guarda en la base de datos.") // <-- Actualizado
+                Text("Chat con IA. El historial se guarda en la base de datos.")
                     .font(.title3).foregroundColor(.gray).padding(.bottom)
                 
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 20) {
+                            // Mensaje de bienvenida (no se guarda, es solo UI)
                             ChatBubbleView(message: ChatMessage(conversationID: conversationID, content: "¡Hola! Soy tu asistente. Tengo acceso a tus datos de Personal, Productos y Servicios. ¿En qué puedo ayudarte hoy?", isFromUser: false))
                             
+                            // Mensajes guardados
                             ForEach(conversation) { message in
                                 ChatBubbleView(message: message)
                             }
@@ -72,11 +67,12 @@ struct ConsultaView: View {
                         }
                         .padding(.top, 10)
                     }
-                    .onChange(of: conversation.count, perform: { _ in
+                    .onChange(of: conversation.count) { _ in
                         proxy.scrollTo(conversation.last?.id, anchor: .bottom)
-                    })
+                    }
                 }
                 
+                // Barra de Entrada
                 HStack(spacing: 15) {
                     TextField("Escribe tu consulta...", text: $inputText, onCommit: enviarMensaje)
                         .textFieldStyle(PlainTextFieldStyle())
@@ -182,9 +178,7 @@ struct ConsultaView: View {
                 Text("Verificación Requerida").font(.largeTitle).fontWeight(.bold)
                 Text("Autoriza para registrar una decisión manual.").font(.title3).foregroundColor(.gray).padding(.bottom)
                 if isTouchIDEnabled {
-                    Button(action: {
-                        Task { await authenticateWithTouchID() }
-                    }) {
+                    Button(action: { Task { await authenticateWithTouchID() } }) {
                         Label("Usar Huella (Touch ID)", systemImage: "touchid")
                             .font(.headline).padding().frame(maxWidth: .infinity)
                             .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
@@ -198,9 +192,7 @@ struct ConsultaView: View {
                 if !authError.isEmpty {
                     Text(authError).font(.caption).foregroundColor(.red)
                 }
-                Button(action: {
-                    authenticateWithPassword()
-                }) {
+                Button(action: { authenticateWithPassword() }) {
                     Label("Autorizar con Contraseña", systemImage: "lock.fill")
                         .font(.headline).padding().frame(maxWidth: .infinity)
                         .background(Color.gray.opacity(0.4)).foregroundColor(.white).cornerRadius(8)
@@ -215,37 +207,39 @@ struct ConsultaView: View {
     }
     
     // --- LÓGICA DE LA VISTA (¡ACTUALIZADA!) ---
+    
     func enviarMensaje() {
         let userMessage = inputText
         guard !userMessage.isEmpty else { return }
 
         // 1. Guarda el mensaje del usuario en la BD
-        // (Asegúrate de que usa el ID constante)
         let userMsg = ChatMessage(conversationID: strategicConversationID, content: userMessage, isFromUser: true)
         modelContext.insert(userMsg)
-    // ...
+        
         inputText = ""
         estaCargandoIA = true
         isCustomDecisionUnlocked = false
         
-        // 2. Simula una respuesta de IA "INTELIGENTE"
+        // --- 2. CEREBRO DE IA v3 (ACTUALIZADO) ---
         let prompt = userMessage.lowercased()
         var respuesta: String
         
         if prompt.contains("contratar") || prompt.contains("personal") {
             let totalPersonal = personal.count
-            let aprendices = personal.filter { $0.nivelHabilidad == .aprendiz }.count
-            let tecnicos = personal.filter { $0.nivelHabilidad == .tecnico }.count
-            let maestros = personal.filter { $0.nivelHabilidad == .maestro }.count
-            respuesta = "He analizado tu plantilla. Actualmente tienes \(totalPersonal) empleados: \(maestros) Maestros, \(tecnicos) Técnicos, y \(aprendices) Aprendices. Basado en tus \(servicios.count) servicios, te recomiendo contratar otro 'Técnico' si tu carga de trabajo en 'Frenos' es alta."
+            // ¡Lógica actualizada a Roles!
+            let jefes = personal.filter { $0.rol == .jefeDeTaller }.count
+            let ayudantes = personal.filter { $0.rol == .ayudante }.count
+            let mecanicos = totalPersonal - jefes - ayudantes // (Asumiendo que el resto son mecánicos)
+            respuesta = "He analizado tu plantilla. Actualmente tienes \(totalPersonal) empleados: \(jefes) Jefes, \(mecanicos) Mecánicos, y \(ayudantes) Ayudantes. Basado en tus \(servicios.count) servicios, te recomiendo contratar otro 'Ayudante' si la carga de trabajo es alta."
             
         } else if prompt.contains("inventario") || prompt.contains("productos") {
             let totalProductos = productos.count
-            // Considera bajo stock si la cantidad es <= 1.0 (umbral simple)
-            let productosBajos = productos.filter { $0.cantidad <= 1.0 }.count
-            respuesta = "He analizado tu inventario. Tienes \(totalProductos) tipos de productos. Detecto que \(productosBajos) productos están con bajo stock. Te recomiendo hacer un pedido pronto."
+            // ¡Lógica actualizada a Cantidad! (ya no usa 'disponibilidad')
+            let productosBajos = productos.filter { $0.cantidad < 10 }.count // (Nueva métrica: menos de 10 unidades)
+            respuesta = "He analizado tu inventario. Tienes \(totalProductos) tipos de productos. Detecto que \(productosBajos) productos tienen un stock bajo (menos de 10 unidades). Te recomiendo hacer un pedido pronto."
             
         } else if prompt.contains("rentable") || prompt.contains("servicios") {
+            // (Esta lógica sigue funcionando)
             let servicioMasCaro = servicios.max(by: { $0.precioAlCliente < $1.precioAlCliente })
             if let servicio = servicioMasCaro {
                 let price = String(format: "%.2f", servicio.precioAlCliente)
@@ -255,16 +249,19 @@ struct ConsultaView: View {
             }
             
         } else {
+            // (Esta lógica sigue funcionando)
             respuesta = "Es una consulta interesante. Basado en tus \(historial.count) decisiones pasadas y tus \(personal.count) empleados, te recomiendo analizar los costos de oportunidad antes de proceder."
         }
         
-        // ...
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                estaCargandoIA = false
-                let aiMsg = ChatMessage(conversationID: strategicConversationID, content: respuesta, isFromUser: false)
-                modelContext.insert(aiMsg)
-            }
+        // 3. Guarda la respuesta de la IA en la BD
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            estaCargandoIA = false
+            let aiMsg = ChatMessage(conversationID: strategicConversationID, content: respuesta, isFromUser: false)
+            modelContext.insert(aiMsg)
+        }
     }
+    
+    // --- Lógica de Auth/Guardar (Sin cambios) ---
     
     func authenticateWithTouchID() async {
         let context = LAContext()
@@ -296,4 +293,3 @@ struct ConsultaView: View {
         isCustomDecisionUnlocked = false
     }
 }
-

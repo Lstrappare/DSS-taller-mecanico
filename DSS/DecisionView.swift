@@ -12,7 +12,7 @@ struct RecomendacionDSS {
 }
 
 
-// --- VISTA PRINCIPAL (Actualizada) ---
+// --- VISTA PRINCIPAL (¡ACTUALIZADA!) ---
 struct DecisionView: View {
     @Environment(\.modelContext) private var modelContext
     @Binding var seleccion: Vista?
@@ -26,14 +26,16 @@ struct DecisionView: View {
     @State private var recomendacion: RecomendacionDSS?
 
     var body: some View {
-        // Renombramos los títulos como pediste
         ScrollView {
             VStack(alignment: .leading, spacing: 25) {
-                Text("Asignar Servicio") // <-- Título Actualizado
+                
+                // --- 1. Cabecera ---
+                Text("Asignar Servicio")
                     .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
-                Text("Asigna al mejor personal para ejecutar los servicios.") // <-- Título Actualizado
+                Text("Asigna al mejor personal para ejecutar los servicios.")
                     .font(.title3).foregroundColor(.gray)
                 
+                // --- 2. Tarjeta de Consulta ---
                 VStack(alignment: .leading, spacing: 15) {
                     HStack {
                         Image(systemName: "wand.and.stars")
@@ -47,7 +49,9 @@ struct DecisionView: View {
                     Picker("Selecciona un Servicio", selection: $servicioSeleccionadoID) {
                         Text("Selecciona un servicio...").tag(nil as Servicio.ID?)
                         ForEach(servicios) { servicio in
-                            Text(servicio.nombre).tag(servicio.id as Servicio.ID?)
+                            // Mostramos el servicio y el ROL que requiere
+                            Text("\(servicio.nombre) (Req: \(servicio.rolRequerido.rawValue))")
+                                .tag(servicio.id as Servicio.ID?)
                         }
                     }
                     .pickerStyle(.menu)
@@ -56,7 +60,9 @@ struct DecisionView: View {
                 .padding(20)
                 .background(Color("MercedesCard"))
                 .cornerRadius(15)
+
                 
+                // --- 3. Botones ---
                 HStack(spacing: 15) {
                     Button {
                         generarRecomendacion()
@@ -68,23 +74,34 @@ struct DecisionView: View {
                     .buttonStyle(.plain)
                     .disabled(servicioSeleccionadoID == nil || estaCargando)
                 }
+
                 
+                // --- 4. Área de Resultados ---
                 if estaCargando {
                     ProgressView()
                         .frame(maxWidth: .infinity).padding()
                 } else if let rec = recomendacion {
                     VStack(alignment: .leading, spacing: 15) {
                         Text("Recomendación de Asignación").font(.title2).fontWeight(.bold)
+                        
                         if let advertencia = rec.advertencia {
                             Text("⚠️ ADVERTENCIA: \(advertencia)")
                                 .font(.headline).foregroundColor(.yellow)
                         }
+                        
                         Text("Mecánico Recomendado:").font(.headline).foregroundColor(Color("MercedesPetrolGreen"))
+                        // Mostramos el nombre Y EL ROL del mecánico
                         Text(rec.mecanicoRecomendado?.nombre ?? "Ninguno Disponible")
+                            .font(.title3)
+                        Text(rec.mecanicoRecomendado?.rol.rawValue ?? "")
+                            .font(.subheadline).foregroundColor(.gray)
+                        
                         Text("Costo de Piezas (Inventario):").font(.headline).foregroundColor(Color("MercedesPetrolGreen"))
                         Text("$\(rec.costoTotalProductos, specifier: "%.2f")")
+                        
                         Text("Rentabilidad Estimada (Mano de obra):").font(.headline).foregroundColor(Color("MercedesPetrolGreen"))
                         Text("$\(rec.rentabilidadEstimada, specifier: "%.2f")")
+                        
                         Button {
                             aceptarDecision(rec)
                         } label: {
@@ -101,6 +118,7 @@ struct DecisionView: View {
                     .background(Color("MercedesCard"))
                     .cornerRadius(10)
                 }
+                
                 Spacer()
             }
             .padding(30)
@@ -112,10 +130,7 @@ struct DecisionView: View {
     
     func generarRecomendacion() {
         guard let servicioID = servicioSeleccionadoID else { return }
-        guard let servicio = servicios.first(where: { $0.id == servicioID }) else {
-            print("Error: No se encontró el servicio")
-            return
-        }
+        guard let servicio = servicios.first(where: { $0.id == servicioID }) else { return }
         
         estaCargando = true
         recomendacion = nil
@@ -123,32 +138,33 @@ struct DecisionView: View {
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             
-            // 2. Encuentra Candidatos (Personal)
+            // --- 2. Encuentra Candidatos (Personal) ---
+            // ¡ESTA ES LA LÓGICA 100% ACTUALIZADA!
             let candidatos = personal.filter { mec in
-                mec.estaDisponible &&
-                mec.estaEnHorario &&
-                mec.especialidades.contains(servicio.especialidadRequerida) &&
-                mec.nivelHabilidad.rawValue >= servicio.nivelMinimoRequerido.rawValue
+                mec.isAsignable && // ¿Está "Disponible" Y "En Horario"?
+                mec.especialidades.contains(servicio.especialidadRequerida) && // ¿Sabe hacerlo?
+                mec.rol == servicio.rolRequerido // ¿Tiene el ROL correcto?
             }
-            let mecanicoElegido = candidatos.first
+            
+            // (Esta es la lógica V2 que discutimos, el "Cerebro Eficiente")
+            // Ordena los candidatos.
+            // Esto es 'inteligente': si el rol es "Ayudante", no importa.
+            // Pero si es un rol de "Mecánico", prioriza al de menor rango (Ayudante -> Técnico -> Maestro)
+            // para no desperdiciar a los expertos en trabajos fáciles.
+            let mecanicoElegido = candidatos.sorted(by: { $0.rol.rawValue < $1.rol.rawValue }).first
+            
             if mecanicoElegido == nil {
-                advertencia = "No se encontraron mecánicos disponibles que cumplan los requisitos."
+                advertencia = "No se encontraron mecánicos disponibles que cumplan los requisitos de ROL y ESPECIALIDAD."
             }
             
-            // --- 4. Calcula Costos (¡LÓGICA ACTUALIZADA!) ---
+            // --- 4. Calcula Costos (Lógica fraccional) ---
             var costoTotalProductos: Double = 0.0
-            
-            // Itera sobre los ingredientes de la receta
             for ingrediente in servicio.ingredientes {
                 if let producto = productos.first(where: { $0.nombre == ingrediente.nombreProducto }) {
-                    
-                    // Revisa si hay suficiente stock
                     if producto.cantidad < ingrediente.cantidadUsada {
                         advertencia = (advertencia ?? "") + "\nStock insuficiente de: \(producto.nombre)."
                     }
-                    // Suma el costo
                     costoTotalProductos += (producto.costo * ingrediente.cantidadUsada)
-                    
                 } else {
                     advertencia = (advertencia ?? "") + "\nNo se encontró \(ingrediente.nombreProducto) en el inventario."
                 }
@@ -183,18 +199,17 @@ struct DecisionView: View {
             nombreMecanicoAsignado: mecanico.nombre,
             horaInicio: Date(),
             duracionHoras: rec.servicio.duracionHoras,
-            // Pasa los nombres de los productos consumidos
             productosConsumidos: rec.servicio.ingredientes.map { $0.nombreProducto }
         )
         modelContext.insert(nuevoServicio)
         
         // 2. Ocupar al Mecánico
-        mecanico.estaDisponible = false
+        // ¡CAMBIO CLAVE! Pone el estado en "Ocupado"
+        mecanico.estado = .ocupado
         
-        // --- 3. Restar del Inventario (¡LÓGICA ACTUALIZADA!) ---
+        // 3. Restar del Inventario (Lógica fraccional)
         for ingrediente in rec.servicio.ingredientes {
             if let producto = productos.first(where: { $0.nombre == ingrediente.nombreProducto }) {
-                // Resta la cantidad fraccional
                 producto.cantidad -= ingrediente.cantidadUsada
             }
         }

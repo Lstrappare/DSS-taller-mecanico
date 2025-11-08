@@ -1,10 +1,11 @@
 import SwiftUI
 import SwiftData
 
-// (El enum ServiceModalMode no cambia)
+// --- MODO DEL MODAL (Sin cambios) ---
 fileprivate enum ServiceModalMode: Identifiable {
     case add
     case edit(Servicio)
+    
     var id: String {
         switch self {
         case .add: return "add"
@@ -13,7 +14,8 @@ fileprivate enum ServiceModalMode: Identifiable {
     }
 }
 
-// --- VISTA PRINCIPAL (Actualizada) ---
+
+// --- VISTA PRINCIPAL (¡ACTUALIZADA!) ---
 struct ServiciosView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Servicio.nombre) private var servicios: [Servicio]
@@ -22,44 +24,51 @@ struct ServiciosView: View {
 
     var body: some View {
         VStack(alignment: .leading) {
-            // ... (Cabecera no cambia)
+            // --- Cabecera (Sin cambios) ---
             HStack {
-                Text("Gestión de servicios")
+                Text("Gestión de Servicios")
                     .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
                 Spacer()
-                Button { modalMode = .add }
-                label: {
-                    Label("Añadir Servicio", systemImage: "plus")
+                Button {
+                    modalMode = .add
+                } label: {
+                    Label("Añadir Servicios", systemImage: "plus")
                         .font(.headline).padding(.vertical, 10).padding(.horizontal)
                         .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
                 }
                 .buttonStyle(.plain)
             }
             .padding(.bottom, 20)
-            Text("Registra que servicios ofreces en el taller.")
+            
+            Text("Añade los servicios que ofrece tu taller.")
                 .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
             
-            // --- Lista de Servicios (Actualizada) ---
+            // --- Lista de Servicios (¡ACTUALIZADA!) ---
             ScrollView {
                 LazyVStack(spacing: 15) {
                     ForEach(servicios) { servicio in
+                        // Tarjeta de Servicio
                         VStack(alignment: .leading, spacing: 10) {
                             Text(servicio.nombre)
                                 .font(.title2).fontWeight(.semibold)
+                            
                             Text(servicio.descripcion)
                                 .font(.body).foregroundColor(.gray)
+                            
                             Divider()
                             
-                            // Requerimientos
-                            Text("Requerimientos:").font(.headline)
+                            // --- Requerimientos (¡ACTUALIZADO!) ---
+                            Text("Requerimientos:")
+                                .font(.headline)
                             HStack {
                                 Label(servicio.especialidadRequerida, systemImage: "wrench.and.screwdriver.fill")
-                                Label(servicio.nivelMinimoRequerido.rawValue, systemImage: "person.badge.shield.checkmark.fill")
+                                // Muestra el ROL requerido, no el nivel
+                                Label(servicio.rolRequerido.rawValue, systemImage: "person.badge.shield.checkmark.fill")
                             }
                             .font(.subheadline)
                             .foregroundColor(Color("MercedesPetrolGreen"))
                             
-                            // Muestra los ingredientes y sus cantidades
+                            // Muestra los ingredientes (esta lógica no cambia)
                             Text("Productos: \(formatearIngredientes(servicio.ingredientes))")
                                 .font(.subheadline).foregroundColor(.gray)
                         }
@@ -67,15 +76,17 @@ struct ServiciosView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color("MercedesCard"))
                         .cornerRadius(10)
-                        .onTapGesture { modalMode = .edit(servicio) }
+                        .onTapGesture {
+                            modalMode = .edit(servicio)
+                        }
                     }
                 }
             }
             Spacer()
         }
         .padding(30)
-        .sheet(item: $modalMode) { mode in
-            ServicioFormView(mode: mode)
+        .sheet(item: $modalMode) { incomingMode in
+            ServicioFormView(mode: incomingMode)
         }
     }
     
@@ -87,7 +98,7 @@ struct ServiciosView: View {
 }
 
 
-// --- VISTA DEL FORMULARIO (¡EL GRAN CAMBIO!) ---
+// --- VISTA DEL FORMULARIO (¡ACTUALIZADA!) ---
 fileprivate struct ServicioFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -101,29 +112,48 @@ fileprivate struct ServicioFormView: View {
     @State private var nombre = ""
     @State private var descripcion = ""
     @State private var especialidadRequerida = ""
-    @State private var nivelMinimoRequerido: NivelHabilidad = .aprendiz
+    
+    // --- ¡CAMPO ACTUALIZADO! ---
+    @State private var rolRequerido: Rol = .ayudante // Reemplaza a nivelMinimoRequerido
+    
     @State private var precioString = ""
     @State private var duracionString = "1.0"
-    
-    // --- NUEVO STATE PARA INGREDIENTES ---
-    // Un diccionario temporal para guardar las cantidades
     @State private var cantidadesProductos: [String: Double] = [:]
-    
     @State private var especialidadesDisponibles: [String] = []
-    
-    // Deriva el servicio a editar desde mode (evita stored property adicional)
-    private var servicioAEditar: Servicio? {
-        if case .edit(let servicio) = mode { return servicio }
-        return nil
+
+    private var servicioAEditar: Servicio?
+    var formTitle: String {
+        switch mode {
+        case .add: return "Añadir Nuevo Servicio"
+        case .edit: return "Editar Servicio"
+        }
     }
     
-    var formTitle: String { (servicioAEditar == nil) ? "Añadir nuevo servicio" : "Editar servicio" }
+    // Inicializador
+    init(mode: ServiceModalMode) {
+        self.mode = mode
+        
+        if case .edit(let servicio) = mode {
+            self.servicioAEditar = servicio
+            _nombre = State(initialValue: servicio.nombre)
+            _descripcion = State(initialValue: servicio.descripcion)
+            _especialidadRequerida = State(initialValue: servicio.especialidadRequerida)
+            
+            // --- ¡CAMPO ACTUALIZADO! ---
+            _rolRequerido = State(initialValue: servicio.rolRequerido)
+            
+            _precioString = State(initialValue: "\(servicio.precioAlCliente)")
+            _duracionString = State(initialValue: "\(servicio.duracionHoras)")
+            let cantidades = Dictionary(uniqueKeysWithValues: servicio.ingredientes.map { ($0.nombreProducto, $0.cantidadUsada) })
+            _cantidadesProductos = State(initialValue: cantidades)
+        }
+    }
     
     var body: some View {
         VStack(spacing: 20) {
             Text(formTitle).font(.largeTitle).fontWeight(.bold)
             
-            TextField("Nombre del servicio", text: $nombre).disabled(servicioAEditar != nil)
+            TextField("Service Name", text: $nombre).disabled(servicioAEditar != nil)
             TextField("Descripción", text: $descripcion)
             HStack {
                 FormField(title: "Precio Mano de Obra", text: $precioString)
@@ -134,29 +164,33 @@ fileprivate struct ServicioFormView: View {
             
             // --- Requerimientos (Pickers) ---
             Text("Requerimientos").font(.headline)
+            
             Picker("Especialidad Requerida", selection: $especialidadRequerida) {
                 Text("Ninguna").tag("")
                 ForEach(especialidadesDisponibles, id: \.self) { Text($0).tag($0) }
             }
-            Picker("Nivel Mínimo Requerido", selection: $nivelMinimoRequerido) {
-                ForEach(NivelHabilidad.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            
+            // --- ¡PICKER ACTUALIZADO! ---
+            Picker("Rol Mínimo Requerido", selection: $rolRequerido) {
+                ForEach(Rol.allCases, id: \.self) { rol in
+                    Text(rol.rawValue).tag(rol)
+                }
             }
             .pickerStyle(.segmented)
             
-            // --- NUEVA LISTA DE PRODUCTOS ---
+            // --- Lista de Productos (No cambia) ---
             VStack(alignment: .leading) {
                 Text("Productos Requeridos (Ingresa la cantidad a usar)").font(.headline)
                 List(productos) { producto in
                     HStack {
                         Text("\(producto.nombre) (\(producto.unidadDeMedida))")
                         Spacer()
-                        // Un TextField para cada producto
                         TextField("0.0", text: Binding(
                             get: {
                                 cantidadesProductos[producto.nombre].map { String(format: "%.2f", $0) } ?? ""
                             },
                             set: {
-                                cantidadesProductos[producto.nombre] = Double($0) ?? 0
+                                cantidadesProductos[producto.nombre] = Double($0)
                             }
                         ))
                         .frame(width: 80)
@@ -168,7 +202,7 @@ fileprivate struct ServicioFormView: View {
                 .cornerRadius(8)
             }
             
-            // --- Botones de Acción ---
+            // --- Botones de Acción (No cambia) ---
             HStack {
                 Button("Cancelar") { dismiss() }
                     .buttonStyle(.plain).padding().foregroundColor(.gray)
@@ -177,13 +211,13 @@ fileprivate struct ServicioFormView: View {
                     .buttonStyle(.plain).padding().foregroundColor(.red)
                 }
                 Spacer()
-                Button(servicioAEditar == nil ? "Añadir Servicios" : "Guardar Cambios") {
+                Button(servicioAEditar == nil ? "Añadir Servicio" : "Guardar Cambios") {
                     guardarCambios()
                 }
                 .buttonStyle(.plain).padding()
                 .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(8)
             }
-            .padding(.top, 30)
+            .padding(.top, 20)
         }
         .padding(20)
         .background(Color("MercedesBackground"))
@@ -192,29 +226,17 @@ fileprivate struct ServicioFormView: View {
         .textFieldStyle(PlainTextFieldStyle())
         .padding()
         .background(Color("MercedesCard"))
-
+        .cornerRadius(15)
         .onAppear {
-            // Construye especialidades
             let todasLasHabilidades = personal.flatMap { $0.especialidades }
             especialidadesDisponibles = Array(Set(todasLasHabilidades)).sorted()
-            if servicioAEditar == nil, let primera = especialidadesDisponibles.first {
-                especialidadRequerida = primera
-            }
             
-            // Inicializa estados según modo
-            if let servicio = servicioAEditar {
-                nombre = servicio.nombre
-                descripcion = servicio.descripcion
-                especialidadRequerida = servicio.especialidadRequerida
-                nivelMinimoRequerido = servicio.nivelMinimoRequerido
-                precioString = "\(servicio.precioAlCliente)"
-                duracionString = "\(servicio.duracionHoras)"
-                let cantidades = Dictionary(uniqueKeysWithValues: servicio.ingredientes.map { ($0.nombreProducto, $0.cantidadUsada) })
-                cantidadesProductos = cantidades
-            } else {
-                // Defaults para "add"
-                if precioString.isEmpty { precioString = "" }
-                if duracionString.isEmpty { duracionString = "1.0" }
+            // Si es 'add', pone defaults
+            if servicioAEditar == nil {
+                rolRequerido = .ayudante // Default a Ayudante
+                if let primera = especialidadesDisponibles.first {
+                    especialidadRequerida = primera
+                }
             }
         }
     }
@@ -228,7 +250,6 @@ fileprivate struct ServicioFormView: View {
             return
         }
         
-        // Convierte el diccionario [String: Double] al array [Ingrediente]
         let ingredientesArray: [Ingrediente] = cantidadesProductos.compactMap { (nombre, cantidad) in
             guard cantidad > 0 else { return nil }
             return Ingrediente(nombreProducto: nombre, cantidadUsada: cantidad)
@@ -238,7 +259,7 @@ fileprivate struct ServicioFormView: View {
             // MODO EDITAR
             servicio.descripcion = descripcion
             servicio.especialidadRequerida = especialidadRequerida
-            servicio.nivelMinimoRequerido = nivelMinimoRequerido
+            servicio.rolRequerido = rolRequerido // <-- CAMBIADO
             servicio.precioAlCliente = precio
             servicio.duracionHoras = duracion
             servicio.ingredientes = ingredientesArray
@@ -248,7 +269,7 @@ fileprivate struct ServicioFormView: View {
                 nombre: nombre,
                 descripcion: descripcion,
                 especialidadRequerida: especialidadRequerida,
-                nivelMinimoRequerido: nivelMinimoRequerido,
+                rolRequerido: rolRequerido, // <-- CAMBIADO
                 ingredientes: ingredientesArray,
                 precioAlCliente: precio,
                 duracionHoras: duracion

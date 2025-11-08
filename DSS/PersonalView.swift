@@ -1,41 +1,38 @@
 import SwiftUI
 import SwiftData
 
-// --- MODO DEL MODAL ---
-// Usaremos esto para decirle al modal si estamos Añadiendo o Editando
-enum ModalMode: Identifiable {
+// --- MODO DEL MODAL (Sin cambios) ---
+fileprivate enum ModalMode: Identifiable {
     case add
     case edit(Personal)
     
-    // Identificador para el .sheet()
     var id: String {
         switch self {
         case .add: return "add"
-        case .edit(let personal): return personal.dni // <-- ¡ESTA ES LA CORRECCIÓN!
+        case .edit(let personal): return personal.dni
         }
     }
 }
 
 
-// --- VISTA PRINCIPAL ---
+// --- VISTA PRINCIPAL (¡ACTUALIZADA!) ---
 struct PersonalView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Personal.nombre) private var personal: [Personal]
     
-    // Este State controlará qué modal mostrar (añadir o editar)
     @State private var modalMode: ModalMode?
 
     var body: some View {
         VStack(alignment: .leading) {
-            // --- Cabecera ---
+            // --- Cabecera (Sin cambios) ---
             HStack {
-                Text("Gestión de personal")
+                Text("Gestión de Personal")
                     .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
                 Spacer()
                 Button {
-                    modalMode = .add // Abre el modal en modo "Add"
+                    modalMode = .add
                 } label: {
-                    Label("Añadir personal", systemImage: "plus")
+                    Label("Añadir Personal", systemImage: "plus")
                         .font(.headline).padding(.vertical, 10).padding(.horizontal)
                         .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
                 }
@@ -43,61 +40,55 @@ struct PersonalView: View {
             }
             .padding(.bottom, 20)
             
-            Text("Gestiona tu equipo de trabajo del taller.")
+            Text("Registra tu equipo de trabajo aquí.")
                 .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
             
-            // --- Lista del Personal (Actualizada) ---
+            // --- Lista del Personal (¡ACTUALIZADA!) ---
             ScrollView {
                 LazyVStack(spacing: 15) {
                     ForEach(personal) { mecanico in
                         HStack {
+                            // --- Info Izquierda (Actualizada) ---
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(mecanico.nombre)
                                     .font(.title2).fontWeight(.semibold)
                                 
-                                // Muestra Nivel y Especialidades
-                                Text("\(mecanico.nivelHabilidad.rawValue) | \(mecanico.especialidades.joined(separator: ", "))")
+                                // Muestra el nuevo ROL
+                                Text(mecanico.rol.rawValue)
                                     .font(.headline)
                                     .foregroundColor(Color("MercedesPetrolGreen"))
                                 
-                                Text("Email: \(mecanico.email.isEmpty ? "N/A" : mecanico.email)")
+                                Text("Especialidades: \(mecanico.especialidades.joined(separator: ", "))")
                                     .font(.body).foregroundColor(.gray)
                                 Text("CURP/DNI: \(mecanico.dni)")
                                     .font(.body).foregroundColor(.gray)
                             }
                             Spacer()
+                            
+                            // --- Info Derecha (Actualizada) ---
                             VStack(alignment: .trailing, spacing: 8) {
-                                                            
-                                                            // --- LÓGICA DE 3 ESTADOS ---
-                                                            if mecanico.estaEnHorario {
-                                                                // Si está en turno, revisa si está ocupado
-                                                                if mecanico.estaDisponible {
-                                                                    Text("Disponible")
-                                                                        .font(.headline)
-                                                                        .foregroundColor(.green)
-                                                                } else {
-                                                                    Text("Ocupado (En Servicio)")
-                                                                        .font(.headline)
-                                                                        .foregroundColor(.red)
-                                                                }
-                                                            } else {
-                                                                // Si no está en turno, no importa nada más
-                                                                Text("Fuera de Turno")
-                                                                    .font(.headline)
-                                                                    .foregroundColor(.gray)
-                                                            }
-                                                            // --- FIN DE LA LÓGICA ---
-                                                            
-                                                            Text("Turno: \(mecanico.horaEntrada) - \(mecanico.horaSalida)")
-                                                                .font(.body).foregroundColor(.gray)
-                                                        }
+                                
+                                // --- Lógica de 3 Estados (¡ACTUALIZADA!) ---
+                                // (Ahora usa 'isAsignable' y 'estaEnHorario')
+                                if !mecanico.estaEnHorario {
+                                    Text("Fuera de Turno")
+                                        .font(.headline)
+                                        .foregroundColor(.gray)
+                                } else {
+                                    // Está en turno, ¿cuál es su estado?
+                                    Text(mecanico.estado.rawValue)
+                                        .font(.headline)
+                                        .foregroundColor(colorParaEstado(mecanico.estado))
+                                }
+                                
+                                Text("Turno: \(mecanico.horaEntrada) - \(mecanico.horaSalida)")
+                                    .font(.body).foregroundColor(.gray)
+                            }
                         }
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color("MercedesCard"))
                         .cornerRadius(10)
-                        // --- ¡AQUÍ ESTÁ LA MAGIA! ---
-                        // Al tocar la tarjeta, abre el modal en modo "Edit"
                         .onTapGesture {
                             modalMode = .edit(mecanico)
                         }
@@ -107,18 +98,28 @@ struct PersonalView: View {
             Spacer()
         }
         .padding(30)
-        // --- MODAL MEJORADO ---
-        // Usa .sheet(item:...) para pasar el modo (add/edit) al formulario
         .sheet(item: $modalMode) { incomingMode in
-            PersonalFormView(mode: incomingMode) // Llama a la nueva vista de formulario
+            PersonalFormView(mode: incomingMode)
+        }
+    }
+    
+    // Helper para dar color al estado
+    func colorParaEstado(_ estado: EstadoEmpleado) -> Color {
+        switch estado {
+        case .disponible:
+            return .green
+        case .ocupado:
+            return .red
+        case .descanso:
+            return .yellow
+        case .ausente:
+            return .gray
         }
     }
 }
 
 
-// --- VISTA DEL FORMULARIO (ADD/EDIT) ---
-// Movimos el formulario a su propia vista para que sea más limpio
-// --- VISTA DEL FORMULARIO (ADD/EDIT) ---
+// --- VISTA DEL FORMULARIO (¡ACTUALIZADA!) ---
 fileprivate struct PersonalFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -129,23 +130,20 @@ fileprivate struct PersonalFormView: View {
     @State private var nombre = ""
     @State private var email = ""
     @State private var dni = ""
-    
-    // --- CAMBIO AQUÍ ---
-    // (Usamos Strings para los TextFields de números)
     @State private var horaEntradaString = "9"
     @State private var horaSalidaString = "18"
     
-    @State private var nivelHabilidad: NivelHabilidad = .aprendiz
+    // --- ¡CAMPOS ACTUALIZADOS! ---
+    @State private var rol: Rol = .ayudante
+    @State private var estado: EstadoEmpleado = .disponible
+    
     @State private var especialidadesString = ""
-    @State private var estaDisponible = true
     
-    // Debe ser let en un View (se establece en init)
-    private let mecanicoAEditar: Personal?
-    
+    private var mecanicoAEditar: Personal?
     var formTitle: String {
         switch mode {
-        case .add: return "Add New Staff"
-        case .edit: return "Edit Staff"
+        case .add: return "Añadir Personal"
+        case .edit: return "Editar Personal"
         }
     }
     
@@ -158,14 +156,14 @@ fileprivate struct PersonalFormView: View {
             _nombre = State(initialValue: personal.nombre)
             _email = State(initialValue: personal.email)
             _dni = State(initialValue: personal.dni)
-            // --- CAMBIO AQUÍ ---
             _horaEntradaString = State(initialValue: "\(personal.horaEntrada)")
             _horaSalidaString = State(initialValue: "\(personal.horaSalida)")
-            _nivelHabilidad = State(initialValue: personal.nivelHabilidad)
+            
+            // --- ¡CAMPOS ACTUALIZADOS! ---
+            _rol = State(initialValue: personal.rol)
+            _estado = State(initialValue: personal.estado)
+            
             _especialidadesString = State(initialValue: personal.especialidades.joined(separator: ", "))
-            _estaDisponible = State(initialValue: personal.estaDisponible)
-        } else {
-            self.mecanicoAEditar = nil
         }
     }
     
@@ -176,10 +174,9 @@ fileprivate struct PersonalFormView: View {
             
             // Formulario
             TextField("Nombre Completo", text: $nombre)
-            TextField("Correo Electronico", text: $email)
+            TextField("Email", text: $email)
             TextField("CURP/DNI", text: $dni).disabled(mecanicoAEditar != nil)
             
-            // --- CAMPO DE HORARIO ACTUALIZADO ---
             HStack {
                 VStack(alignment: .leading) {
                     Text("Hora Entrada (Formato 24h)").font(.caption).foregroundColor(.gray)
@@ -190,18 +187,26 @@ fileprivate struct PersonalFormView: View {
                     TextField("ej. 18", text: $horaSalidaString)
                 }
             }
-            // --- FIN DEL CAMBIO ---
 
-            Picker("Nivel de Habilidad", selection: $nivelHabilidad) {
-                ForEach(NivelHabilidad.allCases, id: \.self) { nivel in
-                    Text(nivel.rawValue).tag(nivel)
+            // --- ¡PICKER DE ROL (NUEVO)! ---
+            Picker("Rol en el Taller", selection: $rol) {
+                ForEach(Rol.allCases, id: \.self) { rol in
+                    Text(rol.rawValue).tag(rol)
+                }
+            }
+            .pickerStyle(.menu) // .segmented queda muy grande
+            
+            // --- ¡PICKER DE ESTADO (NUEVO)! ---
+            Picker("Estado Actual", selection: $estado) {
+                ForEach(EstadoEmpleado.allCases, id: \.self) { estado in
+                    Text(estado.rawValue).tag(estado)
                 }
             }
             .pickerStyle(.segmented)
             
             TextField("Especialidades (separadas por coma, ej: Motor, Frenos)", text: $especialidadesString)
             
-            // ... (Botones de Cancelar, Borrar, Guardar) ...
+            // Botones de Acción
             HStack {
                 Button("Cancelar") { dismiss() }
                 .buttonStyle(.plain).padding().foregroundColor(.gray)
@@ -234,7 +239,6 @@ fileprivate struct PersonalFormView: View {
     // --- Lógica del Formulario (Actualizada) ---
     
     func guardarCambios() {
-        // Validamos los nuevos campos de hora
         guard !nombre.isEmpty, !dni.isEmpty,
               let horaEntrada = Int(horaEntradaString),
               let horaSalida = Int(horaSalidaString) else {
@@ -251,22 +255,22 @@ fileprivate struct PersonalFormView: View {
             // MODO EDITAR
             mecanico.nombre = nombre
             mecanico.email = email
-            mecanico.horaEntrada = horaEntrada // <-- CAMBIADO
-            mecanico.horaSalida = horaSalida   // <-- CAMBIADO
-            mecanico.nivelHabilidad = nivelHabilidad
+            mecanico.horaEntrada = horaEntrada
+            mecanico.horaSalida = horaSalida
+            mecanico.rol = rol // <-- CAMBIADO
+            mecanico.estado = estado // <-- CAMBIADO
             mecanico.especialidades = especialidadesArray
-            mecanico.estaDisponible = estaDisponible
         } else {
             // MODO AÑADIR
             let nuevoMecanico = Personal(
                 nombre: nombre,
                 email: email,
                 dni: dni,
-                horaEntrada: horaEntrada, // <-- CAMBIADO
-                horaSalida: horaSalida,   // <-- CAMBIADO
-                nivelHabilidad: nivelHabilidad,
-                especialidades: especialidadesArray,
-                estaDisponible: estaDisponible
+                horaEntrada: horaEntrada,
+                horaSalida: horaSalida,
+                rol: rol, // <-- CAMBIADO
+                estado: estado, // <-- CAMBIADO
+                especialidades: especialidadesArray
             )
             modelContext.insert(nuevoMecanico)
         }
