@@ -241,8 +241,9 @@ struct ConsultaView: View {
             
         } else if prompt.contains("inventario") || prompt.contains("productos") {
             let totalProductos = productos.count
-            let productosBajos = productos.filter { $0.disponibilidad == "Low Stock" }.count
-            respuesta = "He analizado tu inventario. Tienes \(totalProductos) tipos de productos. Detecto que \(productosBajos) productos están marcados como 'Low Stock'. Te recomiendo hacer un pedido pronto."
+            // Considera bajo stock si la cantidad es <= 1.0 (umbral simple)
+            let productosBajos = productos.filter { $0.cantidad <= 1.0 }.count
+            respuesta = "He analizado tu inventario. Tienes \(totalProductos) tipos de productos. Detecto que \(productosBajos) productos están con bajo stock. Te recomiendo hacer un pedido pronto."
             
         } else if prompt.contains("rentable") || prompt.contains("servicios") {
             let servicioMasCaro = servicios.max(by: { $0.precioAlCliente < $1.precioAlCliente })
@@ -295,3 +296,4 @@ struct ConsultaView: View {
         isCustomDecisionUnlocked = false
     }
 }
+

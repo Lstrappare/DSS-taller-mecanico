@@ -43,10 +43,10 @@ struct RegisterView: View {
                 Text("Crear Cuenta de Administrador del Taller.").font(.body).foregroundColor(.gray).padding(.bottom, 20)
                 
                 VStack(alignment: .leading, spacing: 15) {
-                    TextField("Full Name", text: $fullName)
+                    TextField("Nombre Completo", text: $fullName)
                     TextField("DNI/CURP", text: $dni)
-                    SecureField("Password", text: $password)
-                    SecureField("Confirm Password", text: $confirmPassword)
+                    SecureField("Contraseña", text: $password)
+                    SecureField("Repita su Contraseña", text: $confirmPassword)
                     
                     if !password.isEmpty && !confirmPassword.isEmpty && password != confirmPassword {
                         Text("Las contraseñas no coinciden")
@@ -61,7 +61,7 @@ struct RegisterView: View {
                 Button {
                     register()
                 } label: {
-                    Text("Register Business")
+                    Text("Registro del taller")
                         .font(.headline).padding(.vertical, 12).frame(maxWidth: .infinity)
                         .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
                 }

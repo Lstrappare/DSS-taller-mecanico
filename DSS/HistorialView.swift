@@ -18,12 +18,12 @@ struct HistorialView: View {
     var body: some View {
         VStack(alignment: .leading) {
             // --- Cabecera ---
-            Text("Decision History")
+            Text("Historial de decisiones")
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .foregroundColor(.white)
             
-            Text("Track all business decisions and their outcomes")
+            Text("Aquí se registran todas las decisiones.")
                 .font(.title3)
                 .foregroundColor(.gray)
                 .padding(.bottom, 20)

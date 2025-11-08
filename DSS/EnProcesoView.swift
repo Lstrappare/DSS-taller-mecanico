@@ -21,7 +21,7 @@ struct EnProcesoView: View {
             // --- Cabecera ---
             Text("Servicios en Proceso")
                 .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
-            Text("Monitor de trabajos activos en el taller")
+            Text("Monitor de trabajos activos en el taller.")
                 .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
             
             // --- Cuadrícula de Tickets ---

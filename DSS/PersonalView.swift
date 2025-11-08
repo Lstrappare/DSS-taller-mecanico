@@ -62,7 +62,7 @@ struct PersonalView: View {
                                 
                                 Text("Email: \(mecanico.email.isEmpty ? "N/A" : mecanico.email)")
                                     .font(.body).foregroundColor(.gray)
-                                Text("DNI: \(mecanico.dni)")
+                                Text("CURP/DNI: \(mecanico.dni)")
                                     .font(.body).foregroundColor(.gray)
                             }
                             Spacer()
@@ -175,9 +175,9 @@ fileprivate struct PersonalFormView: View {
                 .font(.largeTitle).fontWeight(.bold)
             
             // Formulario
-            TextField("Name", text: $nombre)
-            TextField("Email", text: $email)
-            TextField("DNI", text: $dni).disabled(mecanicoAEditar != nil)
+            TextField("Nombre Completo", text: $nombre)
+            TextField("Correo Electronico", text: $email)
+            TextField("CURP/DNI", text: $dni).disabled(mecanicoAEditar != nil)
             
             // --- CAMPO DE HORARIO ACTUALIZADO ---
             HStack {
@@ -201,21 +201,19 @@ fileprivate struct PersonalFormView: View {
             
             TextField("Especialidades (separadas por coma, ej: Motor, Frenos)", text: $especialidadesString)
             
-            Toggle("Disponible (no está en un servicio)", isOn: $estaDisponible)
-            
             // ... (Botones de Cancelar, Borrar, Guardar) ...
             HStack {
-                Button("Cancel") { dismiss() }
+                Button("Cancelar") { dismiss() }
                 .buttonStyle(.plain).padding().foregroundColor(.gray)
                 
                 if case .edit(let mecanico) = mode {
-                    Button("Delete", role: .destructive) {
+                    Button("Eliminar", role: .destructive) {
                         eliminarMecanico(mecanico)
                     }
                     .buttonStyle(.plain).padding().foregroundColor(.red)
                 }
                 Spacer()
-                Button(mecanicoAEditar == nil ? "Add Staff" : "Save Changes") {
+                Button(mecanicoAEditar == nil ? "Añadir Personal" : "Guardar Cambios") {
                     guardarCambios()
                 }
                 .buttonStyle(.plain).padding()

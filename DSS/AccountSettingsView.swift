@@ -57,22 +57,22 @@ struct AccountSettingsView: View {
             VStack(alignment: .leading, spacing: 30) {
                 
                 // --- Cabecera ---
-                Text("Account Settings")
+                Text("Configuración de la cuenta")
                     .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
-                Text("Manage your account and business preferences")
+                Text("Maneja tu cuenta a tus preferencias.")
                     .font(.title3).foregroundColor(.gray)
                 
                 // --- Tarjeta 1: Personal Information ---
-                FormCardView(title: "Personal Information", icon: "person.fill") {
+                FormCardView(title: "Información personal", icon: "person.fill") {
                     VStack(alignment: .leading, spacing: 15) {
-                        Text("Update your personal details").font(.subheadline).foregroundColor(.gray)
+                        Text("Actualiza tus datos personales").font(.subheadline).foregroundColor(.gray)
                         HStack(spacing: 20) {
-                            FormField(title: "Full Name", text: $name)
+                            FormField(title: "Nombre Completo", text: $name)
                         }
-                        FormField(title: "DNI/CURP (Cannot be changed)", text: $dni)
+                        FormField(title: "DNI/CURP (No puede ser cambiado)", text: $dni)
                             .disabled(true) // DNI no se puede cambiar
                         
-                        FormButton(title: "Save Personal Info") {
+                        FormButton(title: "Guardar información personal") {
                             savePersonalInfo()
                         }
                     }
@@ -84,13 +84,13 @@ struct AccountSettingsView: View {
                         
                         // --- Toggle de Touch ID ---
                         Toggle(isOn: $isTouchIDEnabled) {
-                            Text("Enable Touch ID")
+                            Text("Activar el Touch ID")
                                 .font(.headline)
                                 .foregroundColor(.white)
                         }
                         
                         // --- Leyenda de Recuperación ---
-                        Text("Activa Touch ID para autorizar acciones (como cambiar tu contraseña) sin tener que escribirla. Si olvidas tu contraseña, esta es la única forma de recuperarla.")
+                        Text("Activa Touch ID para autorizar acciones (como cambiar tu contraseña) sin tener que escribirla. Si olvidas tu contraseña, esta es una forma de recuperarla.")
                             .font(.caption)
                             .foregroundColor(.gray)
                         
@@ -99,7 +99,7 @@ struct AccountSettingsView: View {
                         // --- Botón de Cambiar Contraseña ---
                         HStack {
                             VStack(alignment: .leading) {
-                                Text("Change Password")
+                                Text("Cambiar Contraseña")
                                     .font(.headline)
                                     .foregroundColor(.white)
                                 Text("Se te pedirá tu contraseña actual o tu huella.")
@@ -107,7 +107,7 @@ struct AccountSettingsView: View {
                                     .foregroundColor(.gray)
                             }
                             Spacer()
-                            Button("Change...") {
+                            Button("Cambiar...") {
                                 // 1. Pone la razón
                                 authReason = .changePassword
                                 // 2. Abre el modal de AUTORIZACIÓN
@@ -125,7 +125,7 @@ struct AccountSettingsView: View {
                 FormCardView(title: "Danger Zone", icon: "exclamationmark.triangle.fill", isDanger: true) {
                     HStack {
                         VStack(alignment: .leading) {
-                            Text("Delete Account")
+                            Text("Eliminar Cuenta")
                                 .font(.headline)
                                 .foregroundColor(Color.red.opacity(0.9))
                             Text("Esto eliminará permanentemente tu cuenta y todos los datos del negocio (Personal, Inventario, Decisiones). Esta acción no se puede deshacer.")
@@ -133,7 +133,7 @@ struct AccountSettingsView: View {
                                 .foregroundColor(.gray)
                         }
                         Spacer()
-                        Button("Delete...") {
+                        Button("Eliminar...") {
                             showingDeleteAccountModal = true
                         }
                         .buttonStyle(.plain)
@@ -231,18 +231,18 @@ struct AccountSettingsView: View {
     // Modal 2: Pide la NUEVA contraseña
     @ViewBuilder
     func changePasswordModalView() -> some View {
-        ModalView(title: "Change Password") {
+        ModalView(title: "Cambiar Contraseña") {
             VStack(spacing: 15) {
                 Text("Ingresa tu nueva contraseña.").font(.headline)
-                SecureField("New Password", text: $newPassword)
-                SecureField("Confirm New Password", text: $confirmPassword)
+                SecureField("Nueva Contraseña", text: $newPassword)
+                SecureField("Repite la nueva contraseña", text: $confirmPassword)
                 
                 if !newPassword.isEmpty && newPassword != confirmPassword {
                     Text("Las contraseñas no coinciden.")
                         .font(.caption).foregroundColor(.red)
                 }
                 
-                FormButton(title: "Save New Password") {
+                FormButton(title: "Guardar nueva contraseña") {
                     userPassword = newPassword
                     alertMessage = "¡Contraseña actualizada!"
                     showingSaveAlert = true
@@ -258,7 +258,7 @@ struct AccountSettingsView: View {
     // Modal 3: Pide DNI y Contraseña para BORRAR
     @ViewBuilder
     func deleteAccountModalView() -> some View {
-        ModalView(title: "Delete Account", isDanger: true) {
+        ModalView(title: "Eliminar Cuenta", isDanger: true) {
             VStack(spacing: 15) {
                 Text("Esta acción es irreversible. Para confirmar, ingresa tu DNI/CURP y tu contraseña actual.")
                     .font(.headline)
@@ -383,6 +383,7 @@ struct ModalView<Content: View>: View {
             .padding(40)
         }
         .frame(minWidth: 500, minHeight: 400)
+        .cornerRadius(15)
         .preferredColorScheme(.dark)
         .textFieldStyle(PlainTextFieldStyle())
         .padding()

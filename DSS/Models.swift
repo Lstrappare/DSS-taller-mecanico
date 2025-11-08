@@ -68,59 +68,60 @@ class Personal {
 
 @Model
 class Producto {
-    @Attribute(.unique) var nombre: String // El nombre del producto debe ser único
+    @Attribute(.unique) var nombre: String
     
-    var costo: Double        // "Cost" del mockup
-    var precioVenta: Double  // "Sale Price (Approx.)" del mockup
-    var cantidad: Int        // "Quantity" del mockup
-    var informacion: String  // "Information" del formulario
-    var disponibilidad: String // Ej: "In Stock", "Low Stock"
+    var costo: Double
+    var precioVenta: Double
     
-    init(nombre: String, costo: Double, precioVenta: Double, cantidad: Int, informacion: String = "", disponibilidad: String = "In Stock") {
+    // --- CAMBIO AQUÍ ---
+    var cantidad: Double // De Int a Double (para 10.5 litros)
+    var unidadDeMedida: String // "Pieza", "Litro", "Botella"
+    // 'disponibilidad' se ha eliminado
+    
+    var informacion: String
+    
+    init(nombre: String,
+         costo: Double,
+         precioVenta: Double,
+         cantidad: Double, // <-- CAMBIADO
+         unidadDeMedida: String, // <-- NUEVO
+         informacion: String = "")
+    {
         self.nombre = nombre
         self.costo = costo
         self.precioVenta = precioVenta
-        self.cantidad = cantidad
+        self.cantidad = cantidad // <-- CAMBIADO
+        self.unidadDeMedida = unidadDeMedida // <-- NUEVO
         self.informacion = informacion
-        self.disponibilidad = disponibilidad
     }
     
-    // --- La Magia del DSS ---
-    // Propiedad calculada para el "Margin" (Margen)
+    // El 'margen' (propiedad calculada) no cambia
     var margen: Double {
-        // Evita división por cero si el precio es 0
         guard precioVenta > 0 else { return 0 }
-        
-        // Fórmula: ((Precio - Costo) / Precio) * 100
         return (1 - (costo / precioVenta)) * 100
     }
 }
 
 @Model
 class Servicio {
-    @Attribute(.unique) var nombre: String // "Cambio de Frenos Delanteros"
-    
+    @Attribute(.unique) var nombre: String
     var descripcion: String
     
-    // --- El Enlace con Personal ---
-    var especialidadRequerida: String // Ej: "Frenos", "Motor", "Eléctrico"
-    var nivelMinimoRequerido: NivelHabilidad // Ej: "Técnico"
+    var especialidadRequerida: String
+    var nivelMinimoRequerido: NivelHabilidad
     
-    // --- El Enlace con Productos ---
-    // Guardamos una lista de los NOMBRES de los productos
-    var productosRequeridos: [String]
+    // --- ¡ESTE ES EL CAMBIO! ---
+    // Reemplazamos [String] por [Ingrediente]
+    var ingredientes: [Ingrediente]
     
-    // --- Costos ---
-    var precioAlCliente: Double // Cuánto le cobras al cliente por el servicio (sin incluir piezas)
-    
-    // -- Cuántas horas tarda el servicio --
+    var precioAlCliente: Double
     var duracionHoras: Double
 
     init(nombre: String,
          descripcion: String = "",
          especialidadRequerida: String,
          nivelMinimoRequerido: NivelHabilidad = .aprendiz,
-         productosRequeridos: [String] = [],
+         ingredientes: [Ingrediente] = [], // <-- CAMBIADO
          precioAlCliente: Double,
          duracionHoras: Double = 1.0)
     {
@@ -128,7 +129,7 @@ class Servicio {
         self.descripcion = descripcion
         self.especialidadRequerida = especialidadRequerida
         self.nivelMinimoRequerido = nivelMinimoRequerido
-        self.productosRequeridos = productosRequeridos
+        self.ingredientes = ingredientes // <-- CAMBIADO
         self.precioAlCliente = precioAlCliente
         self.duracionHoras = duracionHoras
     }
@@ -212,4 +213,9 @@ class ChatMessage {
         self.content = content
         self.isFromUser = isFromUser
     }
+}
+
+struct Ingrediente: Codable, Hashable {
+    var nombreProducto: String
+    var cantidadUsada: Double
 }
