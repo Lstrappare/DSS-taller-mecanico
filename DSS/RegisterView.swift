@@ -2,6 +2,51 @@ import SwiftUI
 import LocalAuthentication
 import AppKit
 
+struct CustomField: View {
+    var title: String
+    var placeholder: String
+    @Binding var text: String
+    var systemImage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.gray)
+            HStack {
+                Image(systemName: systemImage)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                TextField(placeholder, text: $text)
+                    .disableAutocorrection(true)
+            }
+            .padding(12)
+            .cornerRadius(8)
+        }
+    }
+}
+
+struct CustomSecureField: View {
+    var title: String
+    var placeholder: String
+    @Binding var text: String
+    var systemImage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.gray)
+            HStack {
+                Image(systemName: systemImage)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                SecureField(placeholder, text: $text)
+            }
+            .padding(12)
+            .cornerRadius(8)
+        }
+    }
+}
+
 struct RegisterView: View {
     
     // --- Almacenamiento de la App ---
@@ -13,7 +58,6 @@ struct RegisterView: View {
     @AppStorage("user_dni") private var userDni = ""
     @AppStorage("user_password") private var userPassword = ""
     @AppStorage("user_recovery_key") private var userRecoveryKey = ""
-
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
 
     // --- States de la Vista ---
@@ -21,88 +65,155 @@ struct RegisterView: View {
     @State private var dni = ""
     @State private var password = ""
     @State private var confirmPassword = ""
-
-    @State private var showingError = false
-    @State private var errorMessage = ""
+    
+    // --- ESTADO DE ERROR (¡NUEVO!) ---
+    @State private var errorMsg: String? // Para mostrar errores de validación
     
     @State private var showingRecoveryKeyModal = false
     @State private var showingTouchIDPrompt = false
     
-    // --- States del Modal de Llave ---
-    @State private var keyToDisplay = "" // <-- La variable que mostrará la llave
+    // States del Modal de Llave
+    @State private var keyToDisplay = ""
     @State private var recoveryKeyCheckbox = false
     @State private var copiedFeedback = false
 
     var body: some View {
         ZStack {
-            // ... (VStack de Registro - no cambia) ...
-            Color("MercedesBackground").ignoresSafeArea()
-            VStack(spacing: 20) {
-                Image(systemName: "car.fill").font(.system(size: 40)).foregroundColor(Color("MercedesPetrolGreen"))
-                Text("Sistema de soporte de deciciones").font(.title).fontWeight(.bold).foregroundColor(.white)
-                Text("Crear Cuenta de Administrador del Taller.").font(.body).foregroundColor(.gray).padding(.bottom, 20)
-                
-                VStack(alignment: .leading, spacing: 15) {
-                    TextField("Nombre Completo", text: $fullName)
-                    TextField("DNI/CURP", text: $dni)
-                    SecureField("Contraseña", text: $password)
-                    SecureField("Repita su Contraseña", text: $confirmPassword)
+            Color("MercedesBackground")
+                .ignoresSafeArea()
+
+            VStack(spacing: 25) {
+                // --- Encabezado ---
+                VStack(spacing: 8) {
+                    Image(systemName: "car.fill")
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                        .shadow(color: Color("MercedesPetrolGreen").opacity(0.4), radius: 6, x: 0, y: 3)
+                    
+                    Text("Crear Cuenta de Administrador")
+                        .font(.title2.bold())
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("Este es el único administrador del negocio.")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+
+                // --- Formulario ---
+                VStack(spacing: 16) {
+                    CustomField(title: "Nombre Completo:", placeholder: "Ej. José Cisneros Torres", text: $fullName, systemImage: "person.fill")
+                    CustomField(title: "Clave Única de Registro de Población (CURP):", placeholder: "18 caracteres", text: $dni, systemImage: "document.fill")
+                    CustomSecureField(title: "Contraseña:", placeholder: "********", text: $password, systemImage: "lock.fill")
+                    CustomSecureField(title: "Confirmar Contraseña:", placeholder: "********", text: $confirmPassword, systemImage: "lock.rotation")
                     
                     if !password.isEmpty && !confirmPassword.isEmpty && password != confirmPassword {
-                        Text("Las contraseñas no coinciden")
-                            .font(.caption).foregroundColor(.red)
+                        Text("⚠️ Las contraseñas no coinciden")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding(.top, 4)
                     }
                 }
-                .textFieldStyle(PlainTextFieldStyle())
-                .padding(12)
-                .background(Color("MercedesCard"))
-                .cornerRadius(8)
+                .padding(20)
+                .background(Color("MercedesCard").opacity(0.95))
+                .cornerRadius(15)
+                .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 6)
+                .padding(.horizontal)
+
+                // --- Error general ---
+                if let errorMsg {
+                    Text(errorMsg)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.top, 5)
+                }
+
                 
                 Button {
                     register()
                 } label: {
-                    Text("Registro del taller")
-                        .font(.headline).padding(.vertical, 12).frame(maxWidth: .infinity)
+                    Text("Registrarse")
+                        .font(.headline).padding(.vertical, 12).frame(maxWidth: 500)
                         .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
                 }
                 .buttonStyle(.plain).padding(.top)
                 .disabled(password.isEmpty || password != confirmPassword)
             }
             .padding(50)
-            .frame(width: 450, height: 550)
+            .frame(width: 450, height: 580) // Un poco más alto para el error
         }
-        .alert("Error", isPresented: $showingError) {
-            Button("OK", role: .cancel) { }
-        } message: { Text(errorMessage) }
+        // (Ya no necesitamos .alert(isPresented: $showingError))
         
         // --- MODALES ---
         .sheet(isPresented: $showingRecoveryKeyModal) {
-            recoveryKeyModalView() // 1. Muestra la llave
+            recoveryKeyModalView()
         }
         .sheet(isPresented: $showingTouchIDPrompt) {
-            touchIDPromptModal() // 2. Muestra la huella
+            touchIDPromptModal()
         }
     }
     
-    // --- LÓGICA DE REGISTRO (Actualizada) ---
+    // --- LÓGICA DE REGISTRO (¡ACTUALIZADA!) ---
     func register() {
-        guard !dni.isEmpty && !password.isEmpty && !fullName.isEmpty else {
-            errorMessage = "Please fill in all fields."
-            showingError = true
+        
+        // 1. Resetear el error
+        errorMsg = nil
+        
+        // --- 2. VALIDACIÓN DE FORMATO ---
+        
+        // --- Validación de Nombre ---
+        let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nameParts = trimmedName.split(separator: " ").filter { !$0.isEmpty }
+        let regex = "^[A-Za-zÁÉÍÓÚáéíóúÑñ ]+$"
+        
+        if !NSPredicate(format: "SELF MATCHES %@", regex).evaluate(with: trimmedName) {
+            errorMsg = "El nombre solo debe contener letras y espacios."
             return
         }
+
+        // Validar número mínimo de palabras
+        if nameParts.count < 2 {
+            errorMsg = "El nombre completo debe tener al menos 2 palabras (ej. José Cisneros Torres)."
+            return
+        }
+
+        // Validar que cada palabra tenga al menos 3 letras
+        for part in nameParts {
+            if part.count < 3 {
+                errorMsg = "Cada palabra debe tener al menos 3 letras (ej. Max Verstapen Torres)."
+                return
+            }
+        }
         
-        // 1. Guarda los datos del usuario
+        // Validación de DNI/CURP (18 caracteres)
+        // --- Validación de CURP ---
+        let dniTrimmed = dni.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+
+        let curpRegex = #"^[A-Z]{1}[AEIOUX]{1}[A-Z]{2}\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])[HM]{1}(AS|BC|BS|CC|CL|CM|CS|CH|DF|DG|GT|GR|HG|JC|MC|MN|MS|NT|NL|OC|PL|QT|QR|SP|SL|SR|TC|TS|TL|VZ|YN|ZS|NE)[B-DF-HJ-NP-TV-Z]{3}[A-Z\d]{1}\d{1}$"#
+
+        let predicate = NSPredicate(format: "SELF MATCHES %@", curpRegex)
+
+        if !predicate.evaluate(with: dniTrimmed) {
+            errorMsg = "El CURP no tiene un formato válido. Ejemplo: CATT040903HDFRRS09"
+            return
+        }
+
+        // --- 3. SI TODO ES VÁLIDO, PROCEDE ---
+        
+        // Genera la Llave (esto se mueve al modal)
+        
+        // Guarda los datos en AppStorage
         userName = fullName
-        userDni = dni
+        userDni = dniTrimmed // Guarda la versión sin espacios
         userPassword = password
         
-        // 2. NO genera la llave aquí.
-        //    Solo abre el primer modal.
+        // Muestra el primer modal (el de la llave)
         showingRecoveryKeyModal = true
     }
     
-    // --- VISTA DEL MODAL DE LLAVE (¡MEJORADO!) ---
+    // --- VISTA DEL MODAL DE LLAVE (Sin cambios) ---
     @ViewBuilder
     func recoveryKeyModalView() -> some View {
         ZStack {
@@ -111,52 +222,36 @@ struct RegisterView: View {
                 Text("¡IMPORTANTE!")
                     .font(.largeTitle).fontWeight(.bold)
                     .foregroundColor(.yellow)
-                
                 Text("Guarda tu Llave de Recuperación")
                     .font(.title2).fontWeight(.bold).foregroundColor(.white)
-                
-                // --- NUEVA TARJETA DE LLAVE ---
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Tu Llave Única", systemImage: "key.fill")
-                        .font(.headline)
-                        .foregroundColor(.gray)
-                    
-                    HStack(spacing: 15) {
-                        // Muestra la llave (que se genera 'onAppear')
-                        Text(keyToDisplay)
-                            .font(.system(size: 21, weight: .bold, design: .monospaced))
-                            .textSelection(.enabled)
-
-                        Spacer()
-
-                        Button {
-                            copyToClipboard(text: keyToDisplay)
-                            copiedFeedback = true
-                        } label: {
-                            Image(systemName: copiedFeedback ? "checkmark" : "doc.on.doc")
-                                .font(.title2)
-                                .foregroundColor(copiedFeedback ? .green : Color("MercedesPetrolGreen"))
-                        }
-                        .buttonStyle(.plain)
+                HStack(spacing: 15) {
+                    Text(keyToDisplay)
+                        .font(.system(size: 20, weight: .bold, design: .monospaced))
+                        .textSelection(.enabled)
+                    Spacer()
+                    Button {
+                        copyToClipboard(text: keyToDisplay)
+                        copiedFeedback = true
+                    } label: {
+                        Image(systemName: copiedFeedback ? "checkmark" : "doc.on.doc")
+                            .font(.title)
+                            .foregroundColor(copiedFeedback ? .green : Color("MercedesPetrolGreen"))
                     }
+                    .buttonStyle(.plain)
                 }
                 .padding()
                 .background(Color("MercedesCard"))
-                .cornerRadius(10)
-                // --- FIN DE LA NUEVA TARJETA ---
-                
+                .cornerRadius(8)
                 Text("Esta es la **ÚNICA** forma de recuperar tu cuenta si olvidas tu contraseña y no tienes Touch ID. Cópiala o anótala en un lugar seguro.")
                     .font(.headline)
                     .foregroundColor(.gray)
                     .multilineTextAlignment(.center)
                     .padding(.bottom)
-                
                 Toggle(isOn: $recoveryKeyCheckbox) {
                     Text("He guardado mi llave en un lugar seguro.")
                         .foregroundColor(.white)
                 }
                 .toggleStyle(.switch)
-                
                 Button {
                     showingRecoveryKeyModal = false
                     showingTouchIDPrompt = true
@@ -174,13 +269,9 @@ struct RegisterView: View {
         .preferredColorScheme(.dark)
         .interactiveDismissDisabled()
         .onAppear {
-            // --- ¡AQUÍ ESTÁ LA CORRECCIÓN DEL BUG! ---
-            // Genera y guarda la llave JUSTO al aparecer el modal
             let newKey = generateRecoveryKey()
             keyToDisplay = newKey
-            userRecoveryKey = newKey // Guarda en AppStorage
-            
-            // Resetea los states del modal
+            userRecoveryKey = newKey
             copiedFeedback = false
             recoveryKeyCheckbox = false
         }
