@@ -197,7 +197,6 @@ struct QuickActionsCard: View {
                 .font(.subheadline).foregroundColor(.gray)
             
             Button {
-                seleccion = .decisiones
             } label: {
                 Label("Asignar Servicios", systemImage: "brain.head.profile")
                     .font(.headline)

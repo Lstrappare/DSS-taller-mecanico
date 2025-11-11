@@ -1,23 +1,29 @@
 import SwiftUI
 import SwiftData
+internal import Combine
 
 // 1. AÑADE .configuracion
 //    RENOMBRA .person/.inventario/.servicios
 enum Vista: Hashable { // Añadimos Hashable para el DisclosureGroup
-    case inicio, consultaNegocio, decisiones, historial, serviciosEnProceso
+    case inicio, consultaNegocio, historial, serviciosEnProceso
     case operaciones_personal, operaciones_inventario, operaciones_servicios
     case gestionClientes
     case configuracion
 }
 
+class AppNavigationState: ObservableObject {
+    @Published var seleccion: Vista? = .inicio
+}
+
 struct ContentView: View {
     
+    @StateObject private var appState = AppNavigationState()
     @AppStorage("isLoggedIn") private var isLoggedIn = false
     @State private var seleccion: Vista? = .inicio
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $seleccion) {
+            List(selection: $appState.seleccion) {
                 
                 Text("TALLER")
                     .font(.caption).foregroundColor(.gray).padding(.top)
@@ -31,9 +37,6 @@ struct ContentView: View {
                 
                 Label("Asistente estratégico", systemImage: "bubble.left.and.bubble.right.fill")
                     .tag(Vista.consultaNegocio)
-                
-                Label("Asignar servicios", systemImage: "brain.head.profile")
-                    .tag(Vista.decisiones)
                 
                 Label("Historial de Decisiones", systemImage: "clock.arrow.circlepath")
                     .tag(Vista.historial)
@@ -83,7 +86,7 @@ struct ContentView: View {
                 Color("MercedesBackground").ignoresSafeArea()
                 
                 // --- 4. ACTUALIZAR EL SWITCH ---
-                switch seleccion {
+                switch appState.seleccion {
                 case .inicio:
                     DashboardView(seleccion: $seleccion)
                 case .consultaNegocio:
@@ -95,9 +98,6 @@ struct ContentView: View {
                     InventarioView()
                 case .operaciones_servicios:
                     ServiciosView()
-                //
-                case .decisiones:
-                    DecisionView(seleccion: $seleccion)
                     
                 case .historial:
                     HistorialView()
@@ -116,6 +116,7 @@ struct ContentView: View {
                         .font(.largeTitle).foregroundColor(.gray)
                 }
             }
+            .environmentObject(appState)
         }
         .preferredColorScheme(.dark)
     }

@@ -1,11 +1,11 @@
 import SwiftUI
 import SwiftData
 
-// --- Enums para controlar los Modales (¡ACTUALIZADOS!) ---
+// --- Enums para controlar los Modales (Sin cambios) ---
 fileprivate enum ModalMode: Identifiable {
-    case addClienteConVehiculo // ¡El nuevo modal combinado!
+    case addClienteConVehiculo
     case editCliente(Cliente)
-    case addVehiculo(Cliente)  // Para 2do, 3er, etc.
+    case addVehiculo(Cliente)
     case editVehiculo(Vehiculo)
     
     var id: String {
@@ -18,24 +18,41 @@ fileprivate enum ModalMode: Identifiable {
     }
 }
 
-// --- VISTA PRINCIPAL DE CLIENTES ---
+// --- VISTA PRINCIPAL DE CLIENTES (¡ACTUALIZADA!) ---
 struct GestionClientesView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Cliente.nombre) private var clientes: [Cliente]
     
-    // Un solo State para todos los modales
     @State private var modalMode: ModalMode?
+    
+    // --- 1. STATE PARA EL BUSCADOR ---
+    @State private var searchQuery = ""
+    
+    // --- 2. LÓGICA DE FILTRADO (SOLO CLIENTES) ---
+    var filteredClientes: [Cliente] {
+        if searchQuery.isEmpty {
+            return clientes
+        } else {
+            let query = searchQuery.lowercased()
+            return clientes.filter { cliente in
+                // Busca por Nombre, Teléfono o Email
+                let nombreMatch = cliente.nombre.lowercased().contains(query)
+                let telefonoMatch = cliente.telefono.lowercased().contains(query)
+                let emailMatch = cliente.email.lowercased().contains(query)
+                
+                return nombreMatch || telefonoMatch || emailMatch
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading) {
-            // --- Cabecera ---
+            // --- Cabecera (Sin cambios) ---
             HStack {
                 Text("Gestión de Clientes y Vehículos")
                     .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
                 Spacer()
                 Button {
-                    // ¡AQUÍ ESTÁ EL CAMBIO!
-                    // Llama al nuevo modal combinado
                     modalMode = .addClienteConVehiculo
                 } label: {
                     Label("Añadir Cliente", systemImage: "person.badge.plus")
@@ -49,10 +66,19 @@ struct GestionClientesView: View {
             Text("Registra y administra tus clientes y sus vehículos.")
                 .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
             
+            // --- 3. TEXTFIELD DE BÚSQUEDA ---
+            TextField("Buscar por Nombre, Teléfono o Email...", text: $searchQuery)
+                .textFieldStyle(PlainTextFieldStyle())
+                .padding(12)
+                .background(Color("MercedesCard"))
+                .cornerRadius(8)
+                .padding(.bottom, 20)
+            
             // --- Lista de Clientes ---
             ScrollView {
                 LazyVStack(spacing: 15) {
-                    ForEach(clientes) { cliente in
+                    // --- 4. USA LA LISTA FILTRADA ---
+                    ForEach(filteredClientes) { cliente in
                         // Tarjeta de Cliente
                         VStack(alignment: .leading) {
                             HStack {
@@ -120,35 +146,31 @@ struct GestionClientesView: View {
             Spacer()
         }
         .padding(30)
-        // --- El .sheet ahora maneja todos los casos ---
         .sheet(item: $modalMode) { mode in
-            // Decide qué modal mostrar
             switch mode {
             case .addClienteConVehiculo:
-                ClienteConVehiculoFormView() // ¡El nuevo modal!
+                ClienteConVehiculoFormView()
             case .editCliente(let cliente):
-                ClienteFormView(cliente: cliente) // El modal de edición
+                ClienteFormView(cliente: cliente)
             case .addVehiculo(let cliente):
-                VehiculoFormView(cliente: cliente) // El modal de añadir 2do carro
+                VehiculoFormView(cliente: cliente)
             case .editVehiculo(let vehiculo):
-                VehiculoFormView(vehiculo: vehiculo) // El modal de editar carro
+                VehiculoFormView(vehiculo: vehiculo)
             }
         }
     }
 }
 
 
-// --- 1. NUEVO FORMULARIO COMBINADO (ADD CLIENTE + VEHÍCULO) ---
+// --- 1. FORMULARIO COMBINADO (Sin cambios) ---
 fileprivate struct ClienteConVehiculoFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    // States del Cliente
     @State private var nombre = ""
     @State private var telefono = ""
     @State private var email = ""
     
-    // States del Vehículo
     @State private var placas = ""
     @State private var marca = ""
     @State private var modelo = ""
@@ -176,7 +198,6 @@ fileprivate struct ClienteConVehiculoFormView: View {
                 Text(errorMsg).font(.caption).foregroundColor(.red)
             }
 
-            // Botones
             HStack {
                 Button("Cancelar") { dismiss() }
                     .buttonStyle(.plain).padding().foregroundColor(.gray)
@@ -191,25 +212,17 @@ fileprivate struct ClienteConVehiculoFormView: View {
     }
     
     func guardarCambios() {
-        // Validación
         guard !nombre.isEmpty, !telefono.isEmpty, !placas.isEmpty, !marca.isEmpty, let anio = Int(anioString) else {
             errorMsg = "Por favor, llena todos los campos."
             return
         }
         
-        // --- ¡AQUÍ ESTÁ LA LÓGICA COMPLETA! ---
-        
-        // 1. Crea el Cliente
         let nuevoCliente = Cliente(nombre: nombre, telefono: telefono, email: email)
-        
-        // 2. Crea el Vehículo
         let nuevoVehiculo = Vehiculo(placas: placas, marca: marca, modelo: modelo, anio: anio)
         
-        // 3. ¡ENLAZA AMBOS LADOS!
-        nuevoVehiculo.cliente = nuevoCliente      // Lado 1
-        nuevoCliente.vehiculos.append(nuevoVehiculo) // Lado 2 (¡La corrección del bug!)
+        nuevoVehiculo.cliente = nuevoCliente
+        nuevoCliente.vehiculos.append(nuevoVehiculo)
         
-        // 4. Guarda (Solo necesitas insertar el "padre", SwiftData maneja el resto)
         modelContext.insert(nuevoCliente)
         
         dismiss()
@@ -217,18 +230,18 @@ fileprivate struct ClienteConVehiculoFormView: View {
 }
 
 
-// --- 2. FORMULARIO DE CLIENTE (SOLO EDITAR) ---
+// --- 2. FORMULARIO DE CLIENTE (SOLO EDITAR) (Sin cambios) ---
 fileprivate struct ClienteFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    @Bindable var cliente: Cliente // Se edita directamente
+    @Bindable var cliente: Cliente
 
     var body: some View {
         FormModal(title: "Editar Cliente", minHeight: 400) {
             FormField(title: "Nombre Completo", text: $cliente.nombre)
             FormField(title: "Teléfono", text: $cliente.telefono)
-                .disabled(true) // No se puede cambiar el ID
+                .disabled(true)
             FormField(title: "Email (Opcional)", text: $cliente.email)
             
             HStack {
@@ -241,7 +254,6 @@ fileprivate struct ClienteFormView: View {
                 .buttonStyle(.plain).padding().foregroundColor(.red)
                 Spacer()
                 Button("Guardar Cambios") {
-                    // No se necesita 'guardar', SwiftData lo hace solo.
                     dismiss()
                 }
                 .buttonStyle(.plain).padding()
@@ -253,33 +265,29 @@ fileprivate struct ClienteFormView: View {
 }
 
 
-// --- 3. FORMULARIO DE VEHÍCULO (AÑADIR 2do+ / EDITAR) ---
+// --- 3. FORMULARIO DE VEHÍCULO (AÑADIR 2do+ / EDITAR) (Sin cambios) ---
 fileprivate struct VehiculoFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    // Dos modos: Añadir 2do carro o Editar uno existente
     @State private var vehiculo: Vehiculo
     private var clientePadre: Cliente?
     private var esModoEdicion: Bool
     
     var formTitle: String { esModoEdicion ? "Editar Vehículo" : "Añadir Nuevo Vehículo" }
     
-    // Inicializador para AÑADIR (a un cliente existente)
     init(cliente: Cliente) {
         self.clientePadre = cliente
         self._vehiculo = State(initialValue: Vehiculo(placas: "", marca: "", modelo: "", anio: 2020))
         self.esModoEdicion = false
     }
     
-    // Inicializador para EDITAR (un vehículo existente)
     init(vehiculo: Vehiculo) {
         self._vehiculo = State(initialValue: vehiculo)
         self.clientePadre = vehiculo.cliente
         self.esModoEdicion = true
     }
     
-    // Binding para el año (convierte Int a String)
     private var anioString: Binding<String> {
         Binding(
             get: { String(vehiculo.anio) },
@@ -293,7 +301,7 @@ fileprivate struct VehiculoFormView: View {
                 .font(.headline).foregroundColor(.gray)
             
             FormField(title: "Placas", text: $vehiculo.placas)
-                .disabled(esModoEdicion) // No se puede cambiar si se está editando
+                .disabled(esModoEdicion)
             FormField(title: "Marca", text: $vehiculo.marca)
             FormField(title: "Modelo", text: $vehiculo.modelo)
             FormField(title: "Año", text: anioString)
@@ -323,19 +331,16 @@ fileprivate struct VehiculoFormView: View {
         guard !vehiculo.placas.isEmpty, !vehiculo.marca.isEmpty else { return }
         
         if !esModoEdicion {
-            // ¡AQUÍ ESTÁ LA CORRECCIÓN DEL BUG!
-            // Enlazamos en AMBOS sentidos
             vehiculo.cliente = clientePadre
             clientePadre?.vehiculos.append(vehiculo)
             modelContext.insert(vehiculo)
         }
-        // (Si esModoEdicion, SwiftData guarda los cambios automáticamente)
         dismiss()
     }
 }
 
 
-// --- VISTAS HELPER REUTILIZABLES ---
+// --- VISTAS HELPER REUTILIZABLES (Sin cambios) ---
 fileprivate struct FormModal<Content: View>: View {
     var title: String
     var minHeight: CGFloat
@@ -346,17 +351,16 @@ fileprivate struct FormModal<Content: View>: View {
             Text(title)
                 .font(.largeTitle).fontWeight(.bold)
             
-            // Usamos un Form para agrupar visualmente
             Form {
                 content()
             }
             .textFieldStyle(PlainTextFieldStyle())
-            .formStyle(.grouped) // Estilo de secciones
-            .scrollContentBackground(.hidden) // Oculta el fondo del Form
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
         }
         .padding(30)
         .frame(minWidth: 500, minHeight: minHeight)
-        .background(Color("MercedesCard")) // Fondo general
+        .background(Color("MercedesCard"))
         .cornerRadius(15)
         .preferredColorScheme(.dark)
     }

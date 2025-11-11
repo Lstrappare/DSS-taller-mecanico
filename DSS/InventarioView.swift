@@ -13,16 +13,33 @@ fileprivate enum ProductModalMode: Identifiable {
     }
 }
 
-// --- VISTA PRINCIPAL (Actualizada) ---
+// --- VISTA PRINCIPAL (¡ACTUALIZADA!) ---
 struct InventarioView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Producto.nombre) private var productos: [Producto]
     
     @State private var modalMode: ProductModalMode?
+    
+    // --- 1. STATE PARA EL BUSCADOR ---
+    @State private var searchQuery = ""
+    
+    // --- 2. LÓGICA DE FILTRADO ---
+    var filteredProductos: [Producto] {
+        if searchQuery.isEmpty {
+            return productos
+        } else {
+            let query = searchQuery.lowercased()
+            return productos.filter { producto in
+                // Revisa nombre o unidad de medida
+                producto.nombre.lowercased().contains(query) ||
+                producto.unidadDeMedida.lowercased().contains(query)
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading) {
-            // ... (Cabecera no cambia)
+            // --- Cabecera (Sin cambios) ---
             HStack {
                 Text("Gestión de Inventario")
                     .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
@@ -39,10 +56,19 @@ struct InventarioView: View {
             Text("Registra y modifica tus productos.")
                 .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
             
+            // --- 3. TEXTFIELD DE BÚSQUEDA ---
+            TextField("Buscar por Nombre o Unidad de Medida...", text: $searchQuery)
+                .textFieldStyle(PlainTextFieldStyle())
+                .padding(12)
+                .background(Color("MercedesCard"))
+                .cornerRadius(8)
+                .padding(.bottom, 20)
+            
             // --- Lista de Productos (Actualizada) ---
             ScrollView {
                 LazyVStack(spacing: 15) {
-                    ForEach(productos) { producto in
+                    // --- 4. USA LA LISTA FILTRADA ---
+                    ForEach(filteredProductos) { producto in
                         VStack(alignment: .leading, spacing: 10) {
                             Text(producto.nombre)
                                 .font(.title2).fontWeight(.semibold)
@@ -50,13 +76,11 @@ struct InventarioView: View {
                             HStack(alignment: .top) {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text("Costo: $\(producto.costo, specifier: "%.2f")")
-                                    // Muestra cantidad con unidad
                                     Text("Cantidad: \(producto.cantidad, specifier: "%.2f") \(producto.unidadDeMedida)(s)")
                                 }
                                 Spacer()
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text("Precio: $\(producto.precioVenta, specifier: "%.2f")")
-                                    // Mostramos margen (no cambia)
                                     Text(String(format: "Margen de ganancia: %.0f%%", producto.margen))
                                         .font(.headline)
                                         .foregroundColor(producto.margen > 50 ? .green : (producto.margen > 20 ? .yellow : .red))
@@ -83,21 +107,22 @@ struct InventarioView: View {
 }
 
 
-// --- VISTA DEL FORMULARIO (Actualizada) ---
+// --- VISTA DEL FORMULARIO (Sin cambios) ---
+// (Esta parte es idéntica a la que ya tenías)
 fileprivate struct ProductFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
     let mode: ProductModalMode
     
-    // States para los campos
     @State private var nombre = ""
     @State private var costoString = ""
     @State private var precioVentaString = ""
     @State private var cantidadString = ""
     @State private var informacion = ""
-    @State private var unidadDeMedida = "Pieza" // <-- NUEVO
-    let opcionesUnidad = ["Pieza", "Litro", "Galón", "Botella", "Lata", "Juego", "Kit", "Caja", "Metro"]
+    @State private var unidadDeMedida = "Pieza"
+    let opcionesUnidad = ["Pieza", "Litro", "Onza (Oz)", "Galón", "Botella", "Lata", "Juego", "Kit", "Kg", "g", "Caja", "Metro"]
+
     
     private var productoAEditar: Producto?
     
@@ -119,7 +144,7 @@ fileprivate struct ProductFormView: View {
             _precioVentaString = State(initialValue: "\(producto.precioVenta)")
             _cantidadString = State(initialValue: "\(producto.cantidad)")
             _informacion = State(initialValue: producto.informacion)
-            _unidadDeMedida = State(initialValue: producto.unidadDeMedida) // <-- NUEVO
+            _unidadDeMedida = State(initialValue: producto.unidadDeMedida)
         }
     }
     
@@ -133,7 +158,6 @@ fileprivate struct ProductFormView: View {
             
             HStack {
                 TextField("Cantidad", text: $cantidadString)
-                // Picker para la Unidad
                 Picker("Unidad de medida", selection: $unidadDeMedida) {
                     ForEach(opcionesUnidad, id: \.self) { Text($0) }
                 }
@@ -143,7 +167,6 @@ fileprivate struct ProductFormView: View {
             TextField("Información (opcional)", text: $informacion)
             
             HStack {
-                // ... (Botones Cancel/Delete no cambian)
                 Button("Cancelar") { dismiss() }
                     .buttonStyle(.plain).padding().foregroundColor(.gray)
                 if case .edit(let producto) = mode {
@@ -169,11 +192,11 @@ fileprivate struct ProductFormView: View {
         .cornerRadius(15)
     }
     
-    // --- Lógica del Formulario (Actualizada) ---
+    // --- Lógica del Formulario (Sin cambios) ---
     func guardarCambios() {
         guard let costo = Double(costoString),
               let precioVenta = Double(precioVentaString),
-              let cantidad = Double(cantidadString), // <-- AHORA ES DOUBLE
+              let cantidad = Double(cantidadString),
               !nombre.isEmpty else {
             print("Error: Campos inválidos")
             return
@@ -182,16 +205,16 @@ fileprivate struct ProductFormView: View {
         if let producto = productoAEditar {
             producto.costo = costo
             producto.precioVenta = precioVenta
-            producto.cantidad = cantidad // <-- CAMBIADO
+            producto.cantidad = cantidad
             producto.informacion = informacion
-            producto.unidadDeMedida = unidadDeMedida // <-- CAMBIADO
+            producto.unidadDeMedida = unidadDeMedida
         } else {
             let nuevoProducto = Producto(
                 nombre: nombre,
                 costo: costo,
                 precioVenta: precioVenta,
-                cantidad: cantidad, // <-- CAMBIADO
-                unidadDeMedida: unidadDeMedida, // <-- CAMBIADO
+                cantidad: cantidad,
+                unidadDeMedida: unidadDeMedida,
                 informacion: informacion
             )
             modelContext.insert(nuevoProducto)

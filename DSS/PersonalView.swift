@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 // --- MODO DEL MODAL (Sin cambios) ---
-fileprivate enum ModalMode: Identifiable {
+fileprivate enum ModalMode: Identifiable, Equatable {
     case add
     case edit(Personal)
     
@@ -21,6 +21,28 @@ struct PersonalView: View {
     @Query(sort: \Personal.nombre) private var personal: [Personal]
     
     @State private var modalMode: ModalMode?
+    
+    // --- 1. STATE PARA EL BUSCADOR ---
+    @State private var searchQuery = ""
+    
+    // --- 2. LÓGICA DE FILTRADO ---
+    var filteredPersonal: [Personal] {
+        if searchQuery.isEmpty {
+            return personal
+        } else {
+            let query = searchQuery.lowercased()
+            return personal.filter { mec in
+                // Revisa nombre, DNI o Rol
+                let nombreMatch = mec.nombre.lowercased().contains(query)
+                let dniMatch = mec.dni.lowercased().contains(query)
+                let rolMatch = mec.rol.rawValue.lowercased().contains(query)
+                // Revisa si *alguna* especialidad coincide
+                let especialidadMatch = mec.especialidades.contains { $0.lowercased().contains(query) }
+                
+                return nombreMatch || dniMatch || rolMatch || especialidadMatch
+            }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -43,21 +65,27 @@ struct PersonalView: View {
             Text("Registra tu equipo de trabajo aquí.")
                 .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
             
-            // --- Lista del Personal (¡ACTUALIZADA!) ---
+            // --- 3. TEXTFIELD DE BÚSQUEDA ---
+            TextField("Buscar por Nombre, DNI, Rol o Especialidad...", text: $searchQuery)
+                .textFieldStyle(PlainTextFieldStyle())
+                .padding(12)
+                .background(Color("MercedesCard"))
+                .cornerRadius(8)
+                .padding(.bottom, 20)
+            
+            // --- Lista del Personal (Actualizada) ---
             ScrollView {
                 LazyVStack(spacing: 15) {
-                    ForEach(personal) { mecanico in
+                    // --- 4. USA LA LISTA FILTRADA ---
+                    ForEach(filteredPersonal) { mecanico in
                         HStack {
-                            // --- Info Izquierda (Actualizada) ---
+                            // Info Izquierda
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(mecanico.nombre)
                                     .font(.title2).fontWeight(.semibold)
-                                
-                                // Muestra el nuevo ROL
                                 Text(mecanico.rol.rawValue)
                                     .font(.headline)
                                     .foregroundColor(Color("MercedesPetrolGreen"))
-                                
                                 Text("Especialidades: \(mecanico.especialidades.joined(separator: ", "))")
                                     .font(.body).foregroundColor(.gray)
                                 Text("CURP/DNI: \(mecanico.dni)")
@@ -65,22 +93,17 @@ struct PersonalView: View {
                             }
                             Spacer()
                             
-                            // --- Info Derecha (Actualizada) ---
+                            // Info Derecha
                             VStack(alignment: .trailing, spacing: 8) {
-                                
-                                // --- Lógica de 3 Estados (¡ACTUALIZADA!) ---
-                                // (Ahora usa 'isAsignable' y 'estaEnHorario')
                                 if !mecanico.estaEnHorario {
                                     Text("Fuera de Turno")
                                         .font(.headline)
                                         .foregroundColor(.gray)
                                 } else {
-                                    // Está en turno, ¿cuál es su estado?
                                     Text(mecanico.estado.rawValue)
                                         .font(.headline)
                                         .foregroundColor(colorParaEstado(mecanico.estado))
                                 }
-                                
                                 Text("Turno: \(mecanico.horaEntrada) - \(mecanico.horaSalida)")
                                     .font(.body).foregroundColor(.gray)
                             }
@@ -106,20 +129,17 @@ struct PersonalView: View {
     // Helper para dar color al estado
     func colorParaEstado(_ estado: EstadoEmpleado) -> Color {
         switch estado {
-        case .disponible:
-            return .green
-        case .ocupado:
-            return .red
-        case .descanso:
-            return .yellow
-        case .ausente:
-            return .gray
+        case .disponible: return .green
+        case .ocupado: return .red
+        case .descanso: return .yellow
+        case .ausente: return .gray
         }
     }
 }
 
 
-// --- VISTA DEL FORMULARIO (¡ACTUALIZADA!) ---
+// --- VISTA DEL FORMULARIO (Sin cambios) ---
+// (Esta parte es idéntica a la que ya tenías)
 fileprivate struct PersonalFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -132,20 +152,12 @@ fileprivate struct PersonalFormView: View {
     @State private var dni = ""
     @State private var horaEntradaString = "9"
     @State private var horaSalidaString = "18"
-    
-    // --- ¡CAMPOS ACTUALIZADOS! ---
     @State private var rol: Rol = .ayudante
     @State private var estado: EstadoEmpleado = .disponible
-    
     @State private var especialidadesString = ""
     
     private var mecanicoAEditar: Personal?
-    var formTitle: String {
-        switch mode {
-        case .add: return "Añadir Personal"
-        case .edit: return "Editar Personal"
-        }
-    }
+    var formTitle: String { (mode == .add) ? "Añadir Personal" : "Editar Personal" }
     
     // Inicializador
     init(mode: ModalMode) {
@@ -158,11 +170,8 @@ fileprivate struct PersonalFormView: View {
             _dni = State(initialValue: personal.dni)
             _horaEntradaString = State(initialValue: "\(personal.horaEntrada)")
             _horaSalidaString = State(initialValue: "\(personal.horaSalida)")
-            
-            // --- ¡CAMPOS ACTUALIZADOS! ---
             _rol = State(initialValue: personal.rol)
             _estado = State(initialValue: personal.estado)
-            
             _especialidadesString = State(initialValue: personal.especialidades.joined(separator: ", "))
         }
     }
@@ -172,7 +181,6 @@ fileprivate struct PersonalFormView: View {
             Text(formTitle)
                 .font(.largeTitle).fontWeight(.bold)
             
-            // Formulario
             TextField("Nombre Completo", text: $nombre)
             TextField("Email", text: $email)
             TextField("CURP/DNI", text: $dni).disabled(mecanicoAEditar != nil)
@@ -188,15 +196,13 @@ fileprivate struct PersonalFormView: View {
                 }
             }
 
-            // --- ¡PICKER DE ROL (NUEVO)! ---
             Picker("Rol en el Taller", selection: $rol) {
                 ForEach(Rol.allCases, id: \.self) { rol in
                     Text(rol.rawValue).tag(rol)
                 }
             }
-            .pickerStyle(.menu) // .segmented queda muy grande
+            .pickerStyle(.menu)
             
-            // --- ¡PICKER DE ESTADO (NUEVO)! ---
             Picker("Estado Actual", selection: $estado) {
                 ForEach(EstadoEmpleado.allCases, id: \.self) { estado in
                     Text(estado.rawValue).tag(estado)
@@ -205,7 +211,6 @@ fileprivate struct PersonalFormView: View {
             
             TextField("Especialidades (separadas por coma, ej: Motor, Frenos)", text: $especialidadesString)
             
-            // Botones de Acción
             HStack {
                 Button("Cancelar") { dismiss() }
                 .buttonStyle(.plain).padding().foregroundColor(.gray)
@@ -235,7 +240,7 @@ fileprivate struct PersonalFormView: View {
         .cornerRadius(15)
     }
     
-    // --- Lógica del Formulario (Actualizada) ---
+    // --- Lógica del Formulario (Sin cambios) ---
     
     func guardarCambios() {
         guard !nombre.isEmpty, !dni.isEmpty,
@@ -251,24 +256,22 @@ fileprivate struct PersonalFormView: View {
             .filter { !$0.isEmpty }
         
         if let mecanico = mecanicoAEditar {
-            // MODO EDITAR
             mecanico.nombre = nombre
             mecanico.email = email
             mecanico.horaEntrada = horaEntrada
             mecanico.horaSalida = horaSalida
-            mecanico.rol = rol // <-- CAMBIADO
-            mecanico.estado = estado // <-- CAMBIADO
+            mecanico.rol = rol
+            mecanico.estado = estado
             mecanico.especialidades = especialidadesArray
         } else {
-            // MODO AÑADIR
             let nuevoMecanico = Personal(
                 nombre: nombre,
                 email: email,
                 dni: dni,
                 horaEntrada: horaEntrada,
                 horaSalida: horaSalida,
-                rol: rol, // <-- CAMBIADO
-                estado: estado, // <-- CAMBIADO
+                rol: rol,
+                estado: estado,
                 especialidades: especialidadesArray
             )
             modelContext.insert(nuevoMecanico)
