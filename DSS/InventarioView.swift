@@ -103,8 +103,8 @@ fileprivate struct ProductFormView: View {
     
     var formTitle: String {
         switch mode {
-        case .add: return "Add New Product"
-        case .edit: return "Edit Product"
+        case .add: return "Añadir Nuevo Producto"
+        case .edit: return "Editar Producto"
         }
     }
     

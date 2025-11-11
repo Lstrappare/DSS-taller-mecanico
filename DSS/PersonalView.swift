@@ -202,7 +202,6 @@ fileprivate struct PersonalFormView: View {
                     Text(estado.rawValue).tag(estado)
                 }
             }
-            .pickerStyle(.segmented)
             
             TextField("Especialidades (separadas por coma, ej: Motor, Frenos)", text: $especialidadesString)
             

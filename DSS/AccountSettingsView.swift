@@ -79,7 +79,7 @@ struct AccountSettingsView: View {
                 }
                 
                 // --- Tarjeta 2: Security Settings (NUEVO DISEÑO) ---
-                FormCardView(title: "Security Settings", icon: "shield.fill") {
+                FormCardView(title: "Configuración de la seguridad de la cuenta", icon: "shield.fill") {
                     VStack(alignment: .leading, spacing: 20) {
                         
                         // --- Toggle de Touch ID ---
@@ -122,7 +122,7 @@ struct AccountSettingsView: View {
                 }
 
                 // --- Tarjeta 3: Danger Zone (NUEVO) ---
-                FormCardView(title: "Danger Zone", icon: "exclamationmark.triangle.fill", isDanger: true) {
+                FormCardView(title: "Zona de peligro", icon: "exclamationmark.triangle.fill", isDanger: true) {
                     HStack {
                         VStack(alignment: .leading) {
                             Text("Eliminar Cuenta")

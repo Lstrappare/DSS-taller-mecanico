@@ -153,7 +153,7 @@ fileprivate struct ServicioFormView: View {
         VStack(spacing: 20) {
             Text(formTitle).font(.largeTitle).fontWeight(.bold)
             
-            TextField("Service Name", text: $nombre).disabled(servicioAEditar != nil)
+            TextField("Nombre del Servicio", text: $nombre).disabled(servicioAEditar != nil)
             TextField("Descripción", text: $descripcion)
             HStack {
                 FormField(title: "Precio Mano de Obra", text: $precioString)
@@ -176,7 +176,6 @@ fileprivate struct ServicioFormView: View {
                     Text(rol.rawValue).tag(rol)
                 }
             }
-            .pickerStyle(.segmented)
             
             // --- Lista de Productos (No cambia) ---
             VStack(alignment: .leading) {
