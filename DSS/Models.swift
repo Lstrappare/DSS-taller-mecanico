@@ -161,46 +161,47 @@ class DecisionRecord {
 
 @Model
 class ServicioEnProceso {
-    @Attribute(.unique) var id: UUID // ID único para la orden de trabajo
+    @Attribute(.unique) var id: UUID
     
     var nombreServicio: String
-    var dniMecanicoAsignado: String   // Para saber a quién liberar
-    var nombreMecanicoAsignado: String // Para mostrar en la UI
+    var dniMecanicoAsignado: String
+    var nombreMecanicoAsignado: String
     
     var horaInicio: Date
     var horaFinEstimada: Date
     
-    // Guardamos qué productos se usaron, para un futuro historial
     var productosConsumidos: [String]
+    
+    // --- ¡NUEVA RELACIÓN! ---
+    // Un ticket pertenece a UN vehículo
+    var vehiculo: Vehiculo?
 
     init(nombreServicio: String,
          dniMecanicoAsignado: String,
          nombreMecanicoAsignado: String,
          horaInicio: Date,
-         duracionHoras: Double, // Lo leeremos del 'Servicio'
-         productosConsumidos: [String])
+         duracionHoras: Double,
+         productosConsumidos: [String],
+         vehiculo: Vehiculo?) // <-- AÑADIDO AL INIT
     {
-        self.id = UUID() // Genera un nuevo ID único
+        self.id = UUID()
         self.nombreServicio = nombreServicio
         self.dniMecanicoAsignado = dniMecanicoAsignado
         self.nombreMecanicoAsignado = nombreMecanicoAsignado
         self.horaInicio = horaInicio
         
-        // Calcula la hora de fin
         let segundosDeDuracion = duracionHoras * 3600
         self.horaFinEstimada = horaInicio.addingTimeInterval(segundosDeDuracion)
         
         self.productosConsumidos = productosConsumidos
+        self.vehiculo = vehiculo // <-- AÑADIDO
     }
     
-    // --- Propiedades Calculadas (para la UI) ---
-    
-    // Devuelve cuántos segundos quedan
+    // --- Propiedades Calculadas (no cambian) ---
     var tiempoRestanteSegundos: Double {
         return max(0, horaFinEstimada.timeIntervalSinceNow)
     }
     
-    // Devuelve 'true' si el temporizador ya llegó a cero
     var estaCompletado: Bool {
         return tiempoRestanteSegundos == 0
     }
@@ -228,3 +229,43 @@ struct Ingrediente: Codable, Hashable {
     var nombreProducto: String
     var cantidadUsada: Double
 }
+
+@Model
+class Vehiculo {
+    @Attribute(.unique) var placas: String // "Plates"
+    var marca: String
+    var modelo: String
+    var anio: Int
+    
+    // Un vehículo pertenece a UN cliente
+    var cliente: Cliente?
+    
+    // Un vehículo puede tener MUCHOS servicios en proceso
+    @Relationship(deleteRule: .cascade)
+    var serviciosEnProceso: [ServicioEnProceso] = []
+    
+    init(placas: String, marca: String, modelo: String, anio: Int) {
+        self.placas = placas
+        self.marca = marca
+        self.modelo = modelo
+        self.anio = anio
+    }
+}
+
+@Model
+class Cliente {
+    @Attribute(.unique) var telefono: String
+    var nombre: String
+    var email: String
+    
+    // Un cliente puede tener MUCHOS vehículos
+    @Relationship(deleteRule: .cascade)
+    var vehiculos: [Vehiculo] = []
+    
+    init(nombre: String, telefono: String, email: String = "") {
+        self.nombre = nombre
+        self.telefono = telefono
+        self.email = email
+    }
+}
+

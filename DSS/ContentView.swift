@@ -6,6 +6,7 @@ import SwiftData
 enum Vista: Hashable { // Añadimos Hashable para el DisclosureGroup
     case inicio, consultaNegocio, decisiones, historial, serviciosEnProceso
     case operaciones_personal, operaciones_inventario, operaciones_servicios
+    case gestionClientes
     case configuracion
 }
 
@@ -38,6 +39,12 @@ struct ContentView: View {
                     .tag(Vista.historial)
                 
                 Text("GESTIÓN DEL TALLER")
+                    .font(.caption).foregroundColor(.gray).padding(.top)
+                
+                Label("Gestión de Clientes", systemImage: "person.crop.rectangle.stack.fill")
+                    .tag(Vista.gestionClientes)
+                
+                Text("GESTIÓN OPERACIONAL")
                     .font(.caption).foregroundColor(.gray).padding(.top)
                     Label("Gestión de Personal", systemImage: "person.2.fill")
                         .tag(Vista.operaciones_personal)
@@ -97,6 +104,10 @@ struct ContentView: View {
                     
                 case .serviciosEnProceso: // <-- NUEVO CASE
                     EnProcesoView()
+
+                case .gestionClientes: // <-- NUEVO CASE
+                    GestionClientesView()
+                    
                 // Caso de Configuración
                 case .configuracion:
                     AccountSettingsView()

@@ -199,7 +199,8 @@ struct DecisionView: View {
             nombreMecanicoAsignado: mecanico.nombre,
             horaInicio: Date(),
             duracionHoras: rec.servicio.duracionHoras,
-            productosConsumidos: rec.servicio.ingredientes.map { $0.nombreProducto }
+            productosConsumidos: rec.servicio.ingredientes.map { $0.nombreProducto },
+            vehiculo: nil // No hay selección de vehículo en esta vista aún
         )
         modelContext.insert(nuevoServicio)
         
