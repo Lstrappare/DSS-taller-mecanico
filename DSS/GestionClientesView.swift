@@ -137,7 +137,7 @@ struct GestionClientesView: View {
                             Button {
                                 modalMode = .addVehiculo(cliente)
                             } label: {
-                                Label("Añadir Vehículo", systemImage: "car.badge.plus")
+                                Label("+ Añadir Vehículo", systemImage: "car.badge.plus")
                                     .font(.headline)
                             }
                             .buttonStyle(.plain)
