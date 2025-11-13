@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import LocalAuthentication // Necesario para el candado
 
 // --- Enums para controlar los Modales (Sin cambios) ---
 fileprivate enum ModalMode: Identifiable {
@@ -24,22 +25,17 @@ struct GestionClientesView: View {
     @Query(sort: \Cliente.nombre) private var clientes: [Cliente]
     
     @State private var modalMode: ModalMode?
-    
-    // --- 1. STATE PARA EL BUSCADOR ---
     @State private var searchQuery = ""
     
-    // --- 2. LÓGICA DE FILTRADO (SOLO CLIENTES) ---
     var filteredClientes: [Cliente] {
         if searchQuery.isEmpty {
             return clientes
         } else {
             let query = searchQuery.lowercased()
             return clientes.filter { cliente in
-                // Busca por Nombre, Teléfono o Email
                 let nombreMatch = cliente.nombre.lowercased().contains(query)
                 let telefonoMatch = cliente.telefono.lowercased().contains(query)
                 let emailMatch = cliente.email.lowercased().contains(query)
-                
                 return nombreMatch || telefonoMatch || emailMatch
             }
         }
@@ -66,7 +62,7 @@ struct GestionClientesView: View {
             Text("Registra y administra tus clientes y sus vehículos.")
                 .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
             
-            // --- 3. TEXTFIELD DE BÚSQUEDA ---
+            // --- Buscador (Sin cambios) ---
             TextField("Buscar por Nombre, Teléfono o Email...", text: $searchQuery)
                 .textFieldStyle(PlainTextFieldStyle())
                 .padding(12)
@@ -74,21 +70,34 @@ struct GestionClientesView: View {
                 .cornerRadius(8)
                 .padding(.bottom, 20)
             
-            // --- Lista de Clientes ---
+            // --- Lista de Clientes (¡ACTUALIZADA!) ---
             ScrollView {
                 LazyVStack(spacing: 15) {
-                    // --- 4. USA LA LISTA FILTRADA ---
                     ForEach(filteredClientes) { cliente in
-                        // Tarjeta de Cliente
                         VStack(alignment: .leading) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(cliente.nombre)
                                         .font(.title2).fontWeight(.semibold)
-                                    Label(cliente.telefono, systemImage: "phone.fill")
-                                    Label(cliente.email.isEmpty ? "Sin email" : cliente.email, systemImage: "envelope.fill")
+                                    
+                                    // --- ¡CAMBIO! (Links Clickeables) ---
+                                    Link(destination: URL(string: "tel:\(cliente.telefono)")!) {
+                                        Label(cliente.telefono, systemImage: "phone.fill")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundColor(Color("MercedesPetrolGreen"))
+                                    
+                                    if cliente.email.isEmpty {
+                                        Label("Sin email", systemImage: "envelope.fill")
+                                    } else {
+                                        Link(destination: URL(string: "mailto:\(cliente.email)")!) {
+                                            Label(cliente.email, systemImage: "envelope.fill")
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundColor(Color("MercedesPetrolGreen"))
+                                    }
                                 }
-                                .font(.body).foregroundColor(.gray)
+                                .font(.body)
                                 
                                 Spacer()
                                 
@@ -134,7 +143,6 @@ struct GestionClientesView: View {
                             }
                             .buttonStyle(.plain)
                             .padding(.top, 10)
-                            
                         }
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -147,22 +155,27 @@ struct GestionClientesView: View {
         }
         .padding(30)
         .sheet(item: $modalMode) { mode in
+            // Pasa el environment a TODOS los modales
             switch mode {
             case .addClienteConVehiculo:
                 ClienteConVehiculoFormView()
+                    .environment(\.modelContext, modelContext)
             case .editCliente(let cliente):
                 ClienteFormView(cliente: cliente)
+                    .environment(\.modelContext, modelContext)
             case .addVehiculo(let cliente):
                 VehiculoFormView(cliente: cliente)
+                    .environment(\.modelContext, modelContext)
             case .editVehiculo(let vehiculo):
                 VehiculoFormView(vehiculo: vehiculo)
+                    .environment(\.modelContext, modelContext)
             }
         }
     }
 }
 
 
-// --- 1. FORMULARIO COMBINADO (Sin cambios) ---
+// --- 1. FORMULARIO COMBINADO (ADD CLIENTE + VEHÍCULO) (¡ACTUALIZADO!) ---
 fileprivate struct ClienteConVehiculoFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -170,7 +183,6 @@ fileprivate struct ClienteConVehiculoFormView: View {
     @State private var nombre = ""
     @State private var telefono = ""
     @State private var email = ""
-    
     @State private var placas = ""
     @State private var marca = ""
     @State private var modelo = ""
@@ -182,7 +194,7 @@ fileprivate struct ClienteConVehiculoFormView: View {
         FormModal(title: "Añadir Nuevo Cliente", minHeight: 600) {
             
             Section("Datos del Cliente") {
-                FormField(title: "Nombre Completo", text: $nombre)
+                FormField(title: "Nombre Completo (ej. José Cisneros)", text: $nombre)
                 FormField(title: "Teléfono (ID Único)", text: $telefono)
                 FormField(title: "Email (Opcional)", text: $email)
             }
@@ -212,10 +224,25 @@ fileprivate struct ClienteConVehiculoFormView: View {
     }
     
     func guardarCambios() {
-        guard !nombre.isEmpty, !telefono.isEmpty, !placas.isEmpty, !marca.isEmpty, let anio = Int(anioString) else {
-            errorMsg = "Por favor, llena todos los campos."
+        // --- VALIDACIONES ---
+        let nameParts = nombre.trimmingCharacters(in: .whitespaces).split(separator: " ")
+        if nameParts.count < 2 {
+            errorMsg = "El Nombre Completo debe tener al menos 2 palabras."
             return
         }
+        if telefono.trimmingCharacters(in: .whitespaces).isEmpty {
+            errorMsg = "El Teléfono no puede estar vacío."
+            return
+        }
+        if placas.trimmingCharacters(in: .whitespaces).isEmpty {
+            errorMsg = "Las Placas no pueden estar vacías."
+            return
+        }
+        guard let anio = Int(anioString) else {
+            errorMsg = "El Año debe ser un número."
+            return
+        }
+        // --- FIN VALIDACIONES ---
         
         let nuevoCliente = Cliente(nombre: nombre, telefono: telefono, email: email)
         let nuevoVehiculo = Vehiculo(placas: placas, marca: marca, modelo: modelo, anio: anio)
@@ -224,25 +251,64 @@ fileprivate struct ClienteConVehiculoFormView: View {
         nuevoCliente.vehiculos.append(nuevoVehiculo)
         
         modelContext.insert(nuevoCliente)
-        
         dismiss()
     }
 }
 
 
-// --- 2. FORMULARIO DE CLIENTE (SOLO EDITAR) (Sin cambios) ---
+// --- 2. FORMULARIO DE CLIENTE (SOLO EDITAR) (¡ACTUALIZADO!) ---
 fileprivate struct ClienteFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    
+    @AppStorage("user_password") private var userPassword = ""
+    @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
 
     @Bindable var cliente: Cliente
+
+    // States para el candado
+    @State private var isTelefonoUnlocked = false
+    @State private var showingAuthModal = false
+    @State private var authError = ""
+    @State private var passwordAttempt = ""
 
     var body: some View {
         FormModal(title: "Editar Cliente", minHeight: 400) {
             FormField(title: "Nombre Completo", text: $cliente.nombre)
-            FormField(title: "Teléfono", text: $cliente.telefono)
-                .disabled(true)
+            
+            // --- CAMBIO: Teléfono con Candado 🔒 ---
+            HStack {
+                FormField(title: "Teléfono", text: $cliente.telefono)
+                    .disabled(!isTelefonoUnlocked)
+                
+                Button {
+                    if isTelefonoUnlocked {
+                        isTelefonoUnlocked = false
+                    } else {
+                        showingAuthModal = true
+                    }
+                } label: {
+                    Image(systemName: isTelefonoUnlocked ? "lock.open.fill" : "lock.fill")
+                        .foregroundColor(isTelefonoUnlocked ? .green : .red)
+                }
+                .buttonStyle(.plain)
+            }
+            if !cliente.telefono.isEmpty {
+                Link("Llamar a \(cliente.telefono)", destination: URL(string: "tel:\(cliente.telefono)")!)
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                    .padding(.leading, 5)
+            }
+            
             FormField(title: "Email (Opcional)", text: $cliente.email)
+            if !cliente.email.isEmpty {
+                Link("Enviar correo a \(cliente.email)", destination: URL(string: "mailto:\(cliente.email)")!)
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                    .padding(.leading, 5)
+            }
             
             HStack {
                 Button("Cancelar") { dismiss() }
@@ -254,25 +320,106 @@ fileprivate struct ClienteFormView: View {
                 .buttonStyle(.plain).padding().foregroundColor(.red)
                 Spacer()
                 Button("Guardar Cambios") {
-                    dismiss()
+                    // Validar nombre antes de guardar
+                    let nameParts = cliente.nombre.trimmingCharacters(in: .whitespaces).split(separator: " ")
+                    if nameParts.count >= 2 {
+                        dismiss() // SwiftData guarda automáticamente
+                    }
                 }
                 .buttonStyle(.plain).padding()
                 .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
             }
             .padding(.top, 10)
         }
+        .sheet(isPresented: $showingAuthModal) {
+            authModalView()
+        }
+    }
+    
+    // --- Modal de Autenticación (¡NUEVO!) ---
+    @ViewBuilder
+    func authModalView() -> some View {
+        ZStack {
+            Color("MercedesBackground").ignoresSafeArea()
+            VStack(spacing: 20) {
+                Text("Autorización Requerida").font(.largeTitle).fontWeight(.bold)
+                Text("Autoriza para editar el Teléfono.").font(.title3).foregroundColor(.gray).padding(.bottom)
+                
+                if isTouchIDEnabled {
+                    Button { Task { await authenticateWithTouchID() } }
+                    label: {
+                        Label("Usar Huella (Touch ID)", systemImage: "touchid")
+                            .font(.headline).padding().frame(maxWidth: .infinity)
+                            .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
+                    }.buttonStyle(.plain)
+                    Text("o").foregroundColor(.gray)
+                }
+                
+                Text("Usa tu contraseña de administrador:").font(.headline)
+                SecureField("Contraseña", text: $passwordAttempt)
+                    .padding(12).background(Color("MercedesCard")).cornerRadius(8)
+                
+                if !authError.isEmpty {
+                    Text(authError).font(.caption).foregroundColor(.red)
+                }
+                
+                Button { authenticateWithPassword() }
+                label: {
+                    Label("Autorizar con Contraseña", systemImage: "lock.fill")
+                        .font(.headline).padding().frame(maxWidth: .infinity)
+                        .background(Color.gray.opacity(0.4)).foregroundColor(.white).cornerRadius(8)
+                }.buttonStyle(.plain)
+            }
+            .padding(40)
+        }
+        .frame(minWidth: 500, minHeight: 450)
+        .preferredColorScheme(.dark)
+        .onAppear { authError = ""; passwordAttempt = "" }
+    }
+    
+    // --- Lógica de Autenticación (¡NUEVA!) ---
+    func authenticateWithTouchID() async {
+        let context = LAContext()
+        let reason = "Autoriza la edición del Teléfono."
+        do {
+            if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
+                let success = try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
+                if success { await MainActor.run { onAuthSuccess() } }
+            }
+        } catch { await MainActor.run { authError = "Huella no reconocida." } }
+    }
+    
+    func authenticateWithPassword() {
+        if passwordAttempt == userPassword { onAuthSuccess() }
+        else { authError = "Contraseña incorrecta."; passwordAttempt = "" }
+    }
+    
+    func onAuthSuccess() {
+        isTelefonoUnlocked = true
+        showingAuthModal = false
+        authError = ""
+        passwordAttempt = ""
     }
 }
 
 
-// --- 3. FORMULARIO DE VEHÍCULO (AÑADIR 2do+ / EDITAR) (Sin cambios) ---
+// --- 3. FORMULARIO DE VEHÍCULO (AÑADIR 2do+ / EDITAR) (¡ACTUALIZADO!) ---
 fileprivate struct VehiculoFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    
+    @AppStorage("user_password") private var userPassword = ""
+    @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
 
     @State private var vehiculo: Vehiculo
     private var clientePadre: Cliente?
     private var esModoEdicion: Bool
+    
+    // States para el candado
+    @State private var isPlacasUnlocked = false
+    @State private var showingAuthModal = false
+    @State private var authError = ""
+    @State private var passwordAttempt = ""
     
     var formTitle: String { esModoEdicion ? "Editar Vehículo" : "Añadir Nuevo Vehículo" }
     
@@ -300,8 +447,26 @@ fileprivate struct VehiculoFormView: View {
             Text("Cliente: \(clientePadre?.nombre ?? "Error")")
                 .font(.headline).foregroundColor(.gray)
             
-            FormField(title: "Placas", text: $vehiculo.placas)
-                .disabled(esModoEdicion)
+            // --- CAMBIO: Placas con Candado 🔒 ---
+            HStack {
+                FormField(title: "Placas", text: $vehiculo.placas)
+                    .disabled(esModoEdicion && !isPlacasUnlocked)
+                
+                if esModoEdicion {
+                    Button {
+                        if isPlacasUnlocked {
+                            isPlacasUnlocked = false
+                        } else {
+                            showingAuthModal = true
+                        }
+                    } label: {
+                        Image(systemName: isPlacasUnlocked ? "lock.open.fill" : "lock.fill")
+                            .foregroundColor(isPlacasUnlocked ? .green : .red)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            
             FormField(title: "Marca", text: $vehiculo.marca)
             FormField(title: "Modelo", text: $vehiculo.modelo)
             FormField(title: "Año", text: anioString)
@@ -325,8 +490,53 @@ fileprivate struct VehiculoFormView: View {
             }
             .padding(.top, 10)
         }
+        .sheet(isPresented: $showingAuthModal) {
+            authModalView()
+        }
     }
     
+    // --- Modal de Autenticación (¡NUEVO!) ---
+    @ViewBuilder
+    func authModalView() -> some View {
+        ZStack {
+            Color("MercedesBackground").ignoresSafeArea()
+            VStack(spacing: 20) {
+                Text("Autorización Requerida").font(.largeTitle).fontWeight(.bold)
+                Text("Autoriza para editar las Placas.").font(.title3).foregroundColor(.gray).padding(.bottom)
+                
+                if isTouchIDEnabled {
+                    Button { Task { await authenticateWithTouchID() } }
+                    label: {
+                        Label("Usar Huella (Touch ID)", systemImage: "touchid")
+                            .font(.headline).padding().frame(maxWidth: .infinity)
+                            .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
+                    }.buttonStyle(.plain)
+                    Text("o").foregroundColor(.gray)
+                }
+                
+                Text("Usa tu contraseña de administrador:").font(.headline)
+                SecureField("Contraseña", text: $passwordAttempt)
+                    .padding(12).background(Color("MercedesCard")).cornerRadius(8)
+                
+                if !authError.isEmpty {
+                    Text(authError).font(.caption).foregroundColor(.red)
+                }
+                
+                Button { authenticateWithPassword() }
+                label: {
+                    Label("Autorizar con Contraseña", systemImage: "lock.fill")
+                        .font(.headline).padding().frame(maxWidth: .infinity)
+                        .background(Color.gray.opacity(0.4)).foregroundColor(.white).cornerRadius(8)
+                }.buttonStyle(.plain)
+            }
+            .padding(40)
+        }
+        .frame(minWidth: 500, minHeight: 450)
+        .preferredColorScheme(.dark)
+        .onAppear { authError = ""; passwordAttempt = "" }
+    }
+    
+    // --- Lógica de Guardar/Auth (¡NUEVA!) ---
     func guardarCambios() {
         guard !vehiculo.placas.isEmpty, !vehiculo.marca.isEmpty else { return }
         
@@ -336,6 +546,29 @@ fileprivate struct VehiculoFormView: View {
             modelContext.insert(vehiculo)
         }
         dismiss()
+    }
+    
+    func authenticateWithTouchID() async {
+        let context = LAContext()
+        let reason = "Autoriza la edición de las Placas."
+        do {
+            if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
+                let success = try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
+                if success { await MainActor.run { onAuthSuccess() } }
+            }
+        } catch { await MainActor.run { authError = "Huella no reconocida." } }
+    }
+    
+    func authenticateWithPassword() {
+        if passwordAttempt == userPassword { onAuthSuccess() }
+        else { authError = "Contraseña incorrecta."; passwordAttempt = "" }
+    }
+    
+    func onAuthSuccess() {
+        isPlacasUnlocked = true
+        showingAuthModal = false
+        authError = ""
+        passwordAttempt = ""
     }
 }
 

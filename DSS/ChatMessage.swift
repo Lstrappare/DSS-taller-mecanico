@@ -67,7 +67,7 @@ struct ConsultaView: View {
                         }
                         .padding(.top, 10)
                     }
-                    .onChange(of: conversation.count) { _ in
+                    .onChange(of: conversation.count) {
                         proxy.scrollTo(conversation.last?.id, anchor: .bottom)
                     }
                 }

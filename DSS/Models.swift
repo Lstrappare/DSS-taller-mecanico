@@ -8,8 +8,7 @@ enum Rol: String, CaseIterable, Codable {
     case jefeDeTaller = "Jefe de Taller"
     case adminFinanzas = "Administración / Finanzas"
     case atencionCliente = "Atención al Cliente"
-    case mecanicoMotor = "Mecánico de Motor y Transmisión"
-    case mecanicoFrenos = "Mecánico de Frenos/Eléctrico"
+    case mecanicoFrenos = "Mecánico"
     case ayudante = "Ayudante"
 }
 
@@ -26,49 +25,51 @@ enum EstadoEmpleado: String, CaseIterable, Codable {
 class Personal {
     @Attribute(.unique) var dni: String
     var nombre: String
-    var email: String
+    var email: String // Ahora será obligatorio
     
-    var horaEntrada: Int // Formato 24h (ej. 9)
-    var horaSalida: Int  // Formato 24h (ej. 18)
+    // --- ¡NUEVOS CAMPOS! ---
+    var telefono: String
+    var telefonoActivo: Bool // El Toggle que pediste
     
-    // --- ¡CAMPOS ACTUALIZADOS! ---
+    var horaEntrada: Int
+    var horaSalida: Int
+    
     var rol: Rol
-    var estado: EstadoEmpleado // Reemplaza a 'estaDisponible'
+    var estado: EstadoEmpleado
     
     var especialidades: [String]
     
-    // --- Lógica "Inteligente" ---
-    
-    // 1. Revisa si está en turno
+    // (La lógica de 'estaEnHorario' y 'isAsignable' no cambia)
     var estaEnHorario: Bool {
         let calendario = Calendar.current
         let ahora = Date()
         let diaDeSemana = calendario.component(.weekday, from: ahora)
         let horaActual = calendario.component(.hour, from: ahora)
-        
-        let esDiaLaboral = (2...7).contains(diaDeSemana) // Lunes a Sábado
+        let esDiaLaboral = (2...7).contains(diaDeSemana)
         let esHoraLaboral = (horaEntrada..<horaSalida).contains(horaActual)
-        
         return esDiaLaboral && esHoraLaboral
     }
     
-    // 2. Propiedad final para el DSS
-    // (Esta es la que usará el "cerebro")
     var isAsignable: Bool {
-        // Solo se puede asignar si está EN TURNO y su estado es "Disponible"
         return estaEnHorario && (estado == .disponible)
     }
 
-    init(nombre: String, email: String, dni: String,
+    init(nombre: String,
+         email: String, // Ahora requerido
+         dni: String,
+         telefono: String = "", // <-- NUEVO
+         telefonoActivo: Bool = false, // <-- NUEVO
          horaEntrada: Int = 9,
          horaSalida: Int = 18,
-         rol: Rol = .ayudante, // Default
-         estado: EstadoEmpleado = .disponible, // Default
+         rol: Rol = .ayudante,
+         estado: EstadoEmpleado = .disponible,
          especialidades: [String] = [])
     {
         self.nombre = nombre
         self.email = email
         self.dni = dni
+        self.telefono = telefono // <-- NUEVO
+        self.telefonoActivo = telefonoActivo // <-- NUEVO
         self.horaEntrada = horaEntrada
         self.horaSalida = horaSalida
         self.rol = rol
