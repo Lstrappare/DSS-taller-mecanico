@@ -5,6 +5,8 @@ import LocalAuthentication
 // Enum para saber por qué pedimos autorización
 fileprivate enum AuthReason {
     case changePassword
+    case changeDNI
+    case editPersonalInfo
     case none
 }
 
@@ -51,6 +53,18 @@ struct AccountSettingsView: View {
     @State private var deleteDniAttempt = ""
     @State private var deletePasswordAttempt = ""
     @State private var deleteError = ""
+    
+    // --- NUEVO: buffers y validaciones ---
+    @State private var pendingNewDni: String? = nil
+    @State private var nameValidationError: String = ""
+    @State private var curpValidationError: String = ""
+    @State private var dniChangePendingInfo: String = ""
+    @State private var touchIDAvailable: Bool = true
+    
+    // --- NUEVO: modo edición de información personal ---
+    @State private var isEditingPersonalInfo: Bool = false
+    @State private var originalName: String = ""
+    @State private var originalDni: String = ""
 
     var body: some View {
         ScrollView {
@@ -65,15 +79,92 @@ struct AccountSettingsView: View {
                 // --- Tarjeta 1: Personal Information ---
                 FormCardView(title: "Información personal", icon: "person.fill") {
                     VStack(alignment: .leading, spacing: 15) {
-                        Text("Actualiza tus datos personales").font(.subheadline).foregroundColor(.gray)
+                        HStack {
+                            Text("Actualiza tus datos personales")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                            Spacer()
+                            if !isEditingPersonalInfo {
+                                Button {
+                                    // Solicitar autorización para habilitar edición
+                                    authReason = .editPersonalInfo
+                                    showingAuthModal = true
+                                } label: {
+                                    Label("Editar", systemImage: "pencil")
+                                        .font(.caption)
+                                        .padding(.horizontal, 10).padding(.vertical, 6)
+                                        .background(Color("MercedesCard"))
+                                        .cornerRadius(8)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        
                         HStack(spacing: 20) {
                             FormField(title: "Nombre Completo", text: $name)
+                                .onChange(of: name) { oldValue, newValue in
+                                    nameValidationError = validateFullName(newValue)
+                                }
+                                .disabled(!isEditingPersonalInfo)
+                                .opacity(isEditingPersonalInfo ? 1.0 : 0.6)
                         }
-                        FormField(title: "DNI/CURP (No puede ser cambiado)", text: $dni)
-                            .disabled(true) // DNI no se puede cambiar
+                        if !nameValidationError.isEmpty {
+                            Text(nameValidationError)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
                         
-                        FormButton(title: "Guardar información personal") {
-                            savePersonalInfo()
+                        // CURP editable solo en modo edición
+                        FormField(title: "DNI/CURP", text: $dni)
+                            .onChange(of: dni) { _, newValue in
+                                curpValidationError = validateCURP(newValue)
+                            }
+                            .disabled(!isEditingPersonalInfo)
+                            .opacity(isEditingPersonalInfo ? 1.0 : 0.6)
+                        
+                        if !curpValidationError.isEmpty {
+                            Text(curpValidationError)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        
+                        if !dniChangePendingInfo.isEmpty {
+                            Text(dniChangePendingInfo)
+                                .font(.caption)
+                                .foregroundColor(.yellow)
+                        }
+                        
+                        HStack {
+                            if isEditingPersonalInfo {
+                                Button {
+                                    // Cancelar edición y restaurar valores originales
+                                    name = originalName
+                                    dni = originalDni
+                                    nameValidationError = ""
+                                    curpValidationError = ""
+                                    dniChangePendingInfo = ""
+                                    isEditingPersonalInfo = false
+                                } label: {
+                                    Text("Cancelar")
+                                        .font(.headline)
+                                        .padding(.vertical, 10)
+                                        .frame(maxWidth: 120)
+                                        .background(Color.gray.opacity(0.3))
+                                        .foregroundColor(.white)
+                                        .cornerRadius(8)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            
+                            Spacer()
+                            
+                            // Mostrar el botón Guardar solo en modo edición
+                            if isEditingPersonalInfo {
+                                FormButton(title: "Guardar cambios") {
+                                    savePersonalInfo()
+                                }
+                                .disabled(!canSavePersonalInfo || (isEditingPersonalInfo && (!nameValidationError.isEmpty || !curpValidationError.isEmpty)))
+                            }
                         }
                     }
                 }
@@ -152,6 +243,14 @@ struct AccountSettingsView: View {
             // Cargar los datos guardados
             name = userName
             dni = userDni
+            originalName = userName
+            originalDni = userDni
+            nameValidationError = validateFullName(name)
+            curpValidationError = validateCURP(dni)
+            // Detectar si hay biometría
+            let context = LAContext()
+            var error: NSError?
+            touchIDAvailable = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
         }
         .alert(alertMessage, isPresented: $showingSaveAlert) {
             Button("OK", role: .cancel) { }
@@ -196,8 +295,7 @@ struct AccountSettingsView: View {
                 .font(.headline)
                 .padding(.vertical, 10)
                 .frame(maxWidth: 200)
-                .background(Color("MercedesPetrolGreen"))
-                .foregroundColor(.white)
+                .foregroundColor(Color("MercedesPetrolGreen"))
                 .cornerRadius(8)
         }
         .buttonStyle(.plain)
@@ -212,10 +310,10 @@ struct AccountSettingsView: View {
     func authModalView() -> some View {
         AuthModal(
             title: "Autorización Requerida",
-            prompt: "Autoriza para continuar con la acción.",
+            prompt: authReasonPrompt,
             error: authError,
             passwordAttempt: $passwordAttempt,
-            isTouchIDEnabled: isTouchIDEnabled, // Pasa el estado del Toggle
+            isTouchIDEnabled: isTouchIDEnabled && touchIDAvailable, // Pasa el estado del Toggle y disponibilidad
             onAuthTouchID: {
                 // Intenta con Huella
                 Task { await authenticateWithTouchID() }
@@ -237,6 +335,11 @@ struct AccountSettingsView: View {
                 SecureField("Nueva Contraseña", text: $newPassword)
                 SecureField("Repite la nueva contraseña", text: $confirmPassword)
                 
+                // Validaciones
+                if !newPassword.isEmpty && newPassword == userPassword {
+                    Text("La nueva contraseña no puede ser igual a la actual.")
+                        .font(.caption).foregroundColor(.yellow)
+                }
                 if !newPassword.isEmpty && newPassword != confirmPassword {
                     Text("Las contraseñas no coinciden.")
                         .font(.caption).foregroundColor(.red)
@@ -250,7 +353,7 @@ struct AccountSettingsView: View {
                     newPassword = ""; confirmPassword = ""
                     showingChangePasswordModal = false
                 }
-                .disabled(newPassword.isEmpty || newPassword != confirmPassword)
+                .disabled(newPassword.isEmpty || newPassword != confirmPassword || newPassword == userPassword)
             }
         }
     }
@@ -286,13 +389,93 @@ struct AccountSettingsView: View {
     
     // --- LÓGICA DE LA VISTA ---
     
+    // Validación del nombre: exactamente 3 palabras, cada una con >= 3 letras
+    func validateFullName(_ value: String) -> String {
+        let parts = value
+            .split(separator: " ")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard parts.count == 3 else {
+            return "El nombre debe ser exactamente 3 palabras."
+        }
+        for p in parts {
+            if p.count < 3 {
+                return "Cada palabra del nombre debe tener al menos 3 letras."
+            }
+        }
+        return ""
+    }
+    
+    // Validación de CURP (formato oficial de 18 caracteres)
+    // Estructura: 4 letras + 6 dígitos de fecha + 1 letra H/M + 5 letras (incluye entidad y consonantes internas) + 2 alfanuméricos
+    func validateCURP(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !trimmed.isEmpty else { return "La CURP no puede estar vacía." }
+        // Regex común para CURP
+        // 1-4: letras; 5-10: fecha YYMMDD; 11: H/M; 12-13: entidad; 14-16: consonantes internas; 17-18: homoclave/ dígito verificador
+        let pattern = #"^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]{2}$"#
+        if trimmed.count != 18 { return "La CURP debe tener 18 caracteres." }
+        if trimmed.range(of: pattern, options: .regularExpression) == nil {
+            return "Formato de CURP inválido."
+        }
+        return ""
+    }
+    
+    var canSavePersonalInfo: Bool {
+        nameValidationError.isEmpty && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
     func savePersonalInfo() {
-        userName = name
-        alertMessage = "Información Personal Guardada"
-        showingSaveAlert = true
+        // Validar nombre
+        let nameError = validateFullName(name)
+        nameValidationError = nameError
+        guard nameError.isEmpty else { return }
+        
+        // Validar CURP
+        let curpError = validateCURP(dni)
+        curpValidationError = curpError
+        guard curpError.isEmpty else { return }
+        
+        // Si el DNI/CURP cambió, pedimos autorización adicional
+        if dni != userDni {
+            pendingNewDni = dni
+            dniChangePendingInfo = "Se requiere autorización para aplicar el nuevo DNI/CURP."
+            authReason = .changeDNI
+            showingAuthModal = true
+            // Guardamos el nombre de una vez (no requiere auth)
+            userName = name
+            alertMessage = "Nombre actualizado. Falta autorizar el cambio de DNI/CURP."
+            showingSaveAlert = true
+            // Mantener en modo edición hasta que autorice el cambio de CURP
+            originalName = userName
+            // No cerramos edición aún
+        } else {
+            // No cambió el DNI, guardamos directo
+            userName = name
+            alertMessage = "Información Personal Guardada"
+            showingSaveAlert = true
+            dniChangePendingInfo = ""
+            // Salir de modo edición
+            isEditingPersonalInfo = false
+            originalName = userName
+            originalDni = userDni
+        }
     }
 
     // Lógica de Autenticación
+    
+    var authReasonPrompt: String {
+        switch authReason {
+        case .changePassword:
+            return "Autoriza para continuar con el cambio de contraseña."
+        case .changeDNI:
+            return "Autoriza para aplicar el nuevo DNI/CURP."
+        case .editPersonalInfo:
+            return "Autoriza para editar tu información personal."
+        case .none:
+            return "Autoriza para continuar con la acción."
+        }
+    }
     
     func authenticateWithTouchID() async {
         let context = LAContext()
@@ -328,9 +511,29 @@ struct AccountSettingsView: View {
         case .changePassword:
             // Abre el modal para la NUEVA contraseña
             showingChangePasswordModal = true
+        case .changeDNI:
+            if let newDni = pendingNewDni {
+                userDni = newDni
+                dni = newDni
+                alertMessage = "DNI/CURP actualizado."
+                showingSaveAlert = true
+                pendingNewDni = nil
+                dniChangePendingInfo = ""
+                // Si estábamos en modo edición esperando esta autorización, cerramos edición
+                isEditingPersonalInfo = false
+                originalDni = userDni
+            }
+        case .editPersonalInfo:
+            // Habilitar edición de Nombre y CURP
+            isEditingPersonalInfo = true
+            // Guardar originales para poder cancelar
+            originalName = name
+            originalDni = dni
         case .none:
             break
         }
+        authReason = .none
+        authError = ""
     }
     
     // Lógica de Borrado
