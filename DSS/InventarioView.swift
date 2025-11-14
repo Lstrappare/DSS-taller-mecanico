@@ -14,94 +14,275 @@ fileprivate enum ProductModalMode: Identifiable {
     }
 }
 
-// --- VISTA PRINCIPAL (Sin cambios) ---
+// --- VISTA PRINCIPAL (Mejorada UI) ---
 struct InventarioView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Producto.nombre) private var productos: [Producto]
     
     @State private var modalMode: ProductModalMode?
     @State private var searchQuery = ""
+    @State private var productoAEliminar: Producto?
+    @State private var mostrandoConfirmacionBorrado = false
+    
+    // Configuración de UI
+    private let lowStockThreshold: Double = 2.0
     
     var filteredProductos: [Producto] {
-        if searchQuery.isEmpty {
+        if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return productos
         } else {
             let query = searchQuery.lowercased()
             return productos.filter { producto in
                 producto.nombre.lowercased().contains(query) ||
-                producto.unidadDeMedida.lowercased().contains(query)
+                producto.unidadDeMedida.lowercased().contains(query) ||
+                producto.informacion.lowercased().contains(query)
             }
         }
     }
+    
+    // Métricas
+    private var totalProductos: Int { productos.count }
+    private var costoTotal: Double {
+        productos.reduce(0) { $0 + ($1.costo * $1.cantidad) }
+    }
+    private var valorInventario: Double {
+        productos.reduce(0) { $0 + ($1.precioVenta * $1.cantidad) }
+    }
+    private var utilidadEstimada: Double {
+        max(0, valorInventario - costoTotal)
+    }
 
     var body: some View {
-        VStack(alignment: .leading) {
-            HStack {
-                Text("Gestión de Inventario")
-                    .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
+        VStack(alignment: .leading, spacing: 16) {
+            // Cabecera con métricas y CTA
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Gestión de Inventario")
+                        .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
+                    HStack(spacing: 10) {
+                        Label("\(totalProductos) producto\(totalProductos == 1 ? "" : "s")", systemImage: "shippingbox.fill")
+                            .font(.subheadline).foregroundColor(.gray)
+                        Label("Valor: $\(valorInventario, specifier: "%.2f")", systemImage: "banknote.fill")
+                            .font(.subheadline).foregroundColor(.gray)
+                        Label("Costo: $\(costoTotal, specifier: "%.2f")", systemImage: "creditcard.fill")
+                            .font(.subheadline).foregroundColor(.gray)
+                        Label("Utilidad: $\(utilidadEstimada, specifier: "%.2f")", systemImage: "chart.line.uptrend.xyaxis")
+                            .font(.subheadline).foregroundColor(.gray)
+                    }
+                }
                 Spacer()
-                Button { modalMode = .add }
-                label: {
-                    Label("Añadir Producto", systemImage: "plus")
-                        .font(.headline).padding(.vertical, 10).padding(.horizontal)
-                        .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
+                Button { modalMode = .add } label: {
+                    Label("Añadir Producto", systemImage: "plus.circle.fill")
+                        .font(.headline)
+                        .padding(.vertical, 10).padding(.horizontal, 14)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.bottom, 20)
+            
+            // Descripción
             Text("Registra y modifica tus productos.")
-                .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
+                .font(.title3).foregroundColor(.gray)
             
-            TextField("Buscar por Nombre o Unidad de Medida...", text: $searchQuery)
-                .textFieldStyle(PlainTextFieldStyle())
-                .padding(12)
-                .background(Color("MercedesCard"))
-                .cornerRadius(8)
-                .padding(.bottom, 20)
-            
-            ScrollView {
-                LazyVStack(spacing: 15) {
-                    ForEach(filteredProductos) { producto in
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(producto.nombre)
-                                .font(.title2).fontWeight(.semibold)
-                            
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text("Costo: $\(producto.costo, specifier: "%.2f")")
-                                    Text("Cantidad: \(producto.cantidad, specifier: "%.2f") \(producto.unidadDeMedida)(s)")
-                                }
-                                Spacer()
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text("Precio: $\(producto.precioVenta, specifier: "%.2f")")
-                                    Text(String(format: "Margen de ganancia: %.0f%%", producto.margen))
-                                        .font(.headline)
-                                        .foregroundColor(producto.margen > 50 ? .green : (producto.margen > 20 ? .yellow : .red))
-                                }
-                            }
-                            .font(.body)
+            // Buscador
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                TextField("Buscar por Nombre, Unidad o Información...", text: $searchQuery)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .animation(.easeInOut(duration: 0.15), value: searchQuery)
+                if !searchQuery.isEmpty {
+                    Button {
+                        searchQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.gray)
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color("MercedesCard"))
-                        .cornerRadius(10)
-                        .onTapGesture { modalMode = .edit(producto) }
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            Spacer()
+            .padding(12)
+            .background(Color("MercedesCard"))
+            .cornerRadius(10)
+            
+            // Lista
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    if filteredProductos.isEmpty {
+                        emptyStateView
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
+                    } else {
+                        ForEach(filteredProductos) { producto in
+                            ProductoCard(
+                                producto: producto,
+                                lowStockThreshold: lowStockThreshold,
+                                onEdit: { modalMode = .edit(producto) },
+                                onDelete: {
+                                    productoAEliminar = producto
+                                    mostrandoConfirmacionBorrado = true
+                                }
+                            )
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            }
+            Spacer(minLength: 0)
         }
         .padding(30)
         .sheet(item: $modalMode) { mode in
             ProductFormView(mode: mode)
                 .environment(\.modelContext, modelContext)
         }
+        .confirmationDialog(
+            "Eliminar producto",
+            isPresented: $mostrandoConfirmacionBorrado,
+            titleVisibility: .visible
+        ) {
+            Button("Eliminar", role: .destructive) {
+                if let p = productoAEliminar {
+                    modelContext.delete(p)
+                }
+            }
+            Button("Cancelar", role: .cancel) { productoAEliminar = nil }
+        } message: {
+            Text("Esta acción no se puede deshacer.")
+        }
+    }
+    
+    // Empty state agradable
+    private var emptyStateView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "shippingbox")
+                .font(.system(size: 42, weight: .bold))
+                .foregroundColor(Color("MercedesPetrolGreen"))
+            Text(searchQuery.isEmpty ? "No hay productos registrados aún." :
+                 "No se encontraron productos para “\(searchQuery)”.")
+                .font(.headline)
+                .foregroundColor(.gray)
+            if searchQuery.isEmpty {
+                Text("Añade tu primer producto para empezar a gestionar el inventario.")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+        }
+    }
+}
+
+// Tarjeta individual de producto
+fileprivate struct ProductoCard: View {
+    let producto: Producto
+    let lowStockThreshold: Double
+    var onEdit: () -> Void
+    var onDelete: () -> Void
+    
+    private var margenColor: Color {
+        producto.margen > 50 ? .green : (producto.margen > 20 ? .yellow : .red)
+    }
+    private var margenTexto: String {
+        if producto.margen > 50 { return "Alto" }
+        if producto.margen > 20 { return "Medio" }
+        return "Crítico"
+    }
+    private var isLowStock: Bool {
+        producto.cantidad <= lowStockThreshold
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(producto.nombre)
+                        .font(.title2).fontWeight(.semibold)
+                    if !producto.informacion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(producto.informacion)
+                            .font(.subheadline).foregroundColor(.gray)
+                            .lineLimit(2)
+                    }
+                }
+                Spacer()
+                HStack(spacing: 8) {
+                    Button {
+                        onEdit()
+                    } label: {
+                        Label("Editar", systemImage: "pencil")
+                            .font(.subheadline)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(Color("MercedesBackground"))
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.white)
+                    
+                    Button(role: .destructive) {
+                        onDelete()
+                    } label: {
+                        Label("Eliminar", systemImage: "trash")
+                            .font(.subheadline)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(Color.red.opacity(0.18))
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.red)
+                }
+            }
+            
+            // Detalles
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        chip(text: producto.unidadDeMedida, icon: "cube.box.fill")
+                        if isLowStock {
+                            chip(text: "Stock bajo", icon: "exclamationmark.triangle.fill", color: .red)
+                        }
+                    }
+                    Text("Cantidad: \(producto.cantidad, specifier: "%.2f") \(producto.unidadDeMedida)(s)")
+                        .font(.body).foregroundColor(.gray)
+                }
+                Spacer()
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Costo: $\(producto.costo, specifier: "%.2f")")
+                    Text("Precio: $\(producto.precioVenta, specifier: "%.2f")")
+                    HStack(spacing: 8) {
+                        Text(String(format: "Margen: %.0f%%", producto.margen))
+                            .font(.headline).foregroundColor(margenColor)
+                        Text(margenTexto)
+                            .font(.caption2)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(margenColor.opacity(0.18))
+                            .foregroundColor(margenColor)
+                            .cornerRadius(6)
+                    }
+                }
+                .font(.body).foregroundColor(.gray)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color("MercedesCard"))
+        .cornerRadius(12)
+    }
+    
+    private func chip(text: String, icon: String, color: Color = Color("MercedesBackground")) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            Text(text)
+        }
+        .font(.caption)
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(color)
+        .cornerRadius(8)
+        .foregroundColor(.white)
     }
 }
 
 
-// --- VISTA DEL FORMULARIO (¡REDISEÑADA!) ---
+// --- VISTA DEL FORMULARIO (Mejorada) ---
 fileprivate struct ProductFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -146,13 +327,26 @@ fileprivate struct ProductFormView: View {
         nombre.trimmingCharacters(in: .whitespaces).count < 3
     }
     private var costoInvalido: Bool {
-        Double(costoString) == nil
+        Double(costoString.replacingOccurrences(of: ",", with: ".")) == nil
     }
     private var precioInvalido: Bool {
-        Double(precioVentaString) == nil
+        Double(precioVentaString.replacingOccurrences(of: ",", with: ".")) == nil
     }
     private var cantidadInvalida: Bool {
-        Double(cantidadString) == nil
+        Double(cantidadString.replacingOccurrences(of: ",", with: ".")) == nil
+    }
+    
+    // Margen en vivo
+    private var margenPreview: Double {
+        guard
+            let c = Double(costoString.replacingOccurrences(of: ",", with: ".")),
+            let p = Double(precioVentaString.replacingOccurrences(of: ",", with: ".")),
+            p > 0
+        else { return 0 }
+        return (1 - (c / p)) * 100
+    }
+    private var margenColor: Color {
+        margenPreview > 50 ? .green : (margenPreview > 20 ? .yellow : .red)
     }
     
     // Inicializador
@@ -162,15 +356,15 @@ fileprivate struct ProductFormView: View {
         if case .edit(let producto) = mode {
             self.productoAEditar = producto
             _nombre = State(initialValue: producto.nombre)
-            _costoString = State(initialValue: "\(producto.costo)")
-            _precioVentaString = State(initialValue: "\(producto.precioVenta)")
-            _cantidadString = State(initialValue: "\(producto.cantidad)")
+            _costoString = State(initialValue: String(format: "%.2f", producto.costo))
+            _precioVentaString = State(initialValue: String(format: "%.2f", producto.precioVenta))
+            _cantidadString = State(initialValue: String(format: "%.2f", producto.cantidad))
             _informacion = State(initialValue: producto.informacion)
             _unidadDeMedida = State(initialValue: producto.unidadDeMedida)
         }
     }
     
-    // --- CUERPO DEL MODAL (¡ACTUALIZADO!) ---
+    // --- CUERPO DEL MODAL ---
     var body: some View {
         VStack(spacing: 0) {
             // Título
@@ -223,6 +417,10 @@ fileprivate struct ProductFormView: View {
                             }
                         }
                         .validationHint(isInvalid: nombreInvalido, message: "El nombre debe tener al menos 3 caracteres.")
+                        if productoAEditar != nil && !isNombreUnlocked {
+                            Text("Campo protegido. Desbloquéalo para editar.")
+                                .font(.caption2).foregroundColor(.gray)
+                        }
                     }
                     
                     // Costo y Precio
@@ -231,6 +429,15 @@ fileprivate struct ProductFormView: View {
                             .validationHint(isInvalid: costoInvalido, message: "Debe ser un número.")
                         FormField(title: "• Precio de Venta", placeholder: "$ 0.00", text: $precioVentaString)
                             .validationHint(isInvalid: precioInvalido, message: "Debe ser un número.")
+                    }
+                    
+                    // Margen en vivo
+                    HStack(spacing: 8) {
+                        Text("Margen estimado:")
+                            .font(.caption).foregroundColor(.gray)
+                        Text(String(format: "%.0f%%", margenPreview))
+                            .font(.headline).foregroundColor(margenColor)
+                        Circle().fill(margenColor).frame(width: 8, height: 8)
                     }
                 }
                 
@@ -288,7 +495,7 @@ fileprivate struct ProductFormView: View {
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 700, minHeight: 480, maxHeight: 600) // Más ancho y corto
+        .frame(minWidth: 700, minHeight: 520, maxHeight: 650)
         .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
@@ -351,15 +558,15 @@ fileprivate struct ProductFormView: View {
             errorMsg = "El nombre del producto debe tener al menos 3 caracteres."
             return
         }
-        guard let costo = Double(costoString), costo >= 0 else {
+        guard let costo = Double(costoString.replacingOccurrences(of: ",", with: ".")), costo >= 0 else {
             errorMsg = "El Costo debe ser un número válido."
             return
         }
-        guard let precioVenta = Double(precioVentaString), precioVenta >= 0 else {
+        guard let precioVenta = Double(precioVentaString.replacingOccurrences(of: ",", with: ".")), precioVenta >= 0 else {
             errorMsg = "El Precio de Venta debe ser un número válido."
             return
         }
-        guard let cantidad = Double(cantidadString), cantidad >= 0 else {
+        guard let cantidad = Double(cantidadString.replacingOccurrences(of: ",", with: ".")), cantidad >= 0 else {
             errorMsg = "La Cantidad debe ser un número válido."
             return
         }
@@ -427,7 +634,7 @@ fileprivate struct ProductFormView: View {
 }
 
 
-// --- Helpers de UI (¡ACTUALIZADOS!) ---
+// --- Helpers de UI ---
 fileprivate struct SectionHeader: View {
     var title: String
     var subtitle: String?
