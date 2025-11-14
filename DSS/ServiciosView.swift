@@ -40,75 +40,74 @@ struct ServiciosView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 16) {
+            // Header compacto con métrica y CTA
             HStack {
-                Text("Gestión de Servicios")
-                    .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Gestión de Servicios")
+                        .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
+                    HStack(spacing: 10) {
+                        Label("\(servicios.count) en catálogo", systemImage: "wrench.and.screwdriver.fill")
+                            .font(.subheadline).foregroundColor(.gray)
+                    }
+                }
                 Spacer()
                 Button {
                     modalMode = .add
                 } label: {
-                    Label("Añadir Servicios", systemImage: "plus")
-                        .font(.headline).padding(.vertical, 10).padding(.horizontal)
-                        .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
+                    Label("Añadir Servicio", systemImage: "plus.circle.fill")
+                        .font(.headline)
+                        .padding(.vertical, 10).padding(.horizontal, 14)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.bottom, 20)
             
-            Text("Selecciona un servicio para asignarlo a un cliente.")
-                .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
+            // Buscador
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                TextField("Buscar por Nombre, Rol o Especialidad...", text: $searchQuery)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .animation(.easeInOut(duration: 0.15), value: searchQuery)
+                if !searchQuery.isEmpty {
+                    Button {
+                        searchQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(12)
+            .background(Color("MercedesCard"))
+            .cornerRadius(10)
             
-            TextField("Buscar por Nombre, Rol o Especialidad...", text: $searchQuery)
-                .textFieldStyle(PlainTextFieldStyle())
-                .padding(12)
-                .background(Color("MercedesCard"))
-                .cornerRadius(8)
-                .padding(.bottom, 20)
-            
+            // Lista de servicios
             ScrollView {
-                LazyVStack(spacing: 15) {
-                    ForEach(filteredServicios) { servicio in
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Text(servicio.nombre)
-                                    .font(.title2).fontWeight(.semibold)
-                                Spacer()
-                                Button {
-                                    modalMode = .edit(servicio)
-                                } label: {
-                                    Text("Editar Servicio")
-                                    Image(systemName: "pencil")
-                                        
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundColor(.gray)
-                            }
-                            Text(servicio.descripcion)
-                                .font(.body).foregroundColor(.gray)
-                            Divider()
-                            Text("Requerimientos:")
-                                .font(.headline)
-                            HStack {
-                                Label(servicio.especialidadRequerida, systemImage: "wrench.and.screwdriver.fill")
-                                Label(servicio.rolRequerido.rawValue, systemImage: "person.badge.shield.checkmark.fill")
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(Color("MercedesPetrolGreen"))
-                            Text("Productos: \(formatearIngredientes(servicio.ingredientes))")
-                                .font(.subheadline).foregroundColor(.gray)
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color("MercedesCard"))
-                        .cornerRadius(10)
-                        .onTapGesture {
-                            modalMode = .assign(servicio)
+                LazyVStack(spacing: 14) {
+                    if filteredServicios.isEmpty {
+                        emptyStateView
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
+                    } else {
+                        ForEach(filteredServicios) { servicio in
+                            ServicioCard(
+                                servicio: servicio,
+                                costoEstimado: costoEstimadoProductos(servicio),
+                                productosCount: servicio.ingredientes.count,
+                                onEdit: { modalMode = .edit(servicio) },
+                                onAssign: { modalMode = .assign(servicio) }
+                            )
                         }
                     }
                 }
+                .padding(.top, 4)
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
         .padding(30)
         .sheet(item: $modalMode) { mode in
@@ -126,9 +125,159 @@ struct ServiciosView: View {
         }
     }
     
+    // Empty state agradable
+    private var emptyStateView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "wrench.adjustable")
+                .font(.system(size: 42, weight: .bold))
+                .foregroundColor(Color("MercedesPetrolGreen"))
+            Text(searchQuery.isEmpty ? "No hay servicios registrados aún." :
+                 "No se encontraron servicios para “\(searchQuery)”.")
+                .font(.headline)
+                .foregroundColor(.gray)
+            if searchQuery.isEmpty {
+                Text("Añade tu primer servicio para empezar a asignar trabajos.")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+        }
+    }
+    
+    // Calcula costo estimado de insumos para mostrar en la tarjeta
+    private func costoEstimadoProductos(_ servicio: Servicio) -> Double {
+        // Necesitamos productos para el costo; usamos una consulta local
+        // Alternativa: mover a AsignarServicioModal; aquí lo usamos solo para UI aproximada.
+        let descriptor = FetchDescriptor<Producto>()
+        let productos = (try? modelContext.fetch(descriptor)) ?? []
+        var costo: Double = 0
+        for ing in servicio.ingredientes {
+            if let p = productos.first(where: { $0.nombre == ing.nombreProducto }) {
+                costo += p.costo * ing.cantidadUsada
+            }
+        }
+        return costo
+    }
+    
     func formatearIngredientes(_ ingredientes: [Ingrediente]) -> String {
         ingredientes.map { "\($0.nombreProducto) (\(String(format: "%.2f", $0.cantidadUsada)))" }
             .joined(separator: ", ")
+    }
+}
+
+// Tarjeta individual de servicio
+fileprivate struct ServicioCard: View {
+    let servicio: Servicio
+    let costoEstimado: Double
+    let productosCount: Int
+    var onEdit: () -> Void
+    var onAssign: () -> Void
+    
+    @Environment(\.modelContext) private var modelContext
+    @Query private var personal: [Personal]
+    @Query private var productos: [Producto]
+    
+    // Preview rápida: hay candidato y stock?
+    private var previewAsignable: (asignable: Bool, motivo: String) {
+        // Candidato
+        let candidatos = personal.filter { mec in
+            mec.isAsignable &&
+            mec.especialidades.contains(servicio.especialidadRequerida) &&
+            mec.rol == servicio.rolRequerido
+        }
+        guard candidatos.first != nil else {
+            return (false, "Sin candidato disponible")
+        }
+        // Stock
+        for ing in servicio.ingredientes {
+            guard let p = productos.first(where: { $0.nombre == ing.nombreProducto }) else { continue }
+            if p.cantidad < ing.cantidadUsada {
+                return (false, "Stock insuficiente")
+            }
+        }
+        return (true, "Listo para asignar")
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(servicio.nombre)
+                        .font(.title2).fontWeight(.semibold)
+                    Text(servicio.descripcion.isEmpty ? "Sin descripción" : servicio.descripcion)
+                        .font(.subheadline).foregroundColor(.gray)
+                }
+                Spacer()
+                Button {
+                    onEdit()
+                } label: {
+                    Label("Editar", systemImage: "pencil")
+                        .font(.subheadline)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color("MercedesBackground"))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.white)
+            }
+            
+            // Chips de requerimientos
+            HStack(spacing: 8) {
+                chip(text: servicio.rolRequerido.rawValue, systemImage: "person.badge.shield.checkmark.fill")
+                chip(text: servicio.especialidadRequerida, systemImage: "wrench.and.screwdriver.fill")
+                chip(text: String(format: "%.1f h", servicio.duracionHoras), systemImage: "clock")
+            }
+            
+            // Productos y costo
+            HStack {
+                Label("\(productosCount) producto\(productosCount == 1 ? "" : "s")", systemImage: "shippingbox.fill")
+                Spacer()
+                Label("Costo insumos: $\(costoEstimado, specifier: "%.2f")", systemImage: "creditcard")
+            }
+            .font(.caption)
+            .foregroundColor(.gray)
+            
+            Divider().opacity(0.5)
+            
+            // Footer con estado de asignación y CTA
+            HStack {
+                let estado = previewAsignable
+                Label(estado.motivo, systemImage: estado.asignable ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background((estado.asignable ? Color.green : Color.red).opacity(0.15))
+                    .foregroundColor(estado.asignable ? .green : .red)
+                    .cornerRadius(6)
+                Spacer()
+                Button {
+                    onAssign()
+                } label: {
+                    Label("Asignar", systemImage: "arrow.right.circle.fill")
+                        .font(.headline)
+                        .padding(.vertical, 8).padding(.horizontal, 12)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color("MercedesCard"))
+        .cornerRadius(12)
+    }
+    
+    private func chip(text: String, systemImage: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+            Text(text)
+        }
+        .font(.caption)
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Color("MercedesBackground"))
+        .cornerRadius(8)
+        .foregroundColor(.white)
     }
 }
 
@@ -202,7 +351,6 @@ fileprivate struct AsignarServicioModal: View {
                     Text("Selecciona el Vehículo")
                         .font(.headline)
                     Spacer()
-                    // Enlace a Gestión de Clientes
                     Button {
                         appState.seleccion = .gestionClientes
                         dismiss()
@@ -215,11 +363,24 @@ fileprivate struct AsignarServicioModal: View {
                     .foregroundColor(Color("MercedesPetrolGreen"))
                 }
                 
-                TextField("Buscar por placas, cliente, marca o modelo...", text: $searchVehiculo)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .padding(10)
-                    .background(Color("MercedesBackground"))
-                    .cornerRadius(8)
+                HStack(spacing: 10) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                    TextField("Buscar por placas, cliente, marca o modelo...", text: $searchVehiculo)
+                        .textFieldStyle(PlainTextFieldStyle())
+                    if !searchVehiculo.isEmpty {
+                        Button {
+                            searchVehiculo = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(10)
+                .background(Color("MercedesBackground"))
+                .cornerRadius(8)
                 
                 // Lista de opciones
                 ScrollView {
@@ -235,7 +396,7 @@ fileprivate struct AsignarServicioModal: View {
                                         .font(.system(.body, design: .monospaced))
                                         .foregroundColor(Color("MercedesPetrolGreen"))
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text("\(vehiculo.marca) \(vehiculo.modelo)")
+                                        Text("\(vehiculo.marca) \(vehiculo.modelo) (\(vehiculo.anio))")
                                             .font(.headline)
                                         Text("Cliente: \(vehiculo.cliente?.nombre ?? "N/A")")
                                             .font(.caption).foregroundColor(.gray)
@@ -271,7 +432,6 @@ fileprivate struct AsignarServicioModal: View {
                     HStack {
                         Text("Candidato Asignado").font(.headline)
                         Spacer()
-                        // Enlace a Gestión de Personal
                         Button {
                             appState.seleccion = .operaciones_personal
                             dismiss()
@@ -323,7 +483,6 @@ fileprivate struct AsignarServicioModal: View {
                     HStack {
                         Text("Productos a Consumir").font(.headline)
                         Spacer()
-                        // Enlace a Inventario
                         Button {
                             appState.seleccion = .operaciones_inventario
                             dismiss()
@@ -347,16 +506,20 @@ fileprivate struct AsignarServicioModal: View {
                                     let stock = prod?.cantidad ?? 0
                                     let unidad = prod?.unidadDeMedida ?? ""
                                     let ok = stock >= ing.cantidadUsada
-                                    HStack {
+                                    HStack(spacing: 10) {
                                         VStack(alignment: .leading) {
                                             Text(ing.nombreProducto).fontWeight(.semibold)
                                             Text("\(ing.cantidadUsada, specifier: "%.2f") \(unidad) requeridos")
                                                 .font(.caption).foregroundColor(.gray)
                                         }
                                         Spacer()
-                                        Text("Stock: \(stock, specifier: "%.2f")")
-                                            .font(.caption)
-                                            .foregroundColor(ok ? .green : .red)
+                                        VStack(alignment: .trailing, spacing: 6) {
+                                            Text("Stock: \(stock, specifier: "%.2f")")
+                                                .font(.caption)
+                                                .foregroundColor(ok ? .green : .red)
+                                            stockBar(progress: min(1, max(0, stock == 0 ? 0 : (stock / max(ing.cantidadUsada, 0.0001)))), color: ok ? .green : .red)
+                                                .frame(width: 120, height: 6)
+                                        }
                                         Image(systemName: ok ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                                             .foregroundColor(ok ? .green : .red)
                                     }
@@ -398,6 +561,7 @@ fileprivate struct AsignarServicioModal: View {
                 .buttonStyle(.plain)
                 .disabled(vehiculoSeleccionadoID == nil || candidato == nil || hayStockInsuficiente)
                 .opacity((vehiculoSeleccionadoID == nil || candidato == nil || hayStockInsuficiente) ? 0.6 : 1.0)
+                .help(botonHelpMessage)
             }
             .padding(.top, 4)
         }
@@ -413,6 +577,13 @@ fileprivate struct AsignarServicioModal: View {
         } message: { error in
             Text(error)
         }
+    }
+    
+    private var botonHelpMessage: String {
+        if vehiculoSeleccionadoID == nil { return "Selecciona un vehículo para continuar." }
+        if candidato == nil { return "No hay candidatos disponibles que cumplan rol y especialidad." }
+        if hayStockInsuficiente { return "Hay productos con stock insuficiente para este servicio." }
+        return "Listo para confirmar."
     }
     
     // Recalcula candidato, costo y stock para pintar la UI
@@ -454,6 +625,14 @@ fileprivate struct AsignarServicioModal: View {
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(Color("MercedesBackground"))
             .cornerRadius(6)
+    }
+    private func stockBar(progress: Double, color: Color) -> some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3).fill(Color.gray.opacity(0.25))
+                RoundedRectangle(cornerRadius: 3).fill(color).frame(width: geo.size.width * progress)
+            }
+        }
     }
     
     // Lógica de asignación (igual que antes)
@@ -684,16 +863,29 @@ fileprivate struct ServicioFormView: View {
                         HStack {
                             Text("\(producto.nombre) (\(producto.unidadDeMedida))")
                             Spacer()
-                            TextField("0.0", text: Binding(
-                                get: {
-                                    cantidadesProductos[producto.nombre].map { String(format: "%.2f", $0) } ?? ""
-                                },
-                                set: {
-                                    cantidadesProductos[producto.nombre] = Double($0)
+                            HStack(spacing: 6) {
+                                TextField("0.0", text: Binding(
+                                    get: {
+                                        cantidadesProductos[producto.nombre].map { String(format: "%.2f", $0) } ?? ""
+                                    },
+                                    set: {
+                                        cantidadesProductos[producto.nombre] = Double($0)
+                                    }
+                                ))
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 80)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                
+                                if (cantidadesProductos[producto.nombre] ?? 0) > 0 {
+                                    Button {
+                                        cantidadesProductos[producto.nombre] = 0
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.gray)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                            ))
-                            .frame(width: 80)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            }
                         }
                         .listRowBackground(Color("MercedesCard"))
                     }
