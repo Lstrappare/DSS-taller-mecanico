@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 import LocalAuthentication
 
-// --- MODO DEL MODAL (Sin cambios) ---
+// --- MODO DEL MODAL ---
 fileprivate enum ModalMode: Identifiable, Equatable {
     case add
     case edit(Personal)
@@ -15,124 +15,167 @@ fileprivate enum ModalMode: Identifiable, Equatable {
     }
 }
 
-// --- VISTA PRINCIPAL (Sin cambios) ---
+// --- VISTA PRINCIPAL ---
 struct PersonalView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Personal.nombre) private var personal: [Personal]
     
     @State private var modalMode: ModalMode?
     @State private var searchQuery = ""
+    @State private var filtroRol: Rol? = nil
+    @State private var filtroEstado: EstadoEmpleado? = nil
     
     var filteredPersonal: [Personal] {
-        if searchQuery.isEmpty {
-            return personal
-        } else {
-            let query = searchQuery.lowercased()
-            return personal.filter { mec in
-                let nombreMatch = mec.nombre.lowercased().contains(query)
-                let dniMatch = mec.dni.lowercased().contains(query)
-                let rolMatch = mec.rol.rawValue.lowercased().contains(query)
-                let especialidadMatch = mec.especialidades.contains { $0.lowercased().contains(query) }
-                return nombreMatch || dniMatch || rolMatch || especialidadMatch
+        var base = personal
+        
+        // Filtro de texto
+        if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let q = searchQuery.lowercased()
+            base = base.filter { mec in
+                mec.nombre.lowercased().contains(q) ||
+                mec.dni.lowercased().contains(q) ||
+                mec.rol.rawValue.lowercased().contains(q) ||
+                mec.especialidades.contains(where: { $0.lowercased().contains(q) })
             }
         }
+        // Filtro por rol
+        if let filtroRol { base = base.filter { $0.rol == filtroRol } }
+        // Filtro por estado
+        if let filtroEstado { base = base.filter { $0.estado == filtroEstado } }
+        
+        return base
     }
 
     var body: some View {
-        VStack(alignment: .leading) {
-            HStack {
-                Text("Gestión de Personal")
-                    .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
+        VStack(alignment: .leading, spacing: 16) {
+            // Cabecera con métricas y CTA
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Gestión de Personal")
+                        .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
+                    HStack(spacing: 10) {
+                        Label("\(personal.count) empleado\(personal.count == 1 ? "" : "s")", systemImage: "person.2.fill")
+                            .font(.subheadline).foregroundColor(.gray)
+                        let disponibles = personal.filter { $0.estado == .disponible && $0.estaEnHorario }.count
+                        Label("\(disponibles) disponibles ahora", systemImage: "checkmark.seal.fill")
+                            .font(.subheadline).foregroundColor(.gray)
+                    }
+                }
                 Spacer()
                 Button {
                     modalMode = .add
                 } label: {
-                    Label("Añadir Personal", systemImage: "plus")
-                        .font(.headline).padding(.vertical, 10).padding(.horizontal)
-                        .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
+                    Label("Añadir Personal", systemImage: "plus.circle.fill")
+                        .font(.headline)
+                        .padding(.vertical, 10).padding(.horizontal, 14)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.bottom, 20)
             
-            Text("Registra tu equipo de trabajo aquí.")
-                .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
+            // Buscador
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                TextField("Buscar por Nombre, DNI, Rol o Especialidad...", text: $searchQuery)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .animation(.easeInOut(duration: 0.15), value: searchQuery)
+                if !searchQuery.isEmpty {
+                    Button {
+                        searchQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(12)
+            .background(Color("MercedesCard"))
+            .cornerRadius(10)
             
-            TextField("Buscar por Nombre, DNI, Rol o Especialidad...", text: $searchQuery)
-                .textFieldStyle(PlainTextFieldStyle())
-                .padding(12)
-                .background(Color("MercedesCard"))
-                .cornerRadius(8)
-                .padding(.bottom, 20)
-            
-            ScrollView {
-                LazyVStack(spacing: 15) {
-                    ForEach(filteredPersonal) { mecanico in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(mecanico.nombre)
-                                    .font(.title2).fontWeight(.semibold)
-                                Text(mecanico.rol.rawValue)
-                                    .font(.headline)
-                                    .foregroundColor(Color("MercedesPetrolGreen"))
-                                
-                                Link(destination: URL(string: "mailto:\(mecanico.email)")!) {
-                                    Label("Email: \(mecanico.email)", systemImage: "envelope.fill")
-                                        .font(.body)
-                                        .foregroundColor(Color("MercedesPetrolGreen"))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .font(.body)
-                                    .foregroundColor(Color("MercedesPetrolGreen"))
-                                
-                                if mecanico.telefonoActivo && !mecanico.telefono.isEmpty {
-                                    Link(destination: URL(string: "tel:\(mecanico.telefono)")!) {
-                                        Label("Tel: \(mecanico.telefono)", systemImage: "phone.fill")
-                                            .font(.body)
-                                            .foregroundColor(Color("MercedesPetrolGreen"))
-                                    }
-                                        .buttonStyle(.plain)
-                                        .font(.body)
-                                        .foregroundColor(Color("MercedesPetrolGreen"))
-                                } else {
-                                    Text("Tel: N/A")
-                                        .font(.body).foregroundColor(.gray)
-                                }
-                                
-                                Text("CURP/DNI: \(mecanico.dni)")
-                                    .font(.body).foregroundColor(.gray)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 8) {
-                                if !mecanico.estaEnHorario {
-                                    Text("Fuera de Turno")
-                                        .font(.headline)
-                                        .foregroundColor(.gray)
-                                } else {
-                                    Text(mecanico.estado.rawValue)
-                                        .font(.headline)
-                                        .foregroundColor(colorParaEstado(mecanico.estado))
-                                }
-                                Text("Turno: \(mecanico.horaEntrada) - \(mecanico.horaSalida)")
-                                    .font(.body).foregroundColor(.gray)
-                            }
+            // Filtros rápidos
+            HStack(spacing: 12) {
+                Picker("Rol", selection: Binding(
+                    get: { filtroRol ?? Rol?.none ?? nil },
+                    set: { newValue in filtroRol = newValue }
+                )) {
+                    Text("Todos los Roles").tag(Rol?.none)
+                    ForEach(Rol.allCases, id: \.self) { r in
+                        Text(r.rawValue).tag(Rol?.some(r))
+                    }
+                }
+                .pickerStyle(.menu)
+                
+                Picker("Estado", selection: Binding(
+                    get: { filtroEstado ?? EstadoEmpleado?.none ?? nil },
+                    set: { newValue in filtroEstado = newValue }
+                )) {
+                    Text("Todos los Estados").tag(EstadoEmpleado?.none)
+                    ForEach(EstadoEmpleado.allCases, id: \.self) { e in
+                        Text(e.rawValue).tag(EstadoEmpleado?.some(e))
+                    }
+                }
+                .pickerStyle(.menu)
+                
+                if filtroRol != nil || filtroEstado != nil {
+                    Button {
+                        withAnimation {
+                            filtroRol = nil
+                            filtroEstado = nil
                         }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color("MercedesCard"))
-                        .cornerRadius(10)
-                        .onTapGesture {
-                            modalMode = .edit(mecanico)
+                    } label: {
+                        Label("Limpiar filtros", systemImage: "line.3.horizontal.decrease.circle")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.gray)
+                }
+                Spacer()
+            }
+            
+            // Lista
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    if filteredPersonal.isEmpty {
+                        emptyStateView
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
+                    } else {
+                        ForEach(filteredPersonal) { mecanico in
+                            PersonalCard(mecanico: mecanico)
+                                .onTapGesture { modalMode = .edit(mecanico) }
                         }
                     }
                 }
+                .padding(.top, 4)
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
         .padding(30)
         .sheet(item: $modalMode) { incomingMode in
             PersonalFormView(mode: incomingMode)
                 .environment(\.modelContext, modelContext)
+        }
+    }
+    
+    // Empty state agradable
+    private var emptyStateView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "person.crop.circle.badge.questionmark")
+                .font(.system(size: 42, weight: .bold))
+                .foregroundColor(Color("MercedesPetrolGreen"))
+            Text(searchQuery.isEmpty ? "No hay personal registrado aún." :
+                 "No se encontraron empleados para “\(searchQuery)”.")
+                .font(.headline)
+                .foregroundColor(.gray)
+            if searchQuery.isEmpty {
+                Text("Añade tu primer empleado para comenzar a asignar servicios.")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
         }
     }
     
@@ -146,8 +189,120 @@ struct PersonalView: View {
     }
 }
 
+// Tarjeta individual de personal
+fileprivate struct PersonalCard: View {
+    let mecanico: Personal
+    
+    var estadoColor: Color {
+        switch mecanico.estado {
+        case .disponible: return .green
+        case .ocupado: return .red
+        case .descanso: return .yellow
+        case .ausente: return .gray
+        }
+    }
+    
+    var avatarText: String {
+        let comps = mecanico.nombre.split(separator: " ")
+        let first = comps.first?.first.map(String.init) ?? ""
+        let last = comps.dropFirst().first?.first.map(String.init) ?? ""
+        return (first + last).uppercased()
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header
+            HStack(alignment: .top, spacing: 12) {
+                ZStack {
+                    Circle().fill(Color("MercedesBackground"))
+                        .frame(width: 44, height: 44)
+                    Text(avatarText)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(mecanico.nombre)
+                            .font(.title3).fontWeight(.semibold)
+                        Spacer()
+                        Text(mecanico.estaEnHorario ? mecanico.estado.rawValue : "Fuera de Turno")
+                            .font(.caption)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background((mecanico.estaEnHorario ? estadoColor : .gray).opacity(0.18))
+                            .foregroundColor(mecanico.estaEnHorario ? estadoColor : .gray)
+                            .cornerRadius(6)
+                    }
+                    
+                    HStack(spacing: 8) {
+                        chip(text: mecanico.rol.rawValue, icon: "person.badge.shield.checkmark.fill")
+                        Text("Turno: \(mecanico.horaEntrada) - \(mecanico.horaSalida)")
+                            .font(.caption).foregroundColor(.gray)
+                    }
+                }
+            }
+            
+            // Contacto
+            HStack(spacing: 12) {
+                Link(destination: URL(string: "mailto:\(mecanico.email)")!) {
+                    Label(mecanico.email, systemImage: "envelope.fill")
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .foregroundColor(Color("MercedesPetrolGreen"))
+                
+                if mecanico.telefonoActivo && !mecanico.telefono.isEmpty {
+                    Link(destination: URL(string: "tel:\(mecanico.telefono)")!) {
+                        Label(mecanico.telefono, systemImage: "phone.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                } else {
+                    Label("Tel: N/A", systemImage: "phone.fill")
+                        .font(.caption).foregroundColor(.gray)
+                }
+                
+                Spacer()
+                Text("CURP: \(mecanico.dni)")
+                    .font(.caption).foregroundColor(.gray)
+            }
+            
+            // Especialidades como chips
+            if !mecanico.especialidades.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(mecanico.especialidades, id: \.self) { esp in
+                            Text(esp)
+                                .font(.caption2)
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(6)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color("MercedesCard"))
+        .cornerRadius(12)
+    }
+    
+    private func chip(text: String, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            Text(text)
+        }
+        .font(.caption)
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Color("MercedesBackground"))
+        .cornerRadius(8)
+        .foregroundColor(.white)
+    }
+}
 
-// --- VISTA DEL FORMULARIO (compacta y aprovechando ancho) ---
+// --- VISTA DEL FORMULARIO ---
 fileprivate struct PersonalFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -236,15 +391,13 @@ fileprivate struct PersonalFormView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 4) {
                         SectionHeader(title: "Datos de Identidad", subtitle: nil)
-                        // Dos columnas que aprovechan ancho
+                        // Dos columnas
                         HStack(spacing: 16) {
                             FormField(title: "• Nombre Completo", placeholder: "ej. José Cisneros Torres", text: $nombre)
                                 .validationHint(isInvalid: nombreInvalido, message: "Escribe nombre y apellido.")
                             FormField(title: "• Email", placeholder: "ej. jose@taller.com", text: $email)
                                 .validationHint(isInvalid: emailInvalido, message: "Ingresa un email válido.")
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        
                         if case .edit = mode, !email.isEmpty {
                             Link("Enviar correo a \(email)", destination: URL(string: "mailto:\(email)")!)
                                 .buttonStyle(.plain)
@@ -276,7 +429,6 @@ fileprivate struct PersonalFormView: View {
                                                 .allowsHitTesting(false)
                                         }
                                     }
-                                    
                                     if mecanicoAEditar != nil {
                                         Button {
                                             if isDniUnlocked { isDniUnlocked = false }
@@ -382,7 +534,7 @@ fileprivate struct PersonalFormView: View {
                     .padding(.vertical, 6)
             }
             
-            // --- Barra de Botones (compacta) ---
+            // Barra de Botones
             HStack {
                 Button("Cancelar") { dismiss() }
                     .buttonStyle(.plain)
@@ -418,14 +570,14 @@ fileprivate struct PersonalFormView: View {
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 720, minHeight: 480, maxHeight: 600) // <-- más baja
+        .frame(minWidth: 720, minHeight: 480, maxHeight: 600)
         .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
         }
     }
     
-    // --- VISTA: Modal de Autenticación ---
+    // Modal de Autenticación
     @ViewBuilder
     func authModalView() -> some View {
         let prompt = (authReason == .unlockDNI) ?
@@ -467,12 +619,12 @@ fileprivate struct PersonalFormView: View {
             }
             .padding(28)
         }
-        .frame(minWidth: 520, minHeight: 380) // Modal de auth también más compacto
+        .frame(minWidth: 520, minHeight: 380)
         .preferredColorScheme(.dark)
         .onAppear { authError = ""; passwordAttempt = "" }
     }
     
-    // --- Lógica del Formulario (Sin cambios) ---
+    // Lógica del Formulario (idéntica)
     func guardarCambios() {
         errorMsg = nil
         let trimmedName = nombre.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -525,7 +677,6 @@ fileprivate struct PersonalFormView: View {
             return
         }
 
-        // Expresión regular: solo números, espacios, guiones y paréntesis permitidos
         let telefonoRegex = #"^[0-9\s\-\(\)]+$"#
         let telefonoPredicate = NSPredicate(format: "SELF MATCHES %@", telefonoRegex)
 
@@ -534,7 +685,6 @@ fileprivate struct PersonalFormView: View {
             return
         }
 
-        // Contar solo los dígitos
         let digitos = telefonoTrimmed.filter { $0.isNumber }
 
         guard digitos.count >= 10 && digitos.count <= 15 else {
@@ -587,7 +737,7 @@ fileprivate struct PersonalFormView: View {
         dismiss()
     }
     
-    // --- Lógica de Autenticación (Sin cambios) ---
+    // Autenticación
     func authenticateWithTouchID() async {
         let context = LAContext()
         let reason = (authReason == .unlockDNI) ? "Autoriza la edición del DNI/CURP." : "Autoriza la ELIMINACIÓN del empleado."
@@ -639,7 +789,6 @@ fileprivate struct SectionHeader: View {
     }
 }
 
-// --- VISTA HELPER REUTILIZABLE (Placeholders reales + compacto) ---
 fileprivate struct FormField: View {
     var title: String
     var placeholder: String

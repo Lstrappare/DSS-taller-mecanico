@@ -19,7 +19,7 @@ fileprivate enum ModalMode: Identifiable {
     }
 }
 
-// --- VISTA PRINCIPAL (Con Buscador) ---
+// --- VISTA PRINCIPAL (Con Buscador y UI mejorada) ---
 struct GestionClientesView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Cliente.nombre) private var clientes: [Cliente]
@@ -36,121 +36,96 @@ struct GestionClientesView: View {
                 let nombreMatch = cliente.nombre.lowercased().contains(query)
                 let telefonoMatch = cliente.telefono.lowercased().contains(query)
                 let emailMatch = cliente.email.lowercased().contains(query)
-                return nombreMatch || telefonoMatch || emailMatch
+                let vehiculosMatch = cliente.vehiculos.contains { v in
+                    v.placas.lowercased().contains(query) ||
+                    v.marca.lowercased().contains(query) ||
+                    v.modelo.lowercased().contains(query) ||
+                    String(v.anio).contains(query)
+                }
+                return nombreMatch || telefonoMatch || emailMatch || vehiculosMatch
             }
         }
     }
+    
+    private var totalVehiculos: Int {
+        clientes.reduce(0) { $0 + $1.vehiculos.count }
+    }
 
     var body: some View {
-        VStack(alignment: .leading) {
-            // Cabecera
-            HStack {
-                Text("Gestión de Clientes y Vehículos")
-                    .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
+        VStack(alignment: .leading, spacing: 16) {
+            // Cabecera con métricas y CTA
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Gestión de Clientes y Vehículos")
+                        .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
+                    HStack(spacing: 10) {
+                        Label("\(clientes.count) cliente\(clientes.count == 1 ? "" : "s")", systemImage: "person.2.fill")
+                            .font(.subheadline).foregroundColor(.gray)
+                        Label("\(totalVehiculos) vehículo\(totalVehiculos == 1 ? "" : "s")", systemImage: "car.2.fill")
+                            .font(.subheadline).foregroundColor(.gray)
+                    }
+                }
                 Spacer()
                 Button {
                     modalMode = .addClienteConVehiculo
                 } label: {
                     Label("Añadir Cliente", systemImage: "person.badge.plus")
-                        .font(.headline).padding(.vertical, 10).padding(.horizontal)
-                        .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
+                        .font(.headline)
+                        .padding(.vertical, 10).padding(.horizontal, 14)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.bottom, 20)
             
+            // Descripción
             Text("Registra y administra tus clientes y sus vehículos.")
-                .font(.title3).foregroundColor(.gray).padding(.bottom, 20)
+                .font(.title3).foregroundColor(.gray)
             
-            // Buscador
-            TextField("Buscar por Nombre, Teléfono o Email...", text: $searchQuery)
-                .textFieldStyle(PlainTextFieldStyle())
-                .padding(12)
-                .background(Color("MercedesCard"))
-                .cornerRadius(8)
-                .padding(.bottom, 20)
-            
-            // --- Lista de Clientes (con Links) ---
-            ScrollView {
-                LazyVStack(spacing: 15) {
-                    ForEach(filteredClientes) { cliente in
-                        VStack(alignment: .leading) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(cliente.nombre)
-                                        .font(.title2).fontWeight(.semibold)
-                                    // Link de Teléfono
-                                    Link(destination: URL(string: "tel:\(cliente.telefono)")!) {
-                                        Label(cliente.telefono, systemImage: "phone.fill")
-                                    }
-                                    .buttonStyle(.plain)
-                                    .foregroundColor(Color("MercedesPetrolGreen"))
-                                    
-                                    // Link de Email
-                                    if cliente.email.isEmpty {
-                                        Label("Sin email", systemImage: "envelope.fill")
-                                    } else {
-                                        Link(destination: URL(string: "mailto:\(cliente.email)")!) {
-                                            Label(cliente.email, systemImage: "envelope.fill")
-                                        }
-                                        .buttonStyle(.plain)
-                                        .foregroundColor(Color("MercedesPetrolGreen"))
-                                    }
-                                }
-                                .font(.body)
-                                
-                                Spacer()
-                                
-                                Button {
-                                    modalMode = .editCliente(cliente)
-                                } label: {
-                                    Image(systemName: "pencil")
-                                    Text("Editar Cliente")
-                                }.buttonStyle(.plain)
-                            }
-                            
-                            Divider().padding(.vertical, 5)
-                            
-                            // Lista de Vehículos
-                            Text("Vehículos Registrados:").font(.headline)
-                            if cliente.vehiculos.isEmpty {
-                                Text("No hay vehículos registrados para este cliente.")
-                                    .font(.subheadline).foregroundColor(.gray)
-                            } else {
-                                ForEach(cliente.vehiculos) { vehiculo in
-                                    HStack {
-                                        Text("[\(vehiculo.placas)]")
-                                            .font(.system(.body, design: .monospaced))
-                                            .foregroundColor(Color("MercedesPetrolGreen"))
-                                        Text("\(vehiculo.marca) \(vehiculo.modelo) (\(String(vehiculo.anio)))")
-                                        Spacer()
-                                        Button {
-                                            modalMode = .editVehiculo(vehiculo)
-                                        } label: {
-                                            Image(systemName: "pencil.circle")
-                                            Text("Editar Auto")
-                                        }.buttonStyle(.plain).foregroundColor(.gray)
-                                    }
-                                }
-                            }
-                            
-                            Button {
-                                modalMode = .addVehiculo(cliente)
-                            } label: {
-                                Label("+ Añadir Vehículo", systemImage: "car.badge.plus")
-                                    .font(.headline)
-                            }
-                            .buttonStyle(.plain)
-                            .padding(.top, 10)
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color("MercedesCard"))
-                        .cornerRadius(10)
+            // Buscador con icono y clear
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                TextField("Buscar por Nombre, Teléfono, Email, Placas o Modelo...", text: $searchQuery)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .animation(.easeInOut(duration: 0.15), value: searchQuery)
+                if !searchQuery.isEmpty {
+                    Button {
+                        searchQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            Spacer()
+            .padding(12)
+            .background(Color("MercedesCard"))
+            .cornerRadius(10)
+            
+            // --- Lista de Clientes (cards) ---
+            ScrollView {
+                LazyVStack(spacing: 14) {
+                    if filteredClientes.isEmpty {
+                        emptyStateView
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
+                    } else {
+                        ForEach(filteredClientes) { cliente in
+                            ClienteCard(
+                                cliente: cliente,
+                                onEditCliente: { modalMode = .editCliente(cliente) },
+                                onAddVehiculo: { modalMode = .addVehiculo(cliente) },
+                                onEditVehiculo: { vehiculo in modalMode = .editVehiculo(vehiculo) }
+                            )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            }
+            Spacer(minLength: 0)
         }
         .padding(30)
         .sheet(item: $modalMode) { mode in
@@ -170,6 +145,151 @@ struct GestionClientesView: View {
                     .environment(\.modelContext, modelContext)
             }
         }
+    }
+    
+    private var emptyStateView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "person.badge.key.fill")
+                .font(.system(size: 42, weight: .bold))
+                .foregroundColor(Color("MercedesPetrolGreen"))
+            Text(searchQuery.isEmpty ? "No hay clientes registrados aún." :
+                 "No se encontraron clientes para “\(searchQuery)”.")
+                .font(.headline)
+                .foregroundColor(.gray)
+            if searchQuery.isEmpty {
+                Text("Añade tu primer cliente para empezar a registrar vehículos.")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+        }
+    }
+}
+
+// --- Tarjeta de Cliente (UI mejorada) ---
+fileprivate struct ClienteCard: View {
+    let cliente: Cliente
+    var onEditCliente: () -> Void
+    var onAddVehiculo: () -> Void
+    var onEditVehiculo: (Vehiculo) -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Header con nombre y acción editar
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(cliente.nombre)
+                        .font(.title2).fontWeight(.semibold)
+                    // Chips de contacto
+                    HStack(spacing: 8) {
+                        if let telURL = URL(string: "tel:\(cliente.telefono)") {
+                            Link(destination: telURL) {
+                                chip(text: cliente.telefono, systemImage: "phone.fill")
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            chip(text: cliente.telefono, systemImage: "phone.fill")
+                        }
+                        if cliente.email.isEmpty {
+                            chip(text: "Sin email", systemImage: "envelope.fill", muted: true)
+                        } else if let mailURL = URL(string: "mailto:\(cliente.email)") {
+                            Link(destination: mailURL) {
+                                chip(text: cliente.email, systemImage: "envelope.fill")
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            chip(text: cliente.email, systemImage: "envelope.fill")
+                        }
+                    }
+                }
+                Spacer()
+                Button {
+                    onEditCliente()
+                } label: {
+                    Label("Editar", systemImage: "pencil")
+                        .font(.subheadline)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(Color("MercedesBackground"))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.white)
+            }
+            
+            Divider().opacity(0.5)
+            
+            // Lista compacta de vehículos
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Vehículos Registrados").font(.headline)
+                    Spacer()
+                    Text("\(cliente.vehiculos.count)")
+                        .font(.caption)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Color("MercedesBackground"))
+                        .cornerRadius(6)
+                        .foregroundColor(.white)
+                }
+                
+                if cliente.vehiculos.isEmpty {
+                    Text("No hay vehículos registrados para este cliente.")
+                        .font(.subheadline).foregroundColor(.gray)
+                        .padding(.top, 2)
+                } else {
+                    ForEach(cliente.vehiculos) { vehiculo in
+                        HStack(spacing: 10) {
+                            Text("[\(vehiculo.placas)]")
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundColor(Color("MercedesPetrolGreen"))
+                            Text("\(vehiculo.marca) \(vehiculo.modelo) (\(String(vehiculo.anio)))")
+                            Spacer()
+                            Button {
+                                onEditVehiculo(vehiculo)
+                            } label: {
+                                Label("Editar Auto", systemImage: "pencil.circle")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.gray)
+                        }
+                        .padding(.vertical, 4)
+                        .background(Color("MercedesBackground").opacity(0.35))
+                        .cornerRadius(8)
+                    }
+                }
+            }
+            
+            // CTA añadir vehículo
+            Button {
+                onAddVehiculo()
+            } label: {
+                Label("Añadir Vehículo", systemImage: "car.badge.plus")
+                    .font(.headline)
+                    .padding(.vertical, 8).padding(.horizontal, 12)
+                    .background(Color("MercedesCard"))
+                    .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(Color("MercedesPetrolGreen"))
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color("MercedesCard"))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+    }
+    
+    private func chip(text: String, systemImage: String, muted: Bool = false) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+            Text(text)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .font(.caption)
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Color("MercedesBackground"))
+        .cornerRadius(8)
+        .foregroundColor(muted ? .gray : .white)
     }
 }
 
