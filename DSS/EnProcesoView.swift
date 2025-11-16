@@ -475,7 +475,7 @@ fileprivate struct CierreServicioModalView: View {
     
     // --- LÓGICA DE CIERRE FINAL ---
     func completarServicio() {
-        if let mecanico = personal.first(where: { $0.dni == servicio.dniMecanicoAsignado }) {
+        if let mecanico = personal.first(where: { $0.rfc == servicio.rfcMecanicoAsignado }) {
             mecanico.estado = .disponible
         }
         

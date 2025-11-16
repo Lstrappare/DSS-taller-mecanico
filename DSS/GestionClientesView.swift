@@ -262,7 +262,7 @@ fileprivate struct ClienteCard: View {
             Button {
                 onAddVehiculo()
             } label: {
-                Label("Añadir Vehículo", systemImage: "car.badge.plus")
+                Label("+ Añadir Vehículo", systemImage: "car.badge.plus")
                     .font(.headline)
                     .padding(.vertical, 8).padding(.horizontal, 12)
                     .background(Color("MercedesCard"))

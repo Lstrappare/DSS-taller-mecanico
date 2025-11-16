@@ -673,7 +673,7 @@ fileprivate struct AsignarServicioModal: View {
         
         let nuevoServicio = ServicioEnProceso(
             nombreServicio: servicio.nombre,
-            dniMecanicoAsignado: mecanico.dni,
+            rfcMecanicoAsignado: mecanico.rfc,
             nombreMecanicoAsignado: mecanico.nombre,
             horaInicio: Date(),
             duracionHoras: servicio.duracionHoras,
