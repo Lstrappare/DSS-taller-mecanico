@@ -19,7 +19,6 @@ struct ContentView: View {
     
     @StateObject private var appState = AppNavigationState()
     @AppStorage("isLoggedIn") private var isLoggedIn = false
-    @State private var seleccion: Vista? = .inicio
 
     var body: some View {
         NavigationSplitView {
@@ -88,7 +87,7 @@ struct ContentView: View {
                 // --- 4. ACTUALIZAR EL SWITCH ---
                 switch appState.seleccion {
                 case .inicio:
-                    DashboardView(seleccion: $seleccion)
+                    DashboardView(seleccion: $appState.seleccion)
                 case .consultaNegocio:
                     ConsultaView()
                 // Casos de Operaciones

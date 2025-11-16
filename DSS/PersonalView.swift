@@ -145,8 +145,10 @@ struct PersonalView: View {
                             .padding(.top, 40)
                     } else {
                         ForEach(filteredPersonal) { mecanico in
-                            PersonalCard(mecanico: mecanico)
-                                .onTapGesture { modalMode = .edit(mecanico) }
+                            PersonalCard(mecanico: mecanico) {
+                                modalMode = .edit(mecanico)
+                            }
+                            .onTapGesture { modalMode = .edit(mecanico) }
                         }
                     }
                 }
@@ -192,6 +194,7 @@ struct PersonalView: View {
 // Tarjeta individual de personal
 fileprivate struct PersonalCard: View {
     let mecanico: Personal
+    var onEdit: () -> Void
     
     var estadoColor: Color {
         switch mecanico.estado {
@@ -232,6 +235,18 @@ fileprivate struct PersonalCard: View {
                             .background((mecanico.estaEnHorario ? estadoColor : .gray).opacity(0.18))
                             .foregroundColor(mecanico.estaEnHorario ? estadoColor : .gray)
                             .cornerRadius(6)
+                        
+                        // Botón Editar
+                        Button {
+                            onEdit()
+                        } label: {
+                            Label("Editar", systemImage: "pencil")
+                                .font(.subheadline)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
                     }
                     
                     HStack(spacing: 8) {
