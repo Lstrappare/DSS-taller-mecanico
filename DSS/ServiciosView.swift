@@ -145,8 +145,6 @@ struct ServiciosView: View {
     
     // Calcula costo estimado de insumos para mostrar en la tarjeta
     private func costoEstimadoProductos(_ servicio: Servicio) -> Double {
-        // Necesitamos productos para el costo; usamos una consulta local
-        // Alternativa: mover a AsignarServicioModal; aquí lo usamos solo para UI aproximada.
         let descriptor = FetchDescriptor<Producto>()
         let productos = (try? modelContext.fetch(descriptor)) ?? []
         var costo: Double = 0
@@ -228,14 +226,32 @@ fileprivate struct ServicioCard: View {
                 chip(text: String(format: "%.1f h", servicio.duracionHoras), systemImage: "clock")
             }
             
-            // Productos y costo
-            HStack {
-                Label("\(productosCount) producto\(productosCount == 1 ? "" : "s")", systemImage: "shippingbox.fill")
-                Spacer()
-                Label("Costo insumos: $\(costoEstimado, specifier: "%.2f")", systemImage: "creditcard")
+            // Productos y costo + precio final
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Label("\(productosCount) producto\(productosCount == 1 ? "" : "s")", systemImage: "shippingbox.fill")
+                    Spacer()
+                    Label("Costo insumos: $\(costoEstimado, specifier: "%.2f")", systemImage: "creditcard")
+                }
+                .font(.caption)
+                .foregroundColor(.gray)
+                
+                // Precio final y sugerido (si fue modificado)
+                let sugerido = PricingHelpers.precioSugeridoParaServicio(servicio: servicio, productos: productos)
+                HStack(spacing: 10) {
+                    Text("Precio final: $\(servicio.precioFinalAlCliente, specifier: "%.2f")")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    if servicio.precioModificadoManualmente {
+                        Text("Sugerido: $\(sugerido, specifier: "%.2f")")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(Color("MercedesBackground"))
+                            .cornerRadius(6)
+                    }
+                }
             }
-            .font(.caption)
-            .foregroundColor(.gray)
             
             Divider().opacity(0.5)
             
@@ -704,7 +720,49 @@ fileprivate struct AsignarServicioModal: View {
     }
 }
 
-// --- VISTA DEL FORMULARIO (UI y validaciones actuales conservadas) ---
+// --- HELPERS DE PRECIO Y PORCENTAJES ---
+fileprivate enum PricingHelpers {
+    static func calcularPorcentaje(base: Double, porcentaje: Double) -> Double {
+        base * (porcentaje / 100.0)
+    }
+    static func calcularMontos(baseCosto: Double, pMO: Double, pAdmin: Double, pMargen: Double) -> (mo: Double, admin: Double, margen: Double, subtotal: Double) {
+        let mo = calcularPorcentaje(base: baseCosto, porcentaje: pMO)
+        let admin = calcularPorcentaje(base: baseCosto, porcentaje: pAdmin)
+        let margen = calcularPorcentaje(base: baseCosto, porcentaje: pMargen)
+        let subtotal = mo + admin + margen
+        return (mo, admin, margen, subtotal)
+    }
+    static func calcularIVA(subtotal: Double, tasa: Double = 0.16, aplicar: Bool) -> Double {
+        aplicar ? subtotal * tasa : 0.0
+    }
+    static func calcularISR(subtotal: Double, porcentajeISR: Double, aplicar: Bool) -> Double {
+        aplicar ? calcularPorcentaje(base: subtotal, porcentaje: porcentajeISR) : 0.0
+    }
+    static func calcularPrecioSugerido(subtotal: Double, iva: Double, isr: Double) -> Double {
+        subtotal + iva + isr
+    }
+    static func costoIngredientes(servicio: Servicio, productos: [Producto]) -> Double {
+        servicio.ingredientes.reduce(0) { acc, ing in
+            if let p = productos.first(where: { $0.nombre == ing.nombreProducto }) {
+                return acc + (p.costo * ing.cantidadUsada)
+            }
+            return acc
+        }
+    }
+    static func precioSugeridoParaServicio(servicio: Servicio, productos: [Producto]) -> Double {
+        let costoInsumos = costoIngredientes(servicio: servicio, productos: productos)
+        let baseCosto = servicio.costoBase + (servicio.requiereRefacciones ? servicio.costoRefacciones : 0) + costoInsumos
+        let montos = calcularMontos(baseCosto: baseCosto,
+                                    pMO: servicio.porcentajeManoDeObra,
+                                    pAdmin: servicio.porcentajeGastosAdministrativos,
+                                    pMargen: servicio.porcentajeMargen)
+        let iva = calcularIVA(subtotal: montos.subtotal, aplicar: servicio.aplicarIVA)
+        let isr = calcularISR(subtotal: montos.subtotal, porcentajeISR: servicio.isrPorcentajeEstimado, aplicar: servicio.aplicarISR)
+        return calcularPrecioSugerido(subtotal: montos.subtotal, iva: iva, isr: isr)
+    }
+}
+
+// --- VISTA DEL FORMULARIO (Actualizada a porcentajes e impuestos) ---
 fileprivate struct ServicioFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -717,15 +775,33 @@ fileprivate struct ServicioFormView: View {
 
     let mode: ServiceModalMode
     
+    // Datos base
     @State private var nombre = ""
     @State private var descripcion = ""
     @State private var especialidadRequerida = ""
     @State private var rolRequerido: Rol = .ayudante
-    @State private var precioString = ""
     @State private var duracionString = "1.0"
+    
+    // Ingredientes
     @State private var cantidadesProductos: [String: Double] = [:]
     @State private var especialidadesDisponibles: [String] = []
 
+    // Costos y configuración porcentual
+    @State private var costoBaseString = "0.0"
+    @State private var requiereRefacciones = false
+    @State private var costoRefaccionesString = "0.0"
+    @State private var porcentajeMOString = "40.0"
+    @State private var porcentajeAdminString = "20.0"
+    @State private var porcentajeMargenString = "30.0"
+    @State private var aplicarIVA = false
+    @State private var aplicarISR = false
+    @State private var porcentajeISRString = "10.0" // configurable
+
+    // Precio final editable
+    @State private var precioFinalString = "0.0"
+    @State private var precioModificadoManualmente = false
+    
+    // Seguridad para editar nombre en modo edición
     @State private var isNombreUnlocked = false
     @State private var showingAuthModal = false
     @State private var authError = ""
@@ -742,21 +818,73 @@ fileprivate struct ServicioFormView: View {
         switch mode {
         case .add: return "Añadir Nuevo Servicio"
         case .edit: return "Editar Servicio"
-        case .assign: return "Editar Servicio" // no se usa, pero cumple el enum
+        case .assign: return "Editar Servicio"
         }
     }
     
-    private var nombreInvalido: Bool {
-        nombre.trimmingCharacters(in: .whitespaces).count < 3
+    // Validaciones
+    private var nombreInvalido: Bool { nombre.trimmingCharacters(in: .whitespaces).count < 3 }
+    private var duracionInvalida: Bool { Double(duracionString) == nil || (Double(duracionString) ?? 0) <= 0 }
+    private var costoBaseInvalido: Bool { Double(costoBaseString) == nil || (Double(costoBaseString) ?? -1) < 0 }
+    private var costoRefInvalido: Bool { Double(costoRefaccionesString) == nil || (Double(costoRefaccionesString) ?? -1) < 0 }
+    private var pMOInvalido: Bool { porcentajeInvalido(porcentajeMOString) }
+    private var pAdminInvalido: Bool { porcentajeInvalido(porcentajeAdminString) }
+    private var pMargenInvalido: Bool { porcentajeInvalido(porcentajeMargenString) }
+    private var pISRInvalido: Bool { porcentajeInvalido(porcentajeISRString) }
+    private func porcentajeInvalido(_ s: String) -> Bool {
+        guard let v = Double(s.replacingOccurrences(of: ",", with: ".")) else { return true }
+        return v < 0 || v > 100
     }
-    private var precioInvalido: Bool {
-        Double(precioString) == nil
+    
+    // Cálculos automáticos (solo lectura)
+    private var costoIngredientes: Double {
+        PricingHelpers.costoIngredientes(servicio: servicioPreview, productos: productos)
     }
-    private var duracionInvalida: Bool {
-        Double(duracionString) == nil
+    private var baseCostoTotal: Double {
+        (Double(costoBaseString) ?? 0) + (requiereRefacciones ? (Double(costoRefaccionesString) ?? 0) : 0) + costoIngredientes
     }
-    private var especialidadInvalida: Bool {
-        especialidadRequerida.isEmpty
+    private var moMonto: Double {
+        PricingHelpers.calcularPorcentaje(base: baseCostoTotal, porcentaje: Double(porcentajeMOString) ?? 0)
+    }
+    private var adminMonto: Double {
+        PricingHelpers.calcularPorcentaje(base: baseCostoTotal, porcentaje: Double(porcentajeAdminString) ?? 0)
+    }
+    private var margenMonto: Double {
+        PricingHelpers.calcularPorcentaje(base: baseCostoTotal, porcentaje: Double(porcentajeMargenString) ?? 0)
+    }
+    private var subtotal: Double { moMonto + adminMonto + margenMonto }
+    private var ivaMonto: Double { PricingHelpers.calcularIVA(subtotal: subtotal, aplicar: aplicarIVA) }
+    private var isrMonto: Double { PricingHelpers.calcularISR(subtotal: subtotal, porcentajeISR: Double(porcentajeISRString) ?? 0, aplicar: aplicarISR) }
+    private var precioSugerido: Double { PricingHelpers.calcularPrecioSugerido(subtotal: subtotal, iva: ivaMonto, isr: isrMonto) }
+    
+    // Servicio “preview” para cálculo de ingredientes
+    private var servicioPreview: Servicio {
+        let ingredientesArray: [Ingrediente] = cantidadesProductos.compactMap { (nombre, cantidad) in
+            guard cantidad > 0 else { return nil }
+            return Ingrediente(nombreProducto: nombre, cantidadUsada: cantidad)
+        }
+        // Construimos un objeto efímero solo para helpers (no se inserta)
+        let dummy = Servicio(
+            nombre: nombre.isEmpty ? "tmp" : nombre,
+            descripcion: descripcion,
+            especialidadRequerida: especialidadRequerida,
+            rolRequerido: rolRequerido,
+            ingredientes: ingredientesArray,
+            precioAlCliente: Double(precioFinalString) ?? 0,
+            duracionHoras: Double(duracionString) ?? 1.0,
+            costoBase: Double(costoBaseString) ?? 0,
+            requiereRefacciones: requiereRefacciones,
+            costoRefacciones: Double(costoRefaccionesString) ?? 0,
+            porcentajeManoDeObra: Double(porcentajeMOString) ?? 0,
+            porcentajeGastosAdministrativos: Double(porcentajeAdminString) ?? 0,
+            porcentajeMargen: Double(porcentajeMargenString) ?? 0,
+            aplicarIVA: aplicarIVA,
+            aplicarISR: aplicarISR,
+            isrPorcentajeEstimado: Double(porcentajeISRString) ?? 0,
+            precioFinalAlCliente: Double(precioFinalString) ?? 0,
+            precioModificadoManualmente: precioModificadoManualmente
+        )
+        return dummy
     }
     
     init(mode: ServiceModalMode) {
@@ -768,10 +896,29 @@ fileprivate struct ServicioFormView: View {
             _descripcion = State(initialValue: servicio.descripcion)
             _especialidadRequerida = State(initialValue: servicio.especialidadRequerida)
             _rolRequerido = State(initialValue: servicio.rolRequerido)
-            _precioString = State(initialValue: "\(servicio.precioAlCliente)")
-            _duracionString = State(initialValue: "\(servicio.duracionHoras)")
+            _duracionString = State(initialValue: String(format: "%.2f", servicio.duracionHoras))
             let cantidades = Dictionary(uniqueKeysWithValues: servicio.ingredientes.map { ($0.nombreProducto, $0.cantidadUsada) })
             _cantidadesProductos = State(initialValue: cantidades)
+            
+            // Nuevos campos
+            _costoBaseString = State(initialValue: String(format: "%.2f", servicio.costoBase))
+            _requiereRefacciones = State(initialValue: servicio.requiereRefacciones)
+            _costoRefaccionesString = State(initialValue: String(format: "%.2f", servicio.costoRefacciones))
+            _porcentajeMOString = State(initialValue: String(format: "%.2f", servicio.porcentajeManoDeObra))
+            _porcentajeAdminString = State(initialValue: String(format: "%.2f", servicio.porcentajeGastosAdministrativos))
+            _porcentajeMargenString = State(initialValue: String(format: "%.2f", servicio.porcentajeMargen))
+            _aplicarIVA = State(initialValue: servicio.aplicarIVA)
+            _aplicarISR = State(initialValue: servicio.aplicarISR)
+            _porcentajeISRString = State(initialValue: String(format: "%.2f", servicio.isrPorcentajeEstimado))
+            _precioFinalString = State(initialValue: String(format: "%.2f", servicio.precioFinalAlCliente))
+            _precioModificadoManualmente = State(initialValue: servicio.precioModificadoManualmente)
+        } else {
+            // defaults para alta
+            _porcentajeMOString = State(initialValue: "40.0")
+            _porcentajeAdminString = State(initialValue: "20.0")
+            _porcentajeMargenString = State(initialValue: "30.0")
+            _porcentajeISRString = State(initialValue: "10.0")
+            _precioFinalString = State(initialValue: "0.0")
         }
     }
     
@@ -829,23 +976,14 @@ fileprivate struct ServicioFormView: View {
                     FormField(title: "Descripción", placeholder: "ej. Reemplazo de balatas y rectificación de discos", text: $descripcion)
                     
                     HStack(spacing: 16) {
-                        FormField(title: "• Precio Mano de Obra ($)", placeholder: "ej. 1500", text: $precioString)
-                            .validationHint(isInvalid: precioInvalido, message: "Debe ser un número.")
                         FormField(title: "• Duración Estimada (Horas)", placeholder: "ej. 2.5", text: $duracionString)
-                            .validationHint(isInvalid: duracionInvalida, message: "Debe ser un número.")
-                    }
-                }
-                
-                Section {
-                    SectionHeader(title: "Requerimientos", subtitle: nil)
-                    HStack(spacing: 16) {
+                            .validationHint(isInvalid: duracionInvalida, message: "Debe ser un número > 0.")
                         Picker("• Especialidad Requerida", selection: $especialidadRequerida) {
                             Text("Seleccionar...").tag("")
                             ForEach(especialidadesDisponibles, id: \.self) { Text($0).tag($0) }
                         }
                         .pickerStyle(.menu)
                         .frame(maxWidth: .infinity)
-                        
                         Picker("• Rol Requerido", selection: $rolRequerido) {
                             ForEach(Rol.allCases, id: \.self) { rol in
                                 Text(rol.rawValue).tag(rol)
@@ -856,6 +994,54 @@ fileprivate struct ServicioFormView: View {
                     }
                 }
                 
+                // Configuración de Costos Base
+                Section {
+                    SectionHeader(title: "Costos Base", subtitle: "Costo del servicio y refacciones")
+                    HStack(spacing: 16) {
+                        FormField(title: "• Costo base del servicio ($)", placeholder: "ej. 800.00", text: $costoBaseString)
+                            .validationHint(isInvalid: costoBaseInvalido, message: "Debe ser un número ≥ 0.")
+                        Toggle("¿Requiere refacciones?", isOn: $requiereRefacciones)
+                            .toggleStyle(.switch)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        FormField(title: "Costo de refacciones ($)", placeholder: "ej. 500.00", text: $costoRefaccionesString)
+                            .validationHint(isInvalid: costoRefInvalido, message: "Debe ser un número ≥ 0.")
+                            .disabled(!requiereRefacciones)
+                            .opacity(requiereRefacciones ? 1 : 0.5)
+                    }
+                    HStack {
+                        Text("Costo de ingredientes (automático): $\(costoIngredientes, specifier: "%.2f")")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        Spacer()
+                    }
+                }
+                
+                // Configuración Porcentual
+                Section {
+                    SectionHeader(title: "Configuración Porcentual", subtitle: "Todo en % (0 a 100)")
+                    HStack(spacing: 16) {
+                        FormField(title: "• % Mano de Obra", placeholder: "ej. 40", text: $porcentajeMOString)
+                            .validationHint(isInvalid: pMOInvalido, message: "0 a 100.")
+                        FormField(title: "• % Gastos Administrativos", placeholder: "ej. 20", text: $porcentajeAdminString)
+                            .validationHint(isInvalid: pAdminInvalido, message: "0 a 100.")
+                        FormField(title: "• % Margen de Ganancia", placeholder: "ej. 30", text: $porcentajeMargenString)
+                            .validationHint(isInvalid: pMargenInvalido, message: "0 a 100.")
+                    }
+                    HStack(spacing: 16) {
+                        Toggle("Aplicar IVA (16%)", isOn: $aplicarIVA)
+                        Toggle("Aplicar ISR (aprox.)", isOn: $aplicarISR)
+                        FormField(title: "% ISR (aprox.)", placeholder: "ej. 10", text: $porcentajeISRString)
+                            .validationHint(isInvalid: pISRInvalido, message: "0 a 100.")
+                            .disabled(!aplicarISR)
+                            .opacity(aplicarISR ? 1 : 0.5)
+                    }
+                    Text("Los cálculos de ISR son aproximados. Verifique las tablas oficiales del SAT.")
+                        .font(.caption2)
+                        .foregroundColor(.yellow)
+                }
+                
+                // Ingredientes
                 Section {
                     SectionHeader(title: "Productos Requeridos", subtitle: "Ingresa la cantidad a usar por servicio (ej. 0.5)")
                     
@@ -869,7 +1055,7 @@ fileprivate struct ServicioFormView: View {
                                         cantidadesProductos[producto.nombre].map { String(format: "%.2f", $0) } ?? ""
                                     },
                                     set: {
-                                        cantidadesProductos[producto.nombre] = Double($0)
+                                        cantidadesProductos[producto.nombre] = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0
                                     }
                                 ))
                                 .multilineTextAlignment(.trailing)
@@ -891,10 +1077,71 @@ fileprivate struct ServicioFormView: View {
                     }
                     .frame(minHeight: 150, maxHeight: 250)
                 }
+                
+                // Cálculos automáticos y Precio
+                Section {
+                    SectionHeader(title: "Cálculos Automáticos", subtitle: "Solo lectura")
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 8) {
+                        roField("Monto Mano de Obra", moMonto)
+                        roField("Monto Gastos Administrativos", adminMonto)
+                        roField("Monto Margen", margenMonto)
+                        roField("Subtotal", subtotal)
+                        roField("IVA (16%)", ivaMonto)
+                        roField("ISR (aprox.)", isrMonto)
+                    }
+                    // Precio sugerido y final
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Precio Sugerido: $\(precioSugerido, specifier: "%.2f")")
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                        HStack(spacing: 12) {
+                            FormField(title: "Precio final al cliente (editable)", placeholder: "ej. 2500.00", text: $precioFinalString)
+                                .onChange(of: precioFinalString) { _, new in
+                                    // Marca como modificado si difiere del sugerido por más de 1 centavo
+                                    let final = Double(new.replacingOccurrences(of: ",", with: ".")) ?? 0
+                                    precioModificadoManualmente = abs(final - precioSugerido) > 0.009
+                                }
+                            if precioModificadoManualmente {
+                                Text("Modificado manualmente")
+                                    .font(.caption)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Color.yellow.opacity(0.2))
+                                    .foregroundColor(.yellow)
+                                    .cornerRadius(6)
+                            }
+                        }
+                        Text("El precio sugerido se mantiene como referencia si editas el precio final.")
+                            .font(.caption).foregroundColor(.gray)
+                    }
+                }
             }
             .textFieldStyle(PlainTextFieldStyle())
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
+            .onAppear {
+                let todasLasHabilidades = personal.flatMap { $0.especialidades }
+                especialidadesDisponibles = Array(Set(todasLasHabilidades)).sorted()
+                
+                if servicioAEditar == nil {
+                    rolRequerido = .ayudante
+                    if let primera = especialidadesDisponibles.first {
+                        especialidadRequerida = primera
+                    }
+                    // Inicializar precio final con el sugerido al abrir "add"
+                    precioFinalString = String(format: "%.2f", precioSugerido)
+                }
+            }
+            .onChange(of: costoBaseString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: requiereRefacciones) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: costoRefaccionesString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: porcentajeMOString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: porcentajeAdminString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: porcentajeMargenString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: aplicarIVA) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: aplicarISR) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: porcentajeISRString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: cantidadesProductos) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: duracionString) { _, _ in /* no afecta precio, solo info */ }
             
             if let errorMsg {
                 Text(errorMsg)
@@ -920,29 +1167,37 @@ fileprivate struct ServicioFormView: View {
                 }
                 .buttonStyle(.plain).padding(.vertical, 8).padding(.horizontal, 12)
                 .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(8)
-                .disabled(nombreInvalido || precioInvalido || duracionInvalida || especialidadInvalida)
-                .opacity((nombreInvalido || precioInvalido || duracionInvalida || especialidadInvalida) ? 0.6 : 1.0)
+                .disabled(nombreInvalido || duracionInvalida || costoBaseInvalido || costoRefInvalido || pMOInvalido || pAdminInvalido || pMargenInvalido || pISRInvalido || especialidadRequerida.isEmpty)
+                .opacity((nombreInvalido || duracionInvalida || costoBaseInvalido || costoRefInvalido || pMOInvalido || pAdminInvalido || pMargenInvalido || pISRInvalido || especialidadRequerida.isEmpty) ? 0.6 : 1.0)
             }
             .padding(.horizontal).padding(.bottom, 8)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 700, minHeight: 600, maxHeight: 750)
+        .frame(minWidth: 760, minHeight: 650, maxHeight: 900)
         .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
         }
-        .onAppear {
-            let todasLasHabilidades = personal.flatMap { $0.especialidades }
-            especialidadesDisponibles = Array(Set(todasLasHabilidades)).sorted()
-            
-            if servicioAEditar == nil {
-                rolRequerido = .ayudante
-                if let primera = especialidadesDisponibles.first {
-                    especialidadRequerida = primera
-                }
-            }
+    }
+    
+    private func roField(_ title: String, _ value: Double) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.caption2).foregroundColor(.gray)
+            Text(value.formatted(.number.precision(.fractionLength(2))))
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color("MercedesBackground").opacity(0.6))
+                .cornerRadius(8)
+        }
+    }
+    
+    private func syncPrecioFinalConSugeridoSiNoManual() {
+        if !precioModificadoManualmente {
+            precioFinalString = String(format: "%.2f", precioSugerido)
         }
     }
     
@@ -1000,16 +1255,32 @@ fileprivate struct ServicioFormView: View {
             errorMsg = "El nombre del servicio debe tener al menos 3 caracteres."
             return
         }
-        guard let precio = Double(precioString), precio >= 0 else {
-            errorMsg = "El Precio debe ser un número válido."
-            return
-        }
         guard let duracion = Double(duracionString), duracion > 0 else {
             errorMsg = "La Duración debe ser un número mayor a 0."
             return
         }
-        guard !especialidadRequerida.isEmpty else {
-            errorMsg = "Debes seleccionar una Especialidad Requerida."
+        guard let costoBase = Double(costoBaseString.replacingOccurrences(of: ",", with: ".")), costoBase >= 0 else {
+            errorMsg = "El Costo base debe ser un número válido."
+            return
+        }
+        guard let costoRef = Double(costoRefaccionesString.replacingOccurrences(of: ",", with: ".")), (!requiereRefacciones || costoRef >= 0) else {
+            errorMsg = "El Costo de refacciones debe ser un número válido."
+            return
+        }
+        guard let pMO = Double(porcentajeMOString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pMO) else {
+            errorMsg = "% Mano de Obra inválido."
+            return
+        }
+        guard let pAdmin = Double(porcentajeAdminString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pAdmin) else {
+            errorMsg = "% Gastos Administrativos inválido."
+            return
+        }
+        guard let pMargen = Double(porcentajeMargenString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pMargen) else {
+            errorMsg = "% Margen inválido."
+            return
+        }
+        guard let pISR = Double(porcentajeISRString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pISR) else {
+            errorMsg = "% ISR inválido."
             return
         }
         
@@ -1018,14 +1289,32 @@ fileprivate struct ServicioFormView: View {
             return Ingrediente(nombreProducto: nombre, cantidadUsada: cantidad)
         }
         
+        let final = Double(precioFinalString.replacingOccurrences(of: ",", with: ".")) ?? precioSugerido
+        
         if let servicio = servicioAEditar {
+            // Actualiza todos los campos
             servicio.nombre = trimmedNombre
             servicio.descripcion = descripcion
             servicio.especialidadRequerida = especialidadRequerida
             servicio.rolRequerido = rolRequerido
-            servicio.precioAlCliente = precio
             servicio.duracionHoras = duracion
             servicio.ingredientes = ingredientesArray
+            
+            servicio.costoBase = costoBase
+            servicio.requiereRefacciones = requiereRefacciones
+            servicio.costoRefacciones = costoRef
+            servicio.porcentajeManoDeObra = pMO
+            servicio.porcentajeGastosAdministrativos = pAdmin
+            servicio.porcentajeMargen = pMargen
+            servicio.aplicarIVA = aplicarIVA
+            servicio.aplicarISR = aplicarISR
+            servicio.isrPorcentajeEstimado = pISR
+            
+            servicio.precioFinalAlCliente = final
+            servicio.precioModificadoManualmente = precioModificadoManualmente
+            
+            // Compatibilidad: actualiza precioAlCliente a lo final (para vistas antiguas/IA)
+            servicio.precioAlCliente = final
         } else {
             let nuevoServicio = Servicio(
                 nombre: trimmedNombre,
@@ -1033,8 +1322,19 @@ fileprivate struct ServicioFormView: View {
                 especialidadRequerida: especialidadRequerida,
                 rolRequerido: rolRequerido,
                 ingredientes: ingredientesArray,
-                precioAlCliente: precio,
-                duracionHoras: duracion
+                precioAlCliente: final, // compat
+                duracionHoras: duracion,
+                costoBase: costoBase,
+                requiereRefacciones: requiereRefacciones,
+                costoRefacciones: costoRef,
+                porcentajeManoDeObra: pMO,
+                porcentajeGastosAdministrativos: pAdmin,
+                porcentajeMargen: pMargen,
+                aplicarIVA: aplicarIVA,
+                aplicarISR: aplicarISR,
+                isrPorcentajeEstimado: pISR,
+                precioFinalAlCliente: final,
+                precioModificadoManualmente: precioModificadoManualmente
             )
             modelContext.insert(nuevoServicio)
         }
@@ -1161,3 +1461,4 @@ fileprivate struct FormModal<Content: View>: View {
         .preferredColorScheme(.dark)
     }
 }
+

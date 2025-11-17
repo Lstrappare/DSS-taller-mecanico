@@ -318,13 +318,37 @@ class Servicio {
     var precioAlCliente: Double
     var duracionHoras: Double
 
+    // Nuevos campos de configuración y precios
+    var costoBase: Double
+    var requiereRefacciones: Bool
+    var costoRefacciones: Double
+    var porcentajeManoDeObra: Double
+    var porcentajeGastosAdministrativos: Double
+    var porcentajeMargen: Double
+    var aplicarIVA: Bool
+    var aplicarISR: Bool
+    var isrPorcentajeEstimado: Double
+    var precioFinalAlCliente: Double
+    var precioModificadoManualmente: Bool
+
     init(nombre: String,
          descripcion: String = "",
          especialidadRequerida: String,
          rolRequerido: Rol,
          ingredientes: [Ingrediente] = [],
          precioAlCliente: Double,
-         duracionHoras: Double = 1.0)
+         duracionHoras: Double = 1.0,
+         costoBase: Double = 0.0,
+         requiereRefacciones: Bool = false,
+         costoRefacciones: Double = 0.0,
+         porcentajeManoDeObra: Double = 40.0,
+         porcentajeGastosAdministrativos: Double = 20.0,
+         porcentajeMargen: Double = 30.0,
+         aplicarIVA: Bool = false,
+         aplicarISR: Bool = false,
+         isrPorcentajeEstimado: Double = 10.0,
+         precioFinalAlCliente: Double? = nil,
+         precioModificadoManualmente: Bool = false)
     {
         self.nombre = nombre
         self.descripcion = descripcion
@@ -333,6 +357,19 @@ class Servicio {
         self.ingredientes = ingredientes
         self.precioAlCliente = precioAlCliente
         self.duracionHoras = duracionHoras
+
+        self.costoBase = costoBase
+        self.requiereRefacciones = requiereRefacciones
+        self.costoRefacciones = costoRefacciones
+        self.porcentajeManoDeObra = porcentajeManoDeObra
+        self.porcentajeGastosAdministrativos = porcentajeGastosAdministrativos
+        self.porcentajeMargen = porcentajeMargen
+        self.aplicarIVA = aplicarIVA
+        self.aplicarISR = aplicarISR
+        self.isrPorcentajeEstimado = isrPorcentajeEstimado
+        // Si no viene un precio final, usa el precioAlCliente como inicial para compatibilidad
+        self.precioFinalAlCliente = precioFinalAlCliente ?? precioAlCliente
+        self.precioModificadoManualmente = precioModificadoManualmente
     }
 }
 
@@ -450,3 +487,4 @@ class Cliente {
         self.email = email
     }
 }
+
