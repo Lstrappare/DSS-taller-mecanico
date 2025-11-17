@@ -14,6 +14,58 @@ fileprivate enum ProductModalMode: Identifiable {
     }
 }
 
+// --- Helpers de precio para productos (flujo corregido) ---
+fileprivate enum ProductPricingHelpers {
+    // 1) Base sin IVA con margen: base = costo + margen(costo)
+    static func baseConMargen(costo: Double, porcentajeMargen: Double) -> Double {
+        costo + (costo * (porcentajeMargen / 100.0))
+    }
+    // 2) IVA sobre base
+    static func ivaSobreBase(base: Double, ivaTasa: Double) -> Double {
+        base * ivaTasa
+    }
+    // 3) Precio final sugerido: base + iva
+    static func precioSugerido(base: Double, iva: Double) -> Double {
+        base + iva
+    }
+    // 4) Gastos administrativos sobre base (sin IVA)
+    static func gastoAdministrativo(base: Double, porcentajeAdmin: Double) -> Double {
+        base * (porcentajeAdmin / 100.0)
+    }
+    // 5) Utilidad bruta antes de gastos
+    static func utilidadAntesDeGastos(base: Double, costo: Double) -> Double {
+        base - costo
+    }
+    // 6) Utilidad después de gastos
+    static func utilidadDespuesDeGastos(utilidadAntes: Double, gastoAdmin: Double) -> Double {
+        utilidadAntes - gastoAdmin
+    }
+    // 7) ISR aproximado sobre utilidad después de gastos
+    static func isrAproximado(utilidadDespuesGastos: Double, tasaISR: Double) -> Double {
+        max(0, utilidadDespuesGastos) * (tasaISR / 100.0)
+    }
+    // 8) Margen real respecto al precio final (editable)
+    static func margenReal(utilidadDespuesGastos: Double, precioFinal: Double) -> Double {
+        guard precioFinal > 0 else { return 0 }
+        return utilidadDespuesGastos / precioFinal
+    }
+    // Utilidad práctica si el precio final fue editado (base desde precio final)
+    static func utilidadDespuesDeGastosConPrecioFinal(precioFinalSinIVA: Double, costo: Double, porcentajeAdmin: Double) -> Double {
+        // precioFinalSinIVA representa la base (sin IVA) cuando el usuario edita el precio final
+        let utilidadAntes = utilidadAntesDeGastos(base: precioFinalSinIVA, costo: costo)
+        let gastoAdmin = gastoAdministrativo(base: precioFinalSinIVA, porcentajeAdmin: porcentajeAdmin)
+        return utilidadDespuesDeGastos(utilidadAntes: utilidadAntes, gastoAdmin: gastoAdmin)
+    }
+    // Diferencia final vs sugerido
+    static func variacionPrecio(final: Double, sugerido: Double) -> Double {
+        final - sugerido
+    }
+    // Si el costo incluye IVA y queremos recuperar el costo neto (no usado en el nuevo flujo, pero útil si se necesitara)
+    static func costoSinIVA(desdeCostoConIVA costo: Double, ivaTasa: Double) -> Double {
+        costo / max(1 + ivaTasa, 0.0001)
+    }
+}
+
 // --- VISTA PRINCIPAL (Mejorada UI) ---
 struct InventarioView: View {
     @Environment(\.modelContext) private var modelContext
@@ -35,7 +87,10 @@ struct InventarioView: View {
             return productos.filter { producto in
                 producto.nombre.lowercased().contains(query) ||
                 producto.unidadDeMedida.lowercased().contains(query) ||
-                producto.informacion.lowercased().contains(query)
+                producto.informacion.lowercased().contains(query) ||
+                producto.categoria.lowercased().contains(query) ||
+                producto.proveedor.lowercased().contains(query) ||
+                producto.lote.lowercased().contains(query)
             }
         }
     }
@@ -90,7 +145,7 @@ struct InventarioView: View {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(Color("MercedesPetrolGreen"))
-                TextField("Buscar por Nombre, Unidad o Información...", text: $searchQuery)
+                TextField("Buscar por Nombre, Unidad, Categoría, Proveedor o Información...", text: $searchQuery)
                     .textFieldStyle(PlainTextFieldStyle())
                     .animation(.easeInOut(duration: 0.15), value: searchQuery)
                 if !searchQuery.isEmpty {
@@ -196,8 +251,17 @@ fileprivate struct ProductoCard: View {
             // Header
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(producto.nombre)
-                        .font(.title2).fontWeight(.semibold)
+                    HStack(spacing: 8) {
+                        Text(producto.nombre)
+                            .font(.title2).fontWeight(.semibold)
+                        if !producto.categoria.isEmpty {
+                            Text(producto.categoria)
+                                .font(.caption)
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(6)
+                        }
+                    }
                     if !producto.informacion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(producto.informacion)
                             .font(.subheadline).foregroundColor(.gray)
@@ -240,9 +304,19 @@ fileprivate struct ProductoCard: View {
                         if isLowStock {
                             chip(text: "Stock bajo", icon: "exclamationmark.triangle.fill", color: .red)
                         }
+                        if !producto.proveedor.isEmpty {
+                            chip(text: producto.proveedor, icon: "building.2.fill")
+                        }
+                        if !producto.lote.isEmpty {
+                            chip(text: "Lote \(producto.lote)", icon: "number")
+                        }
                     }
                     Text("Cantidad: \(producto.cantidad, specifier: "%.2f") \(producto.unidadDeMedida)(s)")
                         .font(.body).foregroundColor(.gray)
+                    if let cad = producto.fechaCaducidad {
+                        Text("Caduca: \(cad.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.caption).foregroundColor(.gray)
+                    }
                 }
                 Spacer()
                 VStack(alignment: .leading, spacing: 6) {
@@ -258,6 +332,11 @@ fileprivate struct ProductoCard: View {
                             .foregroundColor(margenColor)
                             .cornerRadius(6)
                     }
+                    Text(producto.tipoFiscal.rawValue)
+                        .font(.caption2)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Color("MercedesBackground"))
+                        .cornerRadius(6)
                 }
                 .font(.body).foregroundColor(.gray)
             }
@@ -294,13 +373,28 @@ fileprivate struct ProductFormView: View {
     
     // States para los campos
     @State private var nombre = ""
+    @State private var categoria = ""
+    @State private var unidadDeMedida = "Pieza"
+    @State private var proveedor = ""
+    @State private var lote = ""
+    @State private var fechaCaducidad: Date? = nil
+    
     @State private var costoString = ""
-    @State private var precioVentaString = ""
     @State private var cantidadString = ""
     @State private var informacion = ""
-    @State private var unidadDeMedida = "Pieza"
+    @State private var tipoFiscal: TipoFiscalProducto = .iva16
+    
+    // Configuraciones financieras
+    @State private var porcentajeMargenSugeridoString = "30.0"
+    @State private var porcentajeAdminString = "10.0"
+    @State private var isrPorcentajeString = "10.0"
+    
+    // Precio final editable
+    @State private var precioFinalString = ""
+    @State private var precioModificadoManualmente = false
+    
     let opcionesUnidad = ["Pieza", "Litro", "Onza (Oz)", "Galón", "Botella", "Lata", "Juego", "Kit", "Kg", "g", "Caja", "Metro"]
-
+    
     // States para Seguridad y Errores
     @State private var isNombreUnlocked = false
     @State private var showingAuthModal = false
@@ -329,24 +423,64 @@ fileprivate struct ProductFormView: View {
     private var costoInvalido: Bool {
         Double(costoString.replacingOccurrences(of: ",", with: ".")) == nil
     }
-    private var precioInvalido: Bool {
-        Double(precioVentaString.replacingOccurrences(of: ",", with: ".")) == nil
-    }
     private var cantidadInvalida: Bool {
         Double(cantidadString.replacingOccurrences(of: ",", with: ".")) == nil
     }
-    
-    // Margen en vivo
-    private var margenPreview: Double {
-        guard
-            let c = Double(costoString.replacingOccurrences(of: ",", with: ".")),
-            let p = Double(precioVentaString.replacingOccurrences(of: ",", with: ".")),
-            p > 0
-        else { return 0 }
-        return (1 - (c / p)) * 100
+    private var pMargenInvalido: Bool { porcentajeInvalido(porcentajeMargenSugeridoString) }
+    private var pAdminInvalido: Bool { porcentajeInvalido(porcentajeAdminString) }
+    private var pISRInvalido: Bool { porcentajeInvalido(isrPorcentajeString) }
+    private func porcentajeInvalido(_ s: String) -> Bool {
+        guard let v = Double(s.replacingOccurrences(of: ",", with: ".")) else { return true }
+        return v < 0 || v > 100
     }
-    private var margenColor: Color {
-        margenPreview > 50 ? .green : (margenPreview > 20 ? .yellow : .red)
+    
+    // --- Cálculos automáticos (solo lectura, basados en inputs) ---
+    private var costo: Double { Double(costoString.replacingOccurrences(of: ",", with: ".")) ?? 0 }
+    private var cantidad: Double { Double(cantidadString.replacingOccurrences(of: ",", with: ".")) ?? 0 }
+    private var pMargen: Double { Double(porcentajeMargenSugeridoString.replacingOccurrences(of: ",", with: ".")) ?? 0 }
+    private var pAdmin: Double { Double(porcentajeAdminString.replacingOccurrences(of: ",", with: ".")) ?? 0 }
+    private var pISR: Double { Double(isrPorcentajeString.replacingOccurrences(of: ",", with: ".")) ?? 0 }
+    private var ivaTasa: Double { tipoFiscal.tasa }
+    
+    // Flujo exacto solicitado
+    private var baseSinIVAConMargen: Double {
+        ProductPricingHelpers.baseConMargen(costo: costo, porcentajeMargen: pMargen)
+    }
+    private var ivaMonto: Double {
+        ProductPricingHelpers.ivaSobreBase(base: baseSinIVAConMargen, ivaTasa: ivaTasa)
+    }
+    private var precioSugerido: Double {
+        ProductPricingHelpers.precioSugerido(base: baseSinIVAConMargen, iva: ivaMonto)
+    }
+    private var precioFinalEditable: Double {
+        Double(precioFinalString.replacingOccurrences(of: ",", with: ".")) ?? precioSugerido
+    }
+    private var gastoAdminMonto: Double {
+        ProductPricingHelpers.gastoAdministrativo(base: baseSinIVAConMargen, porcentajeAdmin: pAdmin)
+    }
+    private var utilidadAntesDeGastos: Double {
+        ProductPricingHelpers.utilidadAntesDeGastos(base: baseSinIVAConMargen, costo: costo)
+    }
+    private var utilidadDespuesDeGastos: Double {
+        ProductPricingHelpers.utilidadDespuesDeGastos(utilidadAntes: utilidadAntesDeGastos, gastoAdmin: gastoAdminMonto)
+    }
+    private var isrAproxMonto: Double {
+        ProductPricingHelpers.isrAproximado(utilidadDespuesGastos: utilidadDespuesDeGastos, tasaISR: pISR)
+    }
+    private var margenRealPct: Double {
+        // Para margen real usamos la utilidad después de gastos, sobre el precio final editable
+        ProductPricingHelpers.margenReal(utilidadDespuesGastos: utilidadDespuesDeGastos, precioFinal: max(precioFinalEditable, 0.0001))
+    }
+    private var variacionVsSugerido: Double {
+        ProductPricingHelpers.variacionPrecio(final: precioFinalEditable, sugerido: precioSugerido)
+    }
+    // NUEVO: Margen de ganancia neto (restando ISR)
+    private var margenDeGananciaMonto: Double {
+        utilidadDespuesDeGastos - isrAproxMonto
+    }
+    private var margenDeGananciaPct: Double {
+        let denom = max(precioFinalEditable, 0.0001)
+        return margenDeGananciaMonto / denom
     }
     
     // Inicializador
@@ -357,10 +491,19 @@ fileprivate struct ProductFormView: View {
             self.productoAEditar = producto
             _nombre = State(initialValue: producto.nombre)
             _costoString = State(initialValue: String(format: "%.2f", producto.costo))
-            _precioVentaString = State(initialValue: String(format: "%.2f", producto.precioVenta))
             _cantidadString = State(initialValue: String(format: "%.2f", producto.cantidad))
             _informacion = State(initialValue: producto.informacion)
             _unidadDeMedida = State(initialValue: producto.unidadDeMedida)
+            _categoria = State(initialValue: producto.categoria)
+            _proveedor = State(initialValue: producto.proveedor)
+            _lote = State(initialValue: producto.lote)
+            _fechaCaducidad = State(initialValue: producto.fechaCaducidad)
+            _tipoFiscal = State(initialValue: producto.tipoFiscal)
+            _porcentajeMargenSugeridoString = State(initialValue: String(format: "%.2f", producto.porcentajeMargenSugerido))
+            _porcentajeAdminString = State(initialValue: String(format: "%.2f", producto.porcentajeGastosAdministrativos))
+            _isrPorcentajeString = State(initialValue: String(format: "%.2f", producto.isrPorcentajeEstimado))
+            _precioFinalString = State(initialValue: String(format: "%.2f", producto.precioVenta))
+            _precioModificadoManualmente = State(initialValue: producto.precioModificadoManualmente)
         }
     }
     
@@ -378,7 +521,7 @@ fileprivate struct ProductFormView: View {
             Form {
                 // Detalles del Producto
                 Section {
-                    SectionHeader(title: "Detalles del Producto", subtitle: nil)
+                    SectionHeader(title: "Datos del Producto", subtitle: nil)
                     
                     // --- Nombre (ID Único) con Candado ---
                     VStack(alignment: .leading, spacing: 2) {
@@ -423,43 +566,145 @@ fileprivate struct ProductFormView: View {
                         }
                     }
                     
-                    // Costo y Precio
+                    // Categoría y Unidad
                     HStack(spacing: 16) {
-                        FormField(title: "• Costo", placeholder: "$ 0.00", text: $costoString)
-                            .validationHint(isInvalid: costoInvalido, message: "Debe ser un número.")
-                        FormField(title: "• Precio de Venta", placeholder: "$ 0.00", text: $precioVentaString)
-                            .validationHint(isInvalid: precioInvalido, message: "Debe ser un número.")
-                    }
-                    
-                    // Margen en vivo
-                    HStack(spacing: 8) {
-                        Text("Margen estimado:")
-                            .font(.caption).foregroundColor(.gray)
-                        Text(String(format: "%.0f%%", margenPreview))
-                            .font(.headline).foregroundColor(margenColor)
-                        Circle().fill(margenColor).frame(width: 8, height: 8)
-                    }
-                }
-                
-                // Inventario e Info
-                Section {
-                    SectionHeader(title: "Inventario e Información", subtitle: nil)
-                    HStack(spacing: 16) {
-                        FormField(title: "• Cantidad", placeholder: "ej. 10.5", text: $cantidadString)
-                            .validationHint(isInvalid: cantidadInvalida, message: "Debe ser un número.")
-                        
-                        Picker("Unidad de Medida", selection: $unidadDeMedida) {
+                        FormField(title: "Categoría", placeholder: "ej. Aceites, Filtros...", text: $categoria)
+                        Picker("• Unidad de Medida", selection: $unidadDeMedida) {
                             ForEach(opcionesUnidad, id: \.self) { Text($0) }
                         }
                         .pickerStyle(.menu)
                         .frame(maxWidth: .infinity)
                     }
-                    FormField(title: "Información (Opcional)", placeholder: "ej. Para motores V6 2.5L", text: $informacion)
+                    
+                    // Proveedor / Lote / Caducidad
+                    HStack(spacing: 16) {
+                        FormField(title: "Proveedor", placeholder: "Nombre comercial", text: $proveedor)
+                        FormField(title: "Lote", placeholder: "ej. A123-45", text: $lote)
+                        DatePicker("Caducidad (opcional)", selection: Binding(
+                            get: { fechaCaducidad ?? Date() },
+                            set: { fechaCaducidad = $0 }
+                        ), displayedComponents: .date)
+                        .labelsHidden()
+                        .frame(maxWidth: .infinity)
+                        Toggle("Sin fecha", isOn: Binding(
+                            get: { fechaCaducidad == nil },
+                            set: { noDate in fechaCaducidad = noDate ? nil : Date() }
+                        ))
+                        .toggleStyle(.switch)
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                    }
+                    
+                    // Costo y Cantidad
+                    HStack(spacing: 16) {
+                        FormField(title: "• Costo de compra", placeholder: "$ 0.00", text: $costoString)
+                            .validationHint(isInvalid: costoInvalido, message: "Debe ser un número.")
+                        FormField(title: "• Cantidad", placeholder: "ej. 10.5", text: $cantidadString)
+                            .validationHint(isInvalid: cantidadInvalida, message: "Debe ser un número.")
+                    }
+                    
+                    // Tipo fiscal
+                    Picker("• Tipo fiscal del producto", selection: $tipoFiscal) {
+                        ForEach(TipoFiscalProducto.allCases, id: \.self) { t in
+                            Text(t.rawValue).tag(t)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    
+                    FormField(title: "Información (opcional)", placeholder: "ej. Para motores V6 2.5L", text: $informacion)
+                }
+                
+                // Configuraciones financieras
+                Section {
+                    SectionHeader(title: "Configuraciones financieras", subtitle: "Porcentajes entre 0 y 100")
+                    HStack(spacing: 16) {
+                        FormField(title: "• % Margen sugerido", placeholder: "ej. 30", text: $porcentajeMargenSugeridoString)
+                            .validationHint(isInvalid: pMargenInvalido, message: "0 a 100.")
+                        FormField(title: "• % Gastos administrativos", placeholder: "ej. 10", text: $porcentajeAdminString)
+                            .validationHint(isInvalid: pAdminInvalido, message: "0 a 100.")
+                        FormField(title: "% ISR (aprox.)", placeholder: "ej. 10", text: $isrPorcentajeString)
+                            .validationHint(isInvalid: pISRInvalido, message: "0 a 100.")
+                    }
+                }
+                
+                // Cálculos automáticos y Precio
+                Section {
+                    SectionHeader(title: "Cálculos automáticos", subtitle: "Solo lectura y precio final editable")
+                    
+                    // Costo y precio
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Costo y precio").font(.headline)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 8) {
+                            roField("Costo de compra", costo)
+                            roField("Base sin IVA (con margen)", baseSinIVAConMargen)
+                            roField("IVA (\(Int(ivaTasa * 100))%)", ivaMonto)
+                            roField("Precio sugerido", precioSugerido)
+                        }
+                    }
+                    
+                    // Administración y fiscal
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Administración y fiscal").font(.headline)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 8) {
+                            roField("% administrativo", pAdmin)
+                            roField("Gasto administrativo (monto)", gastoAdminMonto)
+                            roField("Utilidad antes de gastos", utilidadAntesDeGastos)
+                            roField("Utilidad después de gastos", utilidadDespuesDeGastos)
+                            roField("ISR aproximado", isrAproxMonto)
+                            roField("Margen de ganancia (monto)", margenDeGananciaMonto)
+                            roField("Margen de ganancia (%)", margenDeGananciaPct * 100)
+                        }
+                        HStack {
+                            Text("El cálculo de ISR es aproximado. Verifique las tablas oficiales del SAT.")
+                                .font(.caption2)
+                                .foregroundColor(.yellow)
+                            Spacer()
+                            Link("SAT (Portal oficial)", destination: URL(string: "https://www.sat.gob.mx/portal/public/home")!)
+                                .font(.caption)
+                                .foregroundColor(Color("MercedesPetrolGreen"))
+                        }
+                    }
+                    
+                    // Utilidad y precio final
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Precio final y variaciones").font(.headline)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 8) {
+                            roField("Variación vs sugerido", variacionVsSugerido)
+                        }
+                        HStack(spacing: 12) {
+                            FormField(title: "Precio final al cliente (editable)", placeholder: "ej. 301.60", text: $precioFinalString)
+                                .onChange(of: precioFinalString) { _, new in
+                                    let final = Double(new.replacingOccurrences(of: ",", with: ".")) ?? 0
+                                    precioModificadoManualmente = abs(final - precioSugerido) > 0.009
+                                }
+                            if precioModificadoManualmente {
+                                Text("Modificado manualmente")
+                                    .font(.caption)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Color.yellow.opacity(0.2))
+                                    .foregroundColor(.yellow)
+                                    .cornerRadius(6)
+                            }
+                        }
+                        Text("El precio sugerido se mantiene como referencia si editas el precio final.")
+                            .font(.caption).foregroundColor(.gray)
+                    }
                 }
             }
             .textFieldStyle(PlainTextFieldStyle())
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
+            .onAppear {
+                // En modo add, inicializa precio final con el sugerido
+                if productoAEditar == nil {
+                    precioFinalString = String(format: "%.2f", precioSugerido)
+                }
+            }
+            .onChange(of: costoString) { _, _ in syncFinalIfNotManual() }
+            .onChange(of: tipoFiscal) { _, _ in syncFinalIfNotManual() }
+            .onChange(of: porcentajeMargenSugeridoString) { _, _ in syncFinalIfNotManual() }
+            .onChange(of: porcentajeAdminString) { _, _ in /* no cambia el precio sugerido (afecta utilidad e ISR) */ }
+            .onChange(of: isrPorcentajeString) { _, _ in /* solo ISR */ }
             
             // Mensaje de Error
             if let errorMsg {
@@ -487,18 +732,37 @@ fileprivate struct ProductFormView: View {
                 }
                 .buttonStyle(.plain).padding(.vertical, 8).padding(.horizontal, 12)
                 .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(8)
-                .disabled(nombreInvalido || costoInvalido || precioInvalido || cantidadInvalida)
-                .opacity((nombreInvalido || costoInvalido || precioInvalido || cantidadInvalida) ? 0.6 : 1.0)
+                .disabled(nombreInvalido || costoInvalido || cantidadInvalida || pMargenInvalido || pAdminInvalido || pISRInvalido)
+                .opacity((nombreInvalido || costoInvalido || cantidadInvalida || pMargenInvalido || pAdminInvalido || pISRInvalido) ? 0.6 : 1.0)
             }
             .padding(.horizontal).padding(.bottom, 8)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 700, minHeight: 520, maxHeight: 650)
+        .frame(minWidth: 760, minHeight: 580, maxHeight: 820)
         .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
+        }
+    }
+    
+    private func roField(_ title: String, _ value: Double) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.caption2).foregroundColor(.gray)
+            Text(value.formatted(.number.precision(.fractionLength(2))))
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color("MercedesBackground").opacity(0.6))
+                .cornerRadius(8)
+        }
+    }
+    
+    private func syncFinalIfNotManual() {
+        if !precioModificadoManualmente {
+            precioFinalString = String(format: "%.2f", precioSugerido)
         }
     }
     
@@ -562,30 +826,59 @@ fileprivate struct ProductFormView: View {
             errorMsg = "El Costo debe ser un número válido."
             return
         }
-        guard let precioVenta = Double(precioVentaString.replacingOccurrences(of: ",", with: ".")), precioVenta >= 0 else {
-            errorMsg = "El Precio de Venta debe ser un número válido."
-            return
-        }
         guard let cantidad = Double(cantidadString.replacingOccurrences(of: ",", with: ".")), cantidad >= 0 else {
             errorMsg = "La Cantidad debe ser un número válido."
             return
         }
+        guard let pMargen = Double(porcentajeMargenSugeridoString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pMargen) else {
+            errorMsg = "% Margen inválido."
+            return
+        }
+        guard let pAdmin = Double(porcentajeAdminString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pAdmin) else {
+            errorMsg = "% Gastos Administrativos inválido."
+            return
+        }
+        guard let pISR = Double(isrPorcentajeString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pISR) else {
+            errorMsg = "% ISR inválido."
+            return
+        }
+        
+        let finalEditable = Double(precioFinalString.replacingOccurrences(of: ",", with: ".")) ?? precioSugerido
         
         if let producto = productoAEditar {
             producto.nombre = trimmedNombre
             producto.costo = costo
-            producto.precioVenta = precioVenta
             producto.cantidad = cantidad
             producto.informacion = informacion
             producto.unidadDeMedida = unidadDeMedida
+            producto.categoria = categoria
+            producto.proveedor = proveedor
+            producto.lote = lote
+            producto.fechaCaducidad = fechaCaducidad
+            producto.tipoFiscal = tipoFiscal
+            producto.porcentajeMargenSugerido = pMargen
+            producto.porcentajeGastosAdministrativos = pAdmin
+            producto.isrPorcentajeEstimado = pISR
+            producto.precioVenta = finalEditable
+            producto.precioModificadoManualmente = precioModificadoManualmente
         } else {
             let nuevoProducto = Producto(
                 nombre: trimmedNombre,
                 costo: costo,
-                precioVenta: precioVenta,
+                precioVenta: finalEditable,
                 cantidad: cantidad,
                 unidadDeMedida: unidadDeMedida,
-                informacion: informacion
+                informacion: informacion,
+                categoria: categoria,
+                proveedor: proveedor,
+                lote: lote,
+                fechaCaducidad: fechaCaducidad,
+                costoIncluyeIVA: true, // ya no lo usamos en el nuevo flujo, pero conservamos compatibilidad
+                porcentajeMargenSugerido: pMargen,
+                porcentajeGastosAdministrativos: pAdmin,
+                tipoFiscal: tipoFiscal,
+                isrPorcentajeEstimado: pISR,
+                precioModificadoManualmente: precioModificadoManualmente
             )
             modelContext.insert(nuevoProducto)
         }

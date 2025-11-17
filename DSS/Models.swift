@@ -269,6 +269,20 @@ class PayrollSettings {
     }
 }
 
+// Tipo fiscal del producto
+enum TipoFiscalProducto: String, Codable, CaseIterable {
+    case iva16 = "IVA 16%"
+    case exento = "Exento"
+    case tasaCero = "Tasa 0%"
+
+    var tasa: Double {
+        switch self {
+        case .iva16: return 0.16
+        case .exento, .tasaCero: return 0.0
+        }
+    }
+}
+
 // Productos
 
 @Model
@@ -280,19 +294,53 @@ class Producto {
     var unidadDeMedida: String
     var informacion: String
 
-    init(nombre: String,
-         costo: Double,
-         precioVenta: Double,
-         cantidad: Double,
-         unidadDeMedida: String,
-         informacion: String = "")
-    {
+    // Nuevos campos
+    var categoria: String
+    var proveedor: String
+    var lote: String
+    var fechaCaducidad: Date?
+    var costoIncluyeIVA: Bool
+    var porcentajeMargenSugerido: Double
+    var porcentajeGastosAdministrativos: Double
+    var tipoFiscal: TipoFiscalProducto
+    var isrPorcentajeEstimado: Double
+    var precioModificadoManualmente: Bool
+
+    init(
+        nombre: String,
+        costo: Double,
+        precioVenta: Double,
+        cantidad: Double,
+        unidadDeMedida: String,
+        informacion: String = "",
+        categoria: String = "",
+        proveedor: String = "",
+        lote: String = "",
+        fechaCaducidad: Date? = nil,
+        costoIncluyeIVA: Bool = true,
+        porcentajeMargenSugerido: Double = 30.0,
+        porcentajeGastosAdministrativos: Double = 10.0,
+        tipoFiscal: TipoFiscalProducto = .iva16,
+        isrPorcentajeEstimado: Double = 10.0,
+        precioModificadoManualmente: Bool = false
+    ) {
         self.nombre = nombre
         self.costo = costo
         self.precioVenta = precioVenta
         self.cantidad = cantidad
         self.unidadDeMedida = unidadDeMedida
         self.informacion = informacion
+
+        self.categoria = categoria
+        self.proveedor = proveedor
+        self.lote = lote
+        self.fechaCaducidad = fechaCaducidad
+        self.costoIncluyeIVA = costoIncluyeIVA
+        self.porcentajeMargenSugerido = porcentajeMargenSugerido
+        self.porcentajeGastosAdministrativos = porcentajeGastosAdministrativos
+        self.tipoFiscal = tipoFiscal
+        self.isrPorcentajeEstimado = isrPorcentajeEstimado
+        self.precioModificadoManualmente = precioModificadoManualmente
     }
 
     var margen: Double {
