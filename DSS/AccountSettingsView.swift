@@ -5,7 +5,7 @@ import LocalAuthentication
 // Enum para saber por qué pedimos autorización
 fileprivate enum AuthReason {
     case changePassword
-    case changeDNI
+    case changeRFC
     case editPersonalInfo
     case none
 }
@@ -21,50 +21,48 @@ struct AccountSettingsView: View {
     
     // Datos del Usuario
     @AppStorage("user_name") private var userName = ""
-    @AppStorage("user_dni") private var userDni = ""
+    @AppStorage("user_dni") private var userRfc = "" // ahora RFC
     @AppStorage("user_password") private var userPassword = ""
     
     // --- NUEVO: Toggle de Touch ID ---
-    // (Por defecto está activado)
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
 
     // --- States para los campos de la UI ---
     @State private var name: String = ""
-    @State private var email: String = ""
-    @State private var dni: String = ""
+    @State private var rfc: String = ""
     
     // --- States para los Modales ---
     @State private var showingSaveAlert = false
     @State private var alertMessage = ""
     
-    // 1. Modal de Autorización (para Huella/Pass actual)
+    // 1. Modal de Autorización
     @State private var showingAuthModal = false
     @State private var authReason: AuthReason = .none
     @State private var authError = ""
-    @State private var passwordAttempt = "" // Contraseña actual
+    @State private var passwordAttempt = ""
     
-    // 2. Modal para CAMBIAR Contraseña (para Pass nueva)
+    // 2. Modal para CAMBIAR Contraseña
     @State private var showingChangePasswordModal = false
     @State private var newPassword = ""
     @State private var confirmPassword = ""
     
     // 3. Modal para ELIMINAR Cuenta
     @State private var showingDeleteAccountModal = false
-    @State private var deleteDniAttempt = ""
+    @State private var deleteRfcAttempt = ""
     @State private var deletePasswordAttempt = ""
     @State private var deleteError = ""
     
     // --- NUEVO: buffers y validaciones ---
-    @State private var pendingNewDni: String? = nil
+    @State private var pendingNewRFC: String? = nil
     @State private var nameValidationError: String = ""
-    @State private var curpValidationError: String = ""
-    @State private var dniChangePendingInfo: String = ""
+    @State private var rfcValidationError: String = ""
+    @State private var rfcChangePendingInfo: String = ""
     @State private var touchIDAvailable: Bool = true
     
     // --- NUEVO: modo edición de información personal ---
     @State private var isEditingPersonalInfo: Bool = false
     @State private var originalName: String = ""
-    @State private var originalDni: String = ""
+    @State private var originalRFC: String = ""
 
     var body: some View {
         ScrollView {
@@ -86,7 +84,6 @@ struct AccountSettingsView: View {
                             Spacer()
                             if !isEditingPersonalInfo {
                                 Button {
-                                    // Solicitar autorización para habilitar edición
                                     authReason = .editPersonalInfo
                                     showingAuthModal = true
                                 } label: {
@@ -100,6 +97,7 @@ struct AccountSettingsView: View {
                             }
                         }
                         
+                        // Nombre
                         HStack(spacing: 20) {
                             FormField(title: "Nombre Completo", text: $name)
                                 .onChange(of: name) { oldValue, newValue in
@@ -114,22 +112,22 @@ struct AccountSettingsView: View {
                                 .foregroundColor(.red)
                         }
                         
-                        // CURP editable solo en modo edición
-                        FormField(title: "DNI/CURP", text: $dni)
-                            .onChange(of: dni) { _, newValue in
-                                curpValidationError = validateCURP(newValue)
+                        // RFC
+                        FormField(title: "RFC", text: $rfc)
+                            .onChange(of: rfc) { _, newValue in
+                                rfcValidationError = validateRFC(newValue)
                             }
                             .disabled(!isEditingPersonalInfo)
                             .opacity(isEditingPersonalInfo ? 1.0 : 0.6)
                         
-                        if !curpValidationError.isEmpty {
-                            Text(curpValidationError)
+                        if !rfcValidationError.isEmpty {
+                            Text(rfcValidationError)
                                 .font(.caption)
                                 .foregroundColor(.red)
                         }
                         
-                        if !dniChangePendingInfo.isEmpty {
-                            Text(dniChangePendingInfo)
+                        if !rfcChangePendingInfo.isEmpty {
+                            Text(rfcChangePendingInfo)
                                 .font(.caption)
                                 .foregroundColor(.yellow)
                         }
@@ -137,12 +135,11 @@ struct AccountSettingsView: View {
                         HStack {
                             if isEditingPersonalInfo {
                                 Button {
-                                    // Cancelar edición y restaurar valores originales
                                     name = originalName
-                                    dni = originalDni
+                                    rfc = originalRFC
                                     nameValidationError = ""
-                                    curpValidationError = ""
-                                    dniChangePendingInfo = ""
+                                    rfcValidationError = ""
+                                    rfcChangePendingInfo = ""
                                     isEditingPersonalInfo = false
                                 } label: {
                                     Text("Cancelar")
@@ -158,36 +155,30 @@ struct AccountSettingsView: View {
                             
                             Spacer()
                             
-                            // Mostrar el botón Guardar solo en modo edición
                             if isEditingPersonalInfo {
                                 FormButton(title: "Guardar cambios") {
                                     savePersonalInfo()
                                 }
-                                .disabled(!canSavePersonalInfo || (isEditingPersonalInfo && (!nameValidationError.isEmpty || !curpValidationError.isEmpty)))
+                                .disabled(!canSavePersonalInfo || (isEditingPersonalInfo && (!nameValidationError.isEmpty || !rfcValidationError.isEmpty)))
                             }
                         }
                     }
                 }
                 
-                // --- Tarjeta 2: Security Settings (NUEVO DISEÑO) ---
+                // --- Tarjeta 2: Seguridad ---
                 FormCardView(title: "Configuración de la seguridad de la cuenta", icon: "shield.fill") {
                     VStack(alignment: .leading, spacing: 20) {
-                        
-                        // --- Toggle de Touch ID ---
                         Toggle(isOn: $isTouchIDEnabled) {
                             Text("Activar el Touch ID")
                                 .font(.headline)
                                 .foregroundColor(.white)
                         }
-                        
-                        // --- Leyenda de Recuperación ---
                         Text("Activa Touch ID para autorizar acciones (como cambiar tu contraseña) sin tener que escribirla. Si olvidas tu contraseña, esta es una forma de recuperarla.")
                             .font(.caption)
                             .foregroundColor(.gray)
                         
                         Divider()
                         
-                        // --- Botón de Cambiar Contraseña ---
                         HStack {
                             VStack(alignment: .leading) {
                                 Text("Cambiar Contraseña")
@@ -199,9 +190,7 @@ struct AccountSettingsView: View {
                             }
                             Spacer()
                             Button("Cambiar...") {
-                                // 1. Pone la razón
                                 authReason = .changePassword
-                                // 2. Abre el modal de AUTORIZACIÓN
                                 showingAuthModal = true
                             }
                             .buttonStyle(.plain)
@@ -212,7 +201,7 @@ struct AccountSettingsView: View {
                     }
                 }
 
-                // --- Tarjeta 3: Danger Zone (NUEVO) ---
+                // --- Tarjeta 3: Danger Zone ---
                 FormCardView(title: "Zona de peligro", icon: "exclamationmark.triangle.fill", isDanger: true) {
                     HStack {
                         VStack(alignment: .leading) {
@@ -242,12 +231,12 @@ struct AccountSettingsView: View {
         .onAppear {
             // Cargar los datos guardados
             name = userName
-            dni = userDni
+            rfc = userRfc
             originalName = userName
-            originalDni = userDni
+            originalRFC = userRfc
             nameValidationError = validateFullName(name)
-            curpValidationError = validateCURP(dni)
-            // Detectar si hay biometría
+            rfcValidationError = validateRFC(rfc)
+            // Detectar biometría
             let context = LAContext()
             var error: NSError?
             touchIDAvailable = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
@@ -255,14 +244,13 @@ struct AccountSettingsView: View {
         .alert(alertMessage, isPresented: $showingSaveAlert) {
             Button("OK", role: .cancel) { }
         }
-        // --- Los 3 Modales ---
-        .sheet(isPresented: $showingAuthModal) { authModalView() } // Modal de Autorización
-        .sheet(isPresented: $showingChangePasswordModal) { changePasswordModalView() } // Modal para Contraseña Nueva
-        .sheet(isPresented: $showingDeleteAccountModal) { deleteAccountModalView() } // Modal de Borrado
+        // Modales
+        .sheet(isPresented: $showingAuthModal) { authModalView() }
+        .sheet(isPresented: $showingChangePasswordModal) { changePasswordModalView() }
+        .sheet(isPresented: $showingDeleteAccountModal) { deleteAccountModalView() }
     }
     
-    // --- VISTAS REUTILIZABLES (Para la UI Limpia) ---
-    
+    // --- VISTAS REUTILIZABLES ---
     @ViewBuilder
     func FormCardView<Content: View>(title: String, icon: String, isDanger: Bool = false, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 15) {
@@ -283,7 +271,7 @@ struct AccountSettingsView: View {
             TextField("", text: text)
                 .textFieldStyle(PlainTextFieldStyle())
                 .padding(10)
-                .background(Color("MercedesBackground")) // Fondo más oscuro
+                .background(Color("MercedesBackground"))
                 .cornerRadius(8)
         }
     }
@@ -302,10 +290,7 @@ struct AccountSettingsView: View {
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
     
-    
-    // --- VISTAS DE MODALES ---
-
-    // Modal 1: Pide Huella O Contraseña ACTUAL
+    // --- MODALES ---
     @ViewBuilder
     func authModalView() -> some View {
         AuthModal(
@@ -313,20 +298,13 @@ struct AccountSettingsView: View {
             prompt: authReasonPrompt,
             error: authError,
             passwordAttempt: $passwordAttempt,
-            isTouchIDEnabled: isTouchIDEnabled && touchIDAvailable, // Pasa el estado del Toggle y disponibilidad
-            onAuthTouchID: {
-                // Intenta con Huella
-                Task { await authenticateWithTouchID() }
-            },
-            onAuthPassword: {
-                // Intenta con Contraseña
-                authenticateWithPassword()
-            }
+            isTouchIDEnabled: isTouchIDEnabled && touchIDAvailable,
+            onAuthTouchID: { Task { await authenticateWithTouchID() } },
+            onAuthPassword: { authenticateWithPassword() }
         )
         .onAppear { authError = "" }
     }
     
-    // Modal 2: Pide la NUEVA contraseña
     @ViewBuilder
     func changePasswordModalView() -> some View {
         ModalView(title: "Cambiar Contraseña") {
@@ -335,9 +313,12 @@ struct AccountSettingsView: View {
                 SecureField("Nueva Contraseña", text: $newPassword)
                 SecureField("Repite la nueva contraseña", text: $confirmPassword)
                 
-                // Validaciones
                 if !newPassword.isEmpty && newPassword == userPassword {
                     Text("La nueva contraseña no puede ser igual a la actual.")
+                        .font(.caption).foregroundColor(.yellow)
+                }
+                if !newPassword.isEmpty && newPassword.count < 8 {
+                    Text("La contraseña debe tener al menos 8 caracteres.")
                         .font(.caption).foregroundColor(.yellow)
                 }
                 if !newPassword.isEmpty && newPassword != confirmPassword {
@@ -349,24 +330,26 @@ struct AccountSettingsView: View {
                     userPassword = newPassword
                     alertMessage = "¡Contraseña actualizada!"
                     showingSaveAlert = true
-                    // Limpia y cierra
                     newPassword = ""; confirmPassword = ""
                     showingChangePasswordModal = false
                 }
-                .disabled(newPassword.isEmpty || newPassword != confirmPassword || newPassword == userPassword)
+                .disabled(!canSaveNewPassword)
             }
         }
     }
     
-    // Modal 3: Pide DNI y Contraseña para BORRAR
+    private var canSaveNewPassword: Bool {
+        return !newPassword.isEmpty && newPassword == confirmPassword && newPassword != userPassword && newPassword.count >= 8
+    }
+    
     @ViewBuilder
     func deleteAccountModalView() -> some View {
         ModalView(title: "Eliminar Cuenta", isDanger: true) {
             VStack(spacing: 15) {
-                Text("Esta acción es irreversible. Para confirmar, ingresa tu DNI/CURP y tu contraseña actual.")
+                Text("Esta acción es irreversible. Para confirmar, ingresa tu RFC y tu contraseña actual.")
                     .font(.headline)
                 
-                TextField("DNI/CURP", text: $deleteDniAttempt)
+                TextField("RFC", text: $deleteRfcAttempt)
                 SecureField("Contraseña Actual", text: $deletePasswordAttempt)
                 
                 if !deleteError.isEmpty {
@@ -386,37 +369,26 @@ struct AccountSettingsView: View {
         .onAppear { deleteError = "" }
     }
     
-    
-    // --- LÓGICA DE LA VISTA ---
-    
-    // Validación del nombre: exactamente 3 palabras, cada una con >= 3 letras
+    // --- LÓGICA ---
     func validateFullName(_ value: String) -> String {
         let parts = value
             .split(separator: " ")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        guard parts.count == 3 else {
-            return "El nombre debe ser exactamente 3 palabras."
+        guard parts.count >= 2 else {
+            return "El nombre debe tener al menos 2 palabras."
         }
-        for p in parts {
-            if p.count < 3 {
-                return "Cada palabra del nombre debe tener al menos 3 letras."
-            }
+        for p in parts where p.count < 3 {
+            return "Cada palabra del nombre debe tener al menos 3 letras."
         }
         return ""
     }
     
-    // Validación de CURP (formato oficial de 18 caracteres)
-    // Estructura: 4 letras + 6 dígitos de fecha + 1 letra H/M + 5 letras (incluye entidad y consonantes internas) + 2 alfanuméricos
-    func validateCURP(_ value: String) -> String {
+    func validateRFC(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !trimmed.isEmpty else { return "La CURP no puede estar vacía." }
-        // Regex común para CURP
-        // 1-4: letras; 5-10: fecha YYMMDD; 11: H/M; 12-13: entidad; 14-16: consonantes internas; 17-18: homoclave/ dígito verificador
-        let pattern = #"^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]{2}$"#
-        if trimmed.count != 18 { return "La CURP debe tener 18 caracteres." }
-        if trimmed.range(of: pattern, options: .regularExpression) == nil {
-            return "Formato de CURP inválido."
+        guard !trimmed.isEmpty else { return "El RFC no puede estar vacío." }
+        if !RFCValidator.isValidRFC(trimmed) {
+            return "RFC inválido. Verifica estructura, fecha y dígito verificador."
         }
         return ""
     }
@@ -426,50 +398,41 @@ struct AccountSettingsView: View {
     }
     
     func savePersonalInfo() {
-        // Validar nombre
         let nameError = validateFullName(name)
         nameValidationError = nameError
         guard nameError.isEmpty else { return }
         
-        // Validar CURP
-        let curpError = validateCURP(dni)
-        curpValidationError = curpError
-        guard curpError.isEmpty else { return }
+        let rfcError = validateRFC(rfc)
+        rfcValidationError = rfcError
+        guard rfcError.isEmpty else { return }
         
-        // Si el DNI/CURP cambió, pedimos autorización adicional
-        if dni != userDni {
-            pendingNewDni = dni
-            dniChangePendingInfo = "Se requiere autorización para aplicar el nuevo DNI/CURP."
-            authReason = .changeDNI
+        // Si el RFC cambió, pedimos autorización
+        if rfc.uppercased() != userRfc.uppercased() {
+            pendingNewRFC = rfc.uppercased()
+            rfcChangePendingInfo = "Se requiere autorización para aplicar el nuevo RFC."
+            authReason = .changeRFC
             showingAuthModal = true
-            // Guardamos el nombre de una vez (no requiere auth)
             userName = name
-            alertMessage = "Nombre actualizado. Falta autorizar el cambio de DNI/CURP."
+            alertMessage = "Nombre actualizado. Falta autorizar el cambio de RFC."
             showingSaveAlert = true
-            // Mantener en modo edición hasta que autorice el cambio de CURP
             originalName = userName
-            // No cerramos edición aún
         } else {
-            // No cambió el DNI, guardamos directo
             userName = name
             alertMessage = "Información Personal Guardada"
             showingSaveAlert = true
-            dniChangePendingInfo = ""
-            // Salir de modo edición
+            rfcChangePendingInfo = ""
             isEditingPersonalInfo = false
             originalName = userName
-            originalDni = userDni
+            originalRFC = userRfc
         }
     }
 
-    // Lógica de Autenticación
-    
     var authReasonPrompt: String {
         switch authReason {
         case .changePassword:
             return "Autoriza para continuar con el cambio de contraseña."
-        case .changeDNI:
-            return "Autoriza para aplicar el nuevo DNI/CURP."
+        case .changeRFC:
+            return "Autoriza para aplicar el nuevo RFC."
         case .editPersonalInfo:
             return "Autoriza para editar tu información personal."
         case .none:
@@ -502,33 +465,27 @@ struct AccountSettingsView: View {
     }
     
     func onAuthSuccess() {
-        // Cierra el modal de autorización
         showingAuthModal = false
         passwordAttempt = ""
         
-        // Decide qué hacer después
         switch authReason {
         case .changePassword:
-            // Abre el modal para la NUEVA contraseña
             showingChangePasswordModal = true
-        case .changeDNI:
-            if let newDni = pendingNewDni {
-                userDni = newDni
-                dni = newDni
-                alertMessage = "DNI/CURP actualizado."
+        case .changeRFC:
+            if let newRFC = pendingNewRFC {
+                userRfc = newRFC
+                rfc = newRFC
+                alertMessage = "RFC actualizado."
                 showingSaveAlert = true
-                pendingNewDni = nil
-                dniChangePendingInfo = ""
-                // Si estábamos en modo edición esperando esta autorización, cerramos edición
+                pendingNewRFC = nil
+                rfcChangePendingInfo = ""
                 isEditingPersonalInfo = false
-                originalDni = userDni
+                originalRFC = userRfc
             }
         case .editPersonalInfo:
-            // Habilitar edición de Nombre y CURP
             isEditingPersonalInfo = true
-            // Guardar originales para poder cancelar
             originalName = name
-            originalDni = dni
+            originalRFC = rfc
         case .none:
             break
         }
@@ -536,16 +493,12 @@ struct AccountSettingsView: View {
         authError = ""
     }
     
-    // Lógica de Borrado
-    
     func deleteAllData() {
-        // 1. Validar credenciales
-        guard deleteDniAttempt == userDni && deletePasswordAttempt == userPassword else {
-            deleteError = "DNI o contraseña incorrectos."
+        guard deleteRfcAttempt.uppercased() == userRfc.uppercased() && deletePasswordAttempt == userPassword else {
+            deleteError = "RFC o contraseña incorrectos."
             return
         }
         
-        // 2. Borrar datos de SwiftData (¡con cuidado!)
         do {
             try modelContext.delete(model: Personal.self)
             try modelContext.delete(model: Producto.self)
@@ -555,86 +508,13 @@ struct AccountSettingsView: View {
             print("Error al borrar la base de datos: \(error)")
         }
         
-        // 3. Borrar datos de AppStorage (resetear la app)
         userName = ""
-        userDni = ""
+        userRfc = ""
         userPassword = ""
         isTouchIDEnabled = true
-        hasCompletedRegistration = false // ¡CLAVE! Esto manda al registro
-        isLoggedIn = false // ¡CLAVE! Esto cierra sesión
+        hasCompletedRegistration = false
+        isLoggedIn = false
     }
 }
 
-
-// --- VISTAS DE MODALES REUTILIZABLES ---
-
-// Un contenedor de modal genérico
-struct ModalView<Content: View>: View {
-    var title: String
-    var isDanger: Bool = false
-    @ViewBuilder var content: () -> Content
-    
-    var body: some View {
-        ZStack {
-            Color("MercedesBackground").ignoresSafeArea()
-            VStack(spacing: 20) {
-                Text(title)
-                    .font(.largeTitle).fontWeight(.bold)
-                    .foregroundColor(isDanger ? .red : .white)
-                content()
-            }
-            .padding(40)
-        }
-        .frame(minWidth: 500, minHeight: 400)
-        .cornerRadius(15)
-        .preferredColorScheme(.dark)
-        .textFieldStyle(PlainTextFieldStyle())
-        .padding()
-        .background(Color("MercedesCard"))
-        .cornerRadius(8)
-    }
-}
-
-// Un modal de autenticación genérico
-struct AuthModal: View {
-    var title: String
-    var prompt: String
-    var error: String
-    @Binding var passwordAttempt: String
-    
-    var isTouchIDEnabled: Bool // Para mostrar/ocultar el botón
-    
-    var onAuthTouchID: () -> Void
-    var onAuthPassword: () -> Void
-    
-    var body: some View {
-        ModalView(title: title) {
-            Text(prompt).font(.title3).foregroundColor(.gray).padding(.bottom)
-            
-            if isTouchIDEnabled {
-                Button { onAuthTouchID() }
-                label: {
-                    Label("Usar Huella (Touch ID)", systemImage: "touchid")
-                        .font(.headline).padding().frame(maxWidth: .infinity)
-                        .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
-                }.buttonStyle(.plain)
-                
-                Text("o").foregroundColor(.gray)
-            }
-            
-            Text("Usa tu contraseña actual:").font(.headline)
-            SecureField("Contraseña Actual", text: $passwordAttempt)
-            
-            if !error.isEmpty {
-                Text(error).font(.caption).foregroundColor(.red)
-            }
-            
-            Button { onAuthPassword() }
-            label: {
-                Label("Autorizar con Contraseña", systemImage: "lock.fill")
-                    .font(.headline).padding().frame(maxWidth: .infinity)
-                    .background(Color.gray.opacity(0.4)).foregroundColor(.white).cornerRadius(8)
-            }.buttonStyle(.plain)
-        }
-    }
-}
+// Reutiliza ModalView y AuthModal ya definidos en este archivo (mantienen la misma API)

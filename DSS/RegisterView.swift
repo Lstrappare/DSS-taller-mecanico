@@ -55,19 +55,19 @@ struct RegisterView: View {
     
     // Datos del Usuario
     @AppStorage("user_name") private var userName = ""
-    @AppStorage("user_dni") private var userDni = ""
+    @AppStorage("user_dni") private var userDni = "" // Guardará RFC a partir de ahora
     @AppStorage("user_password") private var userPassword = ""
     @AppStorage("user_recovery_key") private var userRecoveryKey = ""
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
 
     // --- States de la Vista ---
     @State private var fullName = ""
-    @State private var dni = ""
+    @State private var rfc = "" // reemplaza dni/CURP
     @State private var password = ""
     @State private var confirmPassword = ""
     
-    // --- ESTADO DE ERROR (¡NUEVO!) ---
-    @State private var errorMsg: String? // Para mostrar errores de validación
+    // --- ESTADO DE ERROR ---
+    @State private var errorMsg: String?
     
     @State private var showingRecoveryKeyModal = false
     @State private var showingTouchIDPrompt = false
@@ -105,8 +105,12 @@ struct RegisterView: View {
                 // --- Formulario ---
                 VStack(spacing: 16) {
                     CustomField(title: "Nombre Completo:", placeholder: "Ej. José Cisneros Torres", text: $fullName, systemImage: "person.fill")
-                    CustomField(title: "Clave Única de Registro de Población (CURP):", placeholder: "18 caracteres", text: $dni, systemImage: "document.fill")
-                    CustomSecureField(title: "Contraseña:", placeholder: "********", text: $password, systemImage: "lock.fill")
+                    CustomField(title: "RFC (Persona Física 13 / Moral 12):", placeholder: "Ej. GODE561231GR8", text: $rfc, systemImage: "textformat.123")
+                    
+                    VStack(spacing: 8) {
+                        CustomSecureField(title: "Contraseña:", placeholder: "********", text: $password, systemImage: "lock.fill")
+                    }
+                    
                     CustomSecureField(title: "Confirmar Contraseña:", placeholder: "********", text: $confirmPassword, systemImage: "lock.rotation")
                     
                     if !password.isEmpty && !confirmPassword.isEmpty && password != confirmPassword {
@@ -114,6 +118,12 @@ struct RegisterView: View {
                             .font(.caption)
                             .foregroundColor(.red)
                             .padding(.top, 4)
+                    }
+                    if !password.isEmpty && password.count < 8 {
+                        Text("La contraseña debe tener al menos 8 caracteres.")
+                            .font(.caption)
+                            .foregroundColor(.yellow)
+                            .padding(.top, 2)
                     }
                 }
                 .padding(20)
@@ -130,7 +140,6 @@ struct RegisterView: View {
                         .padding(.top, 5)
                 }
 
-                
                 Button {
                     register()
                 } label: {
@@ -139,13 +148,11 @@ struct RegisterView: View {
                         .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
                 }
                 .buttonStyle(.plain).padding(.top)
-                .disabled(password.isEmpty || password != confirmPassword)
+                .disabled(!canSubmit)
             }
             .padding(50)
-            .frame(width: 450, height: 580) // Un poco más alto para el error
+            .frame(width: 450, height: 620)
         }
-        // (Ya no necesitamos .alert(isPresented: $showingError))
-        
         // --- MODALES ---
         .sheet(isPresented: $showingRecoveryKeyModal) {
             recoveryKeyModalView()
@@ -155,15 +162,19 @@ struct RegisterView: View {
         }
     }
     
-    // --- LÓGICA DE REGISTRO (¡ACTUALIZADA!) ---
+    private var canSubmit: Bool {
+        return !fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+               !rfc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+               !password.isEmpty &&
+               password == confirmPassword &&
+               password.count >= 8
+    }
+    
+    // --- LÓGICA DE REGISTRO ---
     func register() {
-        
-        // 1. Resetear el error
         errorMsg = nil
         
-        // --- 2. VALIDACIÓN DE FORMATO ---
-        
-        // --- Validación de Nombre ---
+        // Validación de Nombre
         let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
         let nameParts = trimmedName.split(separator: " ").filter { !$0.isEmpty }
         let regex = "^[A-Za-zÁÉÍÓÚáéíóúÑñ ]+$"
@@ -172,48 +183,40 @@ struct RegisterView: View {
             errorMsg = "El nombre solo debe contener letras y espacios."
             return
         }
-
-        // Validar número mínimo de palabras
         if nameParts.count < 2 {
             errorMsg = "El nombre completo debe tener al menos 2 palabras (ej. José Cisneros Torres)."
             return
         }
-
-        // Validar que cada palabra tenga al menos 3 letras
         for part in nameParts {
             if part.count < 3 {
-                errorMsg = "Cada palabra debe tener al menos 3 letras (ej. Max Verstapen Torres)."
+                errorMsg = "Cada palabra debe tener al menos 3 letras (ej. Max Verstappen Torres)."
                 return
             }
         }
         
-        // Validación de DNI/CURP (18 caracteres)
-        // --- Validación de CURP ---
-        let dniTrimmed = dni.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-
-        let curpRegex = #"^[A-Z]{1}[AEIOUX]{1}[A-Z]{2}\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])[HM]{1}(AS|BC|BS|CC|CL|CM|CS|CH|DF|DG|GT|GR|HG|JC|MC|MN|MS|NT|NL|OC|PL|QT|QR|SP|SL|SR|TC|TS|TL|VZ|YN|ZS|NE)[B-DF-HJ-NP-TV-Z]{3}[A-Z\d]{1}\d{1}$"#
-
-        let predicate = NSPredicate(format: "SELF MATCHES %@", curpRegex)
-
-        if !predicate.evaluate(with: dniTrimmed) {
-            errorMsg = "El CURP no tiene un formato válido. Ejemplo: CATT040903HDFRRS09"
+        // Validación de RFC (ultra estricta)
+        let rfcTrimmed = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard RFCValidator.isValidRFC(rfcTrimmed) else {
+            errorMsg = "El RFC no es válido. Verifica estructura, fecha y dígito verificador."
             return
         }
-
-        // --- 3. SI TODO ES VÁLIDO, PROCEDE ---
         
-        // Genera la Llave (esto se mueve al modal)
+        // Validación básica de contraseña (longitud mínima)
+        guard password.count >= 8 else {
+            errorMsg = "La contraseña debe tener al menos 8 caracteres."
+            return
+        }
         
         // Guarda los datos en AppStorage
         userName = fullName
-        userDni = dniTrimmed // Guarda la versión sin espacios
+        userDni = rfcTrimmed
         userPassword = password
         
-        // Muestra el primer modal (el de la llave)
+        // Muestra el modal de llave
         showingRecoveryKeyModal = true
     }
     
-    // --- VISTA DEL MODAL DE LLAVE (Sin cambios) ---
+    // --- VISTA DEL MODAL DE LLAVE ---
     @ViewBuilder
     func recoveryKeyModalView() -> some View {
         ZStack {
@@ -242,7 +245,7 @@ struct RegisterView: View {
                 .padding()
                 .background(Color("MercedesCard"))
                 .cornerRadius(8)
-                Text("Esta es la **ÚNICA** forma de recuperar tu cuenta si olvidas tu contraseña y no tienes Touch ID. Cópiala o anótala en un lugar seguro.")
+                Text("Esta es la ÚNICA forma de recuperar tu cuenta si olvidas tu contraseña y no tienes Touch ID. Cópiala o anótala en un lugar seguro.")
                     .font(.headline)
                     .foregroundColor(.gray)
                     .multilineTextAlignment(.center)
@@ -277,7 +280,7 @@ struct RegisterView: View {
         }
     }
     
-    // --- VISTA DEL MODAL DE HUELLA (Sin cambios) ---
+    // --- VISTA DEL MODAL DE HUELLA ---
     @ViewBuilder
     func touchIDPromptModal() -> some View {
         ZStack {
@@ -285,7 +288,8 @@ struct RegisterView: View {
             VStack(spacing: 20) {
                 Text("¿Activar Touch ID?").font(.largeTitle).fontWeight(.bold)
                 Image(systemName: "touchid").font(.system(size: 50)).foregroundColor(Color("MercedesPetrolGreen")).padding()
-                Text("¿Quieres usar la huella guardada en esta Mac para iniciar sesión y autorizar acciones?").font(.headline).foregroundColor(.gray).multilineTextAlignment(.center).padding(.bottom)
+                Text("¿Quieres usar la huella guardada en esta Mac para iniciar sesión y autorizar acciones?")
+                    .font(.headline).foregroundColor(.gray).multilineTextAlignment(.center).padding(.bottom)
                 Button { Task { await enableTouchIDAndLogin() } }
                 label: {
                     Label("Activar y Entrar", systemImage: "checkmark.seal.fill")
@@ -307,7 +311,7 @@ struct RegisterView: View {
         .interactiveDismissDisabled()
     }
     
-    // --- LÓGICA DE HABILITAR HUELLA (Sin cambios) ---
+    // --- LÓGICA DE HABILITAR HUELLA ---
     func enableTouchIDAndLogin() async {
         let context = LAContext()
         let reason = "Verifica tu huella para activar Touch ID en DSS."
@@ -330,7 +334,7 @@ struct RegisterView: View {
         }
     }
     
-    // --- GENERADOR DE LLAVE (Sin cambios) ---
+    // --- GENERADOR DE LLAVE ---
     func generateRecoveryKey() -> String {
         let segments = (1...4).map { _ in
             (1...4).map { _ in
@@ -340,7 +344,7 @@ struct RegisterView: View {
         return segments.joined(separator: " - ")
     }
     
-    // --- FUNCIÓN DE COPIAR (Sin cambios) ---
+    // --- FUNCIÓN DE COPIAR ---
     func copyToClipboard(text: String) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()

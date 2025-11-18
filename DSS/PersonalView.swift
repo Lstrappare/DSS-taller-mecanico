@@ -1186,25 +1186,6 @@ fileprivate struct AssistToolbar: View {
         .font(.caption)
     }
 }
-
-// --- RFC Validator (estricto básico con homoclave) ---
-fileprivate enum RFCValidator {
-    // Persona moral: 12; Persona física: 13
-    // Estructura: 3-4 letras + fecha (YYMMDD) + homoclave (3 alfanum)
-    static func isValidRFC(_ rfc: String) -> Bool {
-        let trimmed = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard (12...13).contains(trimmed.count) else { return false }
-        // Regex amplia común en MX
-        // Personas morales: ^[A-Z&Ñ]{3}\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])[A-Z0-9]{3}$
-        // Personas físicas: ^[A-Z&Ñ]{4}\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])[A-Z0-9]{2}[A0-9]$
-        let moral = #"^[A-Z&Ñ]{3}\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])[A-Z0-9]{3}$"#
-        let fisica = #"^[A-Z&Ñ]{4}\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])[A-Z0-9]{3}$"#
-        let moralPred = NSPredicate(format: "SELF MATCHES %@", moral)
-        let fisicaPred = NSPredicate(format: "SELF MATCHES %@", fisica)
-        return moralPred.evaluate(with: trimmed) || fisicaPred.evaluate(with: trimmed)
-    }
-}
-
 // --- PayrollCalculatorLite (aproximado) ---
 fileprivate struct PayrollCalculatorLite {
     struct Output {
