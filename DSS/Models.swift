@@ -36,11 +36,9 @@ enum TipoContrato: String, Codable, CaseIterable {
     case otro = "Otro"
 }
 
-// Tipo de salario para nómina
+// Tipo de salario para nómina (reducido a 2 opciones)
 enum TipoSalario: String, Codable, CaseIterable {
     case minimo = "Mínimo"
-    case superior = "Superior"
-    case comision = "Comisión"
     case mixto = "Mixto"
 }
 
@@ -70,7 +68,6 @@ class Personal {
     var especialidades: [String]
     var fechaIngreso: Date
     var tipoContrato: TipoContrato
-    var sueldoMensualBruto: Double
     // Días laborables: Calendar weekday (1=Dom, 7=Sáb)
     var diasLaborales: [Int]
 
@@ -79,6 +76,11 @@ class Personal {
     var tipoSalario: TipoSalario
     var frecuenciaPago: FrecuenciaPago
     var salarioMinimoReferencia: Double
+
+    // Nuevo: comisiones acumuladas (editable y automatizable)
+    var comisiones: Double
+    // Nuevo: factor de integración configurable
+    var factorIntegracion: Double
 
     // Campos automáticos (persistidos como snapshot de cálculo)
     var salarioDiario: Double
@@ -136,13 +138,16 @@ class Personal {
         especialidades: [String] = [],
         fechaIngreso: Date = Date(),
         tipoContrato: TipoContrato = .indefinido,
-        sueldoMensualBruto: Double = 0,
         diasLaborales: [Int] = [2,3,4,5,6], // L-V por defecto
 
         prestacionesMinimas: Bool = true,
         tipoSalario: TipoSalario = .minimo,
         frecuenciaPago: FrecuenciaPago = .quincena,
         salarioMinimoReferencia: Double = 248.93,
+
+        // Nuevos
+        comisiones: Double = 0.0,
+        factorIntegracion: Double = 1.0452,
 
         salarioDiario: Double = 0,
         sbc: Double = 0,
@@ -177,13 +182,15 @@ class Personal {
         self.especialidades = especialidades
         self.fechaIngreso = fechaIngreso
         self.tipoContrato = tipoContrato
-        self.sueldoMensualBruto = sueldoMensualBruto
         self.diasLaborales = diasLaborales
 
         self.prestacionesMinimas = prestacionesMinimas
         self.tipoSalario = tipoSalario
         self.frecuenciaPago = frecuenciaPago
         self.salarioMinimoReferencia = salarioMinimoReferencia
+
+        self.comisiones = comisiones
+        self.factorIntegracion = factorIntegracion
 
         self.salarioDiario = salarioDiario
         self.sbc = sbc
@@ -204,6 +211,95 @@ class Personal {
 
         self.antiguedadDias = antiguedadDias
         self.bloqueoAsistenciaFecha = bloqueoAsistenciaFecha
+    }
+
+    // MARK: - Nómina: Funciones de negocio
+
+    // 1) Promedio de comisiones según días (quincena 15, mes 30.4)
+    func calcularComisiones(promedioSobreDias dias: Double) -> Double {
+        guard dias > 0 else { return 0 }
+        return comisiones / dias
+    }
+
+    // 2) SBC = (Salario Diario + Comisiones Promediadas) / FactorIntegracion
+    static func calcularSBC(salarioDiario: Double, comisionesPromedioDiarias: Double, factorIntegracion: Double) -> Double {
+        let factor = max(factorIntegracion, 0.0001)
+        return max(0, (salarioDiario + comisionesPromedioDiarias) / factor)
+    }
+
+    // 3) IMSS aproximado desde SBC y salario diario (coherente con UI actual)
+    static func calcularIMSS(desdeSBC sbc: Double, salarioDiario: Double, prestacionesMinimas: Bool) -> (obrera: Double, patronal: Double, total: Double) {
+        let ingresoMensual = salarioDiario * 30.4
+        let factorPrest = prestacionesMinimas ? 1.0452 : 1.0
+        let base = max(0, ingresoMensual * factorPrest)
+        let obrera = base * 0.02
+        let patronal = base * 0.05
+        return (obrera, patronal, obrera + patronal)
+    }
+
+    // 4) ISR aproximado: 0 si mínimo; si mixto, 10% sobre excedente del mínimo
+    static func calcularISR(salarioDiario: Double, comisionesPromedioDiarias: Double, tipoSalario: TipoSalario) -> Double {
+        guard tipoSalario == .mixto else { return 0 }
+        let ingresoMensual = (salarioDiario + comisionesPromedioDiarias) * 30.4
+        let baseMinimo = salarioDiario * 30.4
+        guard ingresoMensual > baseMinimo else { return 0 }
+        return max(0, ingresoMensual - baseMinimo) * 0.10
+    }
+
+    // 5) Recalcular y actualizar snapshots encadenando todas las reglas
+    func recalcularYActualizarSnapshots() {
+        // Salario diario base = salario mínimo de referencia
+        let salarioDiarioBase = salarioMinimoReferencia
+
+        // Promedio de comisiones según frecuencia
+        let diasPromedio: Double = (frecuenciaPago == .quincena) ? 15.0 : 30.4
+        let comisionesPromedioDiarias = (tipoSalario == .mixto) ? calcularComisiones(promedioSobreDias: diasPromedio) : 0.0
+
+        // SBC
+        let sbcCalc = Personal.calcularSBC(
+            salarioDiario: salarioDiarioBase,
+            comisionesPromedioDiarias: comisionesPromedioDiarias,
+            factorIntegracion: factorIntegracion
+        )
+
+        // IMSS
+        let (obrera, patronal, imssTotal) = Personal.calcularIMSS(
+            desdeSBC: sbcCalc,
+            salarioDiario: salarioDiarioBase,
+            prestacionesMinimas: prestacionesMinimas
+        )
+
+        // ISR
+        let isr = Personal.calcularISR(
+            salarioDiario: salarioDiarioBase,
+            comisionesPromedioDiarias: comisionesPromedioDiarias,
+            tipoSalario: tipoSalario
+        )
+
+        // Ingreso mensual bruto (salario + comisiones del periodo)
+        let ingresoMensualBruto = (salarioDiarioBase * 30.4) + (tipoSalario == .mixto ? comisiones : 0.0)
+
+        // Sueldo neto y costo real
+        let sueldoNeto = max(0, ingresoMensualBruto - isr - obrera)
+        let costoReal = ingresoMensualBruto + patronal
+        let horasMes = max(1, horasSemanalesRequeridas) * 4.0
+        let costoHoraCalc = costoReal / horasMes
+
+        // Sugerencia de mano de obra (markup)
+        let moSug = costoHoraCalc * 2.2
+
+        // Asignar snapshots
+        self.salarioDiario = salarioDiarioBase
+        self.sbc = sbcCalc
+        self.isrMensualEstimado = max(0, isr)
+        self.imssMensualEstimado = imssTotal
+        self.cuotaObrera = obrera
+        self.cuotaPatronal = patronal
+        self.sueldoNetoMensual = sueldoNeto
+        self.costoRealMensual = costoReal
+        self.costoHora = costoHoraCalc
+        self.manoDeObraSugerida = moSug
+        self.ultimoCalculoNomina = Date()
     }
 }
 
@@ -535,4 +631,3 @@ class Cliente {
         self.email = email
     }
 }
-

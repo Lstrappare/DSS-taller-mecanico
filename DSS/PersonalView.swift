@@ -341,16 +341,17 @@ fileprivate struct PersonalFormView: View {
     @State private var especialidadesString = ""
     @State private var fechaIngreso = Date()
     @State private var tipoContrato: TipoContrato = .indefinido
-    @State private var sueldoMensualBrutoString = ""
     @State private var horaEntradaString = "9"
     @State private var horaSalidaString = "18"
     @State private var diasLaborales: Set<Int> = [2,3,4,5,6] // L-V
     
-    // Nómina
+    // Nómina (configuración)
     @State private var prestacionesMinimas = true
     @State private var tipoSalario: TipoSalario = .minimo
     @State private var frecuenciaPago: FrecuenciaPago = .quincena
     @State private var salarioMinimoReferenciaString = "248.93"
+    @State private var comisionesString = "0.00"
+    @State private var factorIntegracionString = "1.0452"
     
     // Documentación
     @State private var ineAdjuntoPath = ""
@@ -404,15 +405,18 @@ fileprivate struct PersonalFormView: View {
             _especialidadesString = State(initialValue: personal.especialidades.joined(separator: ", "))
             _fechaIngreso = State(initialValue: personal.fechaIngreso)
             _tipoContrato = State(initialValue: personal.tipoContrato)
-            _sueldoMensualBrutoString = State(initialValue: String(format: "%.2f", personal.sueldoMensualBruto))
             _horaEntradaString = State(initialValue: "\(personal.horaEntrada)")
             _horaSalidaString = State(initialValue: "\(personal.horaSalida)")
             _diasLaborales = State(initialValue: Set(personal.diasLaborales))
             
             _prestacionesMinimas = State(initialValue: personal.prestacionesMinimas)
-            _tipoSalario = State(initialValue: personal.tipoSalario)
+            // Migración lógica: superior/comision -> mixto (si existiera legado)
+            let ts: TipoSalario = personal.tipoSalario
+            _tipoSalario = State(initialValue: ts)
             _frecuenciaPago = State(initialValue: personal.frecuenciaPago)
             _salarioMinimoReferenciaString = State(initialValue: String(format: "%.2f", personal.salarioMinimoReferencia))
+            _comisionesString = State(initialValue: String(format: "%.2f", personal.comisiones))
+            _factorIntegracionString = State(initialValue: String(format: "%.4f", personal.factorIntegracion))
             
             _ineAdjuntoPath = State(initialValue: personal.ineAdjuntoPath ?? "")
             _comprobanteDomicilioPath = State(initialValue: personal.comprobanteDomicilioPath ?? "")
@@ -450,14 +454,25 @@ fileprivate struct PersonalFormView: View {
         !(Int(horaEntradaString).map { (0...23).contains($0) } ?? false) ||
         !(Int(horaSalidaString).map { (0...23).contains($0) } ?? false)
     }
-    private var sueldoInvalido: Bool {
-        Double(sueldoMensualBrutoString.replacingOccurrences(of: ",", with: ".")) == nil
-    }
     private var salarioMinimoInvalido: Bool {
         Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) == nil
     }
+    private var comisionesInvalidas: Bool {
+        Double(comisionesString.replacingOccurrences(of: ",", with: ".")) == nil
+    }
+    private var factorIntegracionInvalido: Bool {
+        Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) == nil || (Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) ?? 0) <= 0
+    }
     private var sinDiasLaborales: Bool {
         diasLaborales.isEmpty
+    }
+    
+    // Helpers de promedio de comisiones
+    private var diasPromedio: Double {
+        switch frecuenciaPago {
+        case .quincena: return 15.0
+        case .mes: return 30.4
+        }
     }
     
     var body: some View {
@@ -556,8 +571,6 @@ fileprivate struct PersonalFormView: View {
                         .frame(maxWidth: .infinity)
                     }
                     HStack(spacing: 16) {
-                        FormField(title: "• Sueldo mensual bruto", placeholder: "ej. 12000.00", text: $sueldoMensualBrutoString)
-                            .validationHint(isInvalid: sueldoInvalido, message: "Debe ser un número válido.")
                         FormField(title: "• Entrada (0-23)", placeholder: "ej. 9", text: $horaEntradaString)
                             .validationHint(isInvalid: horasInvalidas, message: "0 a 23.")
                         FormField(title: "• Salida (0-23)", placeholder: "ej. 18", text: $horaSalidaString)
@@ -574,29 +587,46 @@ fileprivate struct PersonalFormView: View {
                     }
                 }
                 
-                // Sección: Nómina
+                // Sección: Nómina (config y cálculo)
                 Section {
-                    SectionHeader(title: "Nómina", subtitle: "Cálculos aproximados. Verifique con fuentes oficiales.")
+                    SectionHeader(title: "Nómina", subtitle: "Cálculos aproximados con SBC dinámico")
                     Toggle("Prestaciones mínimas", isOn: $prestacionesMinimas)
+                    
                     HStack(spacing: 16) {
+                        // Tipo de salario reducido a 2 opciones (UI)
                         Picker("• Tipo de salario", selection: $tipoSalario) {
-                            ForEach(TipoSalario.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                            Text(TipoSalario.minimo.rawValue).tag(TipoSalario.minimo)
+                            Text(TipoSalario.mixto.rawValue).tag(TipoSalario.mixto)
                         }
                         .pickerStyle(.menu)
                         .frame(maxWidth: .infinity)
+                        
                         Picker("• Frecuencia de pago", selection: $frecuenciaPago) {
                             ForEach(FrecuenciaPago.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                         }
                         .pickerStyle(.menu)
                         .frame(maxWidth: .infinity)
                     }
+                    
                     HStack(spacing: 16) {
                         FormField(title: "• Salario mínimo de referencia (editable)", placeholder: "ej. 248.93", text: $salarioMinimoReferenciaString)
                             .validationHint(isInvalid: salarioMinimoInvalido, message: "Número válido.")
-                        Link("Tabla oficial de salarios mínimos (CONASAMI)", destination: URL(string: "https://www.gob.mx/conasami/documentos/tabla-de-salarios-minimos-generales-y-profesionales-por-areas-geograficas?idiom=es")!)
-                            .font(.caption)
-                            .foregroundColor(Color("MercedesPetrolGreen"))
-                            .frame(maxWidth: .infinity, alignment: .trailing)
+                        FormField(title: "• Factor de Integración", placeholder: "ej. 1.0452", text: $factorIntegracionString)
+                            .validationHint(isInvalid: factorIntegracionInvalido, message: "Debe ser > 0.")
+                    }
+                    
+                    // Comisiones: visible solo en tipoSalario .mixto
+                    if tipoSalario == .mixto {
+                        HStack(spacing: 16) {
+                            FormField(title: "• Comisiones (acumuladas)", placeholder: "0.00", text: $comisionesString)
+                                .validationHint(isInvalid: comisionesInvalidas, message: "Número válido.")
+                            Text("El monto se incrementa automáticamente al completar servicios (mano de obra).")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    } else {
+                        // Si es mínimo, UI oculta y mantenemos 0
+                        EmptyView()
                     }
                     
                     // Campos automáticos: solo lectura
@@ -626,9 +656,21 @@ fileprivate struct PersonalFormView: View {
                         .cornerRadius(8)
                         .foregroundColor(.white)
                         
-                        Text("Cálculos aproximados. Verifique datos reales con instituciones oficiales.")
-                            .font(.caption2)
-                            .foregroundColor(.yellow)
+                        VStack(alignment: .leading, spacing: 2) {
+                            if tipoSalario == .mixto {
+                                HStack(spacing: 8) {
+                                    Text("El ISR es aproximado. Debe verificarse con la tabla oficial del SAT.")
+                                        .font(.caption2)
+                                        .foregroundColor(.yellow)
+                                    Link("SAT", destination: URL(string: "https://www.sat.gob.mx/portal/public/home")!)
+                                        .font(.caption2)
+                                        .foregroundColor(Color("MercedesPetrolGreen"))
+                                }
+                            }
+                            Text("Cálculos aproximados. Verifique datos reales con instituciones oficiales.")
+                                .font(.caption2)
+                                .foregroundColor(.yellow)
+                        }
                         Spacer()
                     }
                 }
@@ -660,10 +702,18 @@ fileprivate struct PersonalFormView: View {
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
             .onAppear { recalcularNominaPreview() }
-            .onChange(of: sueldoMensualBrutoString) { _, _ in recalcularNominaPreview() }
             .onChange(of: salarioMinimoReferenciaString) { _, _ in recalcularNominaPreview() }
             .onChange(of: prestacionesMinimas) { _, _ in recalcularNominaPreview() }
-            .onChange(of: tipoSalario) { _, _ in recalcularNominaPreview() }
+            .onChange(of: tipoSalario) { _, _ in
+                // Si es mínimo, forzamos comisiones = 0 en la UI
+                if tipoSalario == .minimo {
+                    comisionesString = "0.00"
+                }
+                recalcularNominaPreview()
+            }
+            .onChange(of: frecuenciaPago) { _, _ in recalcularNominaPreview() }
+            .onChange(of: comisionesString) { _, _ in recalcularNominaPreview() }
+            .onChange(of: factorIntegracionString) { _, _ in recalcularNominaPreview() }
             
             if let errorMsg {
                 Text(errorMsg)
@@ -699,8 +749,8 @@ fileprivate struct PersonalFormView: View {
                 .padding(.horizontal, 12)
                 .foregroundColor(Color("MercedesPetrolGreen"))
                 .cornerRadius(8)
-                .disabled(nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || sueldoInvalido || salarioMinimoInvalido || sinDiasLaborales)
-                .opacity((nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || sueldoInvalido || salarioMinimoInvalido || sinDiasLaborales) ? 0.6 : 1.0)
+                .disabled(nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido)
+                .opacity((nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido) ? 0.6 : 1.0)
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
@@ -778,16 +828,20 @@ fileprivate struct PersonalFormView: View {
             errorMsg = "Las horas deben ser números válidos entre 0 y 23."
             return
         }
-        guard let sueldoMensual = Double(sueldoMensualBrutoString.replacingOccurrences(of: ",", with: ".")) else {
-            errorMsg = "Sueldo mensual inválido."
-            return
-        }
         guard let salarioMinimoRef = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) else {
             errorMsg = "Salario mínimo de referencia inválido."
             return
         }
         guard RFCValidator.isValidRFC(rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()) else {
             errorMsg = "RFC inválido."
+            return
+        }
+        guard let comisionesValor = Double(comisionesString.replacingOccurrences(of: ",", with: ".")) else {
+            errorMsg = "Comisiones inválidas."
+            return
+        }
+        guard let factorIntegracionValor = Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")), factorIntegracionValor > 0 else {
+            errorMsg = "Factor de Integración inválido."
             return
         }
         
@@ -797,24 +851,31 @@ fileprivate struct PersonalFormView: View {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         
-        // Recalcular snapshots antes de persistir
-        let calc = PayrollCalculatorLite.calculate(
-            sueldoMensualBruto: sueldoMensual,
-            salarioMinimo: salarioMinimoRef,
-            prestacionesMinimas: prestacionesMinimas,
-            tipoSalario: tipoSalario
-        )
-        salarioDiario = calc.salarioDiario
-        sbc = calc.sbc
-        isrMensualEstimado = calc.isrMensual
-        imssMensualEstimado = calc.imssMensual
-        cuotaObrera = calc.cuotaObrera
-        cuotaPatronal = calc.cuotaPatronal
-        sueldoNetoMensual = calc.sueldoNeto
-        costoRealMensual = calc.costoReal
-        costoHora = calc.costoHora
-        horasSemanalesRequeridas = calc.horasSemanales
-        manoDeObraSugerida = calc.manoDeObraSugerida
+        // Actualización de snapshots vía modelo
+        let salarioDiarioBase = salarioMinimoRef
+        let diasProm = (frecuenciaPago == .quincena) ? 15.0 : 30.4
+        let comisionesPromDiarias = (tipoSalario == .mixto) ? (comisionesValor / diasProm) : 0.0
+        let sbcCalculado = Personal.calcularSBC(salarioDiario: salarioDiarioBase, comisionesPromedioDiarias: comisionesPromDiarias, factorIntegracion: factorIntegracionValor)
+        let (obrera, patronal, imssTotal) = Personal.calcularIMSS(desdeSBC: sbcCalculado, salarioDiario: salarioDiarioBase, prestacionesMinimas: prestacionesMinimas)
+        let isrCalc = Personal.calcularISR(salarioDiario: salarioDiarioBase, comisionesPromedioDiarias: comisionesPromDiarias, tipoSalario: tipoSalario)
+        
+        let ingresoMensualBruto = (salarioDiarioBase * 30.4) + (tipoSalario == .mixto ? comisionesValor : 0.0)
+        let sueldoNeto = max(0, ingresoMensualBruto - isrCalc - obrera)
+        let costoReal = ingresoMensualBruto + patronal
+        let horasMes = horasSemanalesRequeridas * 4.0
+        let costoHoraCalc = horasMes > 0 ? (costoReal / horasMes) : 0
+        
+        salarioDiario = salarioDiarioBase
+        sbc = sbcCalculado
+        isrMensualEstimado = max(0, isrCalc)
+        imssMensualEstimado = imssTotal
+        cuotaObrera = obrera
+        cuotaPatronal = patronal
+        sueldoNetoMensual = sueldoNeto
+        costoRealMensual = costoReal
+        costoHora = costoHoraCalc
+        manoDeObraSugerida = costoHoraCalc * 2.2
+        horasSemanalesRequeridas = 48
         
         if let mec = mecanicoAEditar {
             mec.nombre = nombre
@@ -828,7 +889,6 @@ fileprivate struct PersonalFormView: View {
             mec.especialidades = especialidadesArray
             mec.fechaIngreso = fechaIngreso
             mec.tipoContrato = tipoContrato
-            mec.sueldoMensualBruto = sueldoMensual
             mec.horaEntrada = horaEntrada
             mec.horaSalida = horaSalida
             mec.diasLaborales = Array(diasLaborales).sorted()
@@ -837,19 +897,24 @@ fileprivate struct PersonalFormView: View {
             mec.tipoSalario = tipoSalario
             mec.frecuenciaPago = frecuenciaPago
             mec.salarioMinimoReferencia = salarioMinimoRef
+            mec.factorIntegracion = factorIntegracionValor
+            mec.comisiones = (tipoSalario == .mixto) ? comisionesValor : 0.0
             
-            mec.salarioDiario = salarioDiario
-            mec.sbc = sbc
-            mec.isrMensualEstimado = isrMensualEstimado
-            mec.imssMensualEstimado = imssMensualEstimado
-            mec.cuotaObrera = cuotaObrera
-            mec.cuotaPatronal = cuotaPatronal
-            mec.sueldoNetoMensual = sueldoNetoMensual
-            mec.costoRealMensual = costoRealMensual
-            mec.costoHora = costoHora
-            mec.horasSemanalesRequeridas = horasSemanalesRequeridas
-            mec.manoDeObraSugerida = manoDeObraSugerida
-            mec.ultimoCalculoNomina = Date()
+            // Delega el cálculo al modelo (también guarda snapshots)
+            mec.recalcularYActualizarSnapshots()
+            
+            // Sincroniza estados de preview con el modelo (por consistencia)
+            salarioDiario = mec.salarioDiario
+            sbc = mec.sbc
+            isrMensualEstimado = mec.isrMensualEstimado
+            imssMensualEstimado = mec.imssMensualEstimado
+            cuotaObrera = mec.cuotaObrera
+            cuotaPatronal = mec.cuotaPatronal
+            sueldoNetoMensual = mec.sueldoNetoMensual
+            costoRealMensual = mec.costoRealMensual
+            costoHora = mec.costoHora
+            horasSemanalesRequeridas = mec.horasSemanalesRequeridas
+            manoDeObraSugerida = mec.manoDeObraSugerida
         } else {
             let nuevo = Personal(
                 rfc: rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
@@ -865,12 +930,13 @@ fileprivate struct PersonalFormView: View {
                 especialidades: especialidadesArray,
                 fechaIngreso: fechaIngreso,
                 tipoContrato: tipoContrato,
-                sueldoMensualBruto: sueldoMensual,
                 diasLaborales: Array(diasLaborales).sorted(),
                 prestacionesMinimas: prestacionesMinimas,
                 tipoSalario: tipoSalario,
                 frecuenciaPago: frecuenciaPago,
                 salarioMinimoReferencia: salarioMinimoRef,
+                comisiones: (tipoSalario == .mixto) ? comisionesValor : 0.0,
+                factorIntegracion: factorIntegracionValor,
                 salarioDiario: salarioDiario,
                 sbc: sbc,
                 isrMensualEstimado: isrMensualEstimado,
@@ -889,6 +955,8 @@ fileprivate struct PersonalFormView: View {
                 antiguedadDias: 0,
                 bloqueoAsistenciaFecha: nil
             )
+            // Recalcular con el modelo para asegurar consistencia
+            nuevo.recalcularYActualizarSnapshots()
             modelContext.insert(nuevo)
         }
         dismiss()
@@ -955,27 +1023,36 @@ fileprivate struct PersonalFormView: View {
         asistenciaBloqueada = true
     }
     
-    // Recalcular preview de nómina (live)
+    // Recalcular preview de nómina (live) usando funciones del modelo
     func recalcularNominaPreview() {
-        let sueldo = Double(sueldoMensualBrutoString.replacingOccurrences(of: ",", with: ".")) ?? 0
         let sm = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) ?? 0
-        let out = PayrollCalculatorLite.calculate(
-            sueldoMensualBruto: sueldo,
-            salarioMinimo: sm,
-            prestacionesMinimas: prestacionesMinimas,
-            tipoSalario: tipoSalario
-        )
-        salarioDiario = out.salarioDiario
-        sbc = out.sbc
-        isrMensualEstimado = out.isrMensual
-        imssMensualEstimado = out.imssMensual
-        cuotaObrera = out.cuotaObrera
-        cuotaPatronal = out.cuotaPatronal
-        sueldoNetoMensual = out.sueldoNeto
-        costoRealMensual = out.costoReal
-        costoHora = out.costoHora
-        horasSemanalesRequeridas = out.horasSemanales
-        manoDeObraSugerida = out.manoDeObraSugerida
+        let factor = max(Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) ?? 1.0452, 0.0001)
+        let com = (tipoSalario == .mixto) ? (Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0) : 0
+        let salarioDiarioBase = sm
+        let promCom = (tipoSalario == .mixto) ? (com / diasPromedio) : 0
+        
+        let sbcCalc = Personal.calcularSBC(salarioDiario: salarioDiarioBase, comisionesPromedioDiarias: promCom, factorIntegracion: factor)
+        let (obrera, patronal, imssTotal) = Personal.calcularIMSS(desdeSBC: sbcCalc, salarioDiario: salarioDiarioBase, prestacionesMinimas: prestacionesMinimas)
+        let isr = Personal.calcularISR(salarioDiario: salarioDiarioBase, comisionesPromedioDiarias: promCom, tipoSalario: tipoSalario)
+        
+        let ingresoMensual = (salarioDiarioBase * 30.4) + (tipoSalario == .mixto ? com : 0)
+        let neto = max(0, ingresoMensual - isr - obrera)
+        let costo = ingresoMensual + patronal
+        let horasMes = horasSemanalesRequeridas * 4.0
+        let costoHoraCalc = horasMes > 0 ? (costo / horasMes) : 0
+        let moSug = costoHoraCalc * 2.2
+        
+        salarioDiario = salarioDiarioBase
+        sbc = sbcCalc
+        isrMensualEstimado = max(0, isr)
+        imssMensualEstimado = imssTotal
+        cuotaObrera = obrera
+        cuotaPatronal = patronal
+        sueldoNetoMensual = neto
+        costoRealMensual = costo
+        costoHora = costoHoraCalc
+        manoDeObraSugerida = moSug
+        horasSemanalesRequeridas = 48
     }
 }
 
@@ -1094,15 +1171,15 @@ fileprivate struct AutoPayrollGrid: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 8) {
-                roField("Salario diario", salarioDiario)
+                roField("Salario diario (base)", salarioDiario)
                 roField("SBC", sbc)
-                roField("ISR aprox. (mensual)", isrMensual)
                 roField("IMSS aprox. (mensual)", imssMensual)
                 roField("Cuota obrera", cuotaObrera)
                 roField("Cuota patronal", cuotaPatronal)
+                roField("ISR aprox. (mensual)", isrMensual)
                 roField("Sueldo neto mensual", sueldoNetoMensual)
                 roField("Costo real mensual", costoRealMensual)
-                roField("Costo por hora", costoHora)
+                roField("Costo por hora real", costoHora)
                 roField("Horas semanales requeridas", horasSemanalesRequeridas)
                 roField("Mano de obra sugerida", manoDeObraSugerida)
             }
@@ -1184,65 +1261,5 @@ fileprivate struct AssistToolbar: View {
             .foregroundColor(.red)
         }
         .font(.caption)
-    }
-}
-// --- PayrollCalculatorLite (aproximado) ---
-fileprivate struct PayrollCalculatorLite {
-    struct Output {
-        let salarioDiario: Double
-        let sbc: Double
-        let isrMensual: Double
-        let imssMensual: Double
-        let cuotaObrera: Double
-        let cuotaPatronal: Double
-        let sueldoNeto: Double
-        let costoReal: Double
-        let costoHora: Double
-        let horasSemanales: Double
-        let manoDeObraSugerida: Double
-    }
-    static func calculate(sueldoMensualBruto: Double, salarioMinimo: Double, prestacionesMinimas: Bool, tipoSalario: TipoSalario) -> Output {
-        // Suposiciones simples: 30.4 días/mes, 48h/semana
-        let diasMes = 30.4
-        let horasSemanales = 48.0
-        let salarioDiario = max(salarioMinimo, sueldoMensualBruto / diasMes)
-        
-        // SBC aproximado: salario diario * factor prestaciones mínimas (ej. 1.0452)
-        let factorPrest = prestacionesMinimas ? 1.0452 : 1.0
-        let sbc = salarioDiario * factorPrest
-        
-        // ISR aproximado muy simplificado: 10% sobre excedente de 1 SM (placeholder)
-        let isr = max(0, (sueldoMensualBruto - (salarioMinimo * diasMes))) * 0.10
-        
-        // IMSS aproximado (salud/guarderías) muy simplificado (placeholder)
-        let imssTrabajador = sueldoMensualBruto * 0.02
-        let imssPatron = sueldoMensualBruto * 0.05
-        let imssTotal = imssTrabajador + imssPatron
-        
-        let cuotaObrera = imssTrabajador
-        let cuotaPatronal = imssPatron
-        
-        let sueldoNeto = max(0, sueldoMensualBruto - isr - cuotaObrera)
-        let costoReal = sueldoMensualBruto + cuotaPatronal // sin otras cargas
-        
-        let horasMes = horasSemanales * 4.0
-        let costoHora = horasMes > 0 ? (costoReal / horasMes) : 0
-        
-        // Mano de obra sugerida: aplicar markup 2.2x como referencia (placeholder)
-        let manoObraSugerida = costoHora * 2.2
-        
-        return Output(
-            salarioDiario: salarioDiario,
-            sbc: sbc,
-            isrMensual: max(0, isr),
-            imssMensual: imssTotal,
-            cuotaObrera: cuotaObrera,
-            cuotaPatronal: cuotaPatronal,
-            sueldoNeto: sueldoNeto,
-            costoReal: costoReal,
-            costoHora: costoHora,
-            horasSemanales: horasSemanales,
-            manoDeObraSugerida: manoObraSugerida
-        )
     }
 }
