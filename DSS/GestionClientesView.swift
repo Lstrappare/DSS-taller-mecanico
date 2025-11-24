@@ -19,20 +19,28 @@ fileprivate enum ModalMode: Identifiable {
     }
 }
 
-// --- VISTA PRINCIPAL (Con Buscador y UI mejorada) ---
+// Ordenamiento (alineado a InventarioView/PersonalView)
+fileprivate enum SortOption: String, CaseIterable, Identifiable {
+    case nombre = "Nombre"
+    case vehiculos = "Vehículos"
+    var id: String { rawValue }
+}
+
+// --- VISTA PRINCIPAL (alineada a InventarioView) ---
 struct GestionClientesView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Cliente.nombre) private var clientes: [Cliente]
     
     @State private var modalMode: ModalMode?
     @State private var searchQuery = ""
+    @State private var sortOption: SortOption = .nombre
+    @State private var sortAscending: Bool = true
     
     var filteredClientes: [Cliente] {
-        if searchQuery.isEmpty {
-            return clientes
-        } else {
+        var base = clientes
+        if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let query = searchQuery.lowercased()
-            return clientes.filter { cliente in
+            base = base.filter { cliente in
                 let nombreMatch = cliente.nombre.lowercased().contains(query)
                 let telefonoMatch = cliente.telefono.lowercased().contains(query)
                 let emailMatch = cliente.email.lowercased().contains(query)
@@ -45,6 +53,17 @@ struct GestionClientesView: View {
                 return nombreMatch || telefonoMatch || emailMatch || vehiculosMatch
             }
         }
+        // Ordenamiento
+        base.sort { a, b in
+            switch sortOption {
+            case .nombre:
+                let cmp = a.nombre.localizedCaseInsensitiveCompare(b.nombre)
+                return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
+            case .vehiculos:
+                return sortAscending ? (a.vehiculos.count < b.vehiculos.count) : (a.vehiculos.count > b.vehiculos.count)
+            }
+        }
+        return base
     }
     
     private var totalVehiculos: Int {
@@ -52,65 +71,30 @@ struct GestionClientesView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Cabecera con métricas y CTA
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Gestión de Clientes y Vehículos")
-                        .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
-                    HStack(spacing: 10) {
-                        Label("\(clientes.count) cliente\(clientes.count == 1 ? "" : "s")", systemImage: "person.2.fill")
-                            .font(.subheadline).foregroundColor(.gray)
-                        Label("\(totalVehiculos) vehículo\(totalVehiculos == 1 ? "" : "s")", systemImage: "car.2.fill")
-                            .font(.subheadline).foregroundColor(.gray)
-                    }
-                }
-                Spacer()
-                Button {
-                    modalMode = .addClienteConVehiculo
-                } label: {
-                    Label("Añadir Cliente", systemImage: "person.badge.plus")
-                        .font(.headline)
-                        .padding(.vertical, 10).padding(.horizontal, 14)
-                        .background(Color("MercedesPetrolGreen"))
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .buttonStyle(.plain)
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            // Header compacto
+            header
             
-            // Descripción
-            Text("Registra y administra tus clientes y sus vehículos.")
-                .font(.title3).foregroundColor(.gray)
+            // Filtros y búsqueda (compactos)
+            filtrosView
             
-            // Buscador con icono y clear
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(Color("MercedesPetrolGreen"))
-                TextField("Buscar por Nombre, Teléfono, Email, Placas o Modelo...", text: $searchQuery)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .animation(.easeInOut(duration: 0.15), value: searchQuery)
-                if !searchQuery.isEmpty {
-                    Button {
-                        searchQuery = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.gray)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(12)
-            .background(Color("MercedesCard"))
-            .cornerRadius(10)
-            
-            // --- Lista de Clientes (cards) ---
+            // Lista
             ScrollView {
-                LazyVStack(spacing: 14) {
+                LazyVStack(spacing: 12) {
+                    // Contador de resultados
+                    HStack(spacing: 6) {
+                        Image(systemName: "number")
+                            .foregroundColor(Color("MercedesPetrolGreen"))
+                        Text("\(filteredClientes.count) resultado\(filteredClientes.count == 1 ? "" : "s")")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        Spacer()
+                    }
+                    
                     if filteredClientes.isEmpty {
                         emptyStateView
                             .frame(maxWidth: .infinity)
-                            .padding(.top, 40)
+                            .padding(.top, 12)
                     } else {
                         ForEach(filteredClientes) { cliente in
                             ClienteCard(
@@ -123,11 +107,16 @@ struct GestionClientesView: View {
                         }
                     }
                 }
-                .padding(.top, 4)
+                .padding(.top, 2)
             }
             Spacer(minLength: 0)
         }
-        .padding(30)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .background(
+            LinearGradient(colors: [Color("MercedesBackground"), Color("MercedesBackground").opacity(0.9)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+        )
         .sheet(item: $modalMode) { mode in
             // Pasa el environment a TODOS los modales
             switch mode {
@@ -147,25 +136,164 @@ struct GestionClientesView: View {
         }
     }
     
+    private var header: some View {
+        ZStack {
+            // Fondo más sutil y compacto
+            RoundedRectangle(cornerRadius: 12)
+                .fill(
+                    LinearGradient(
+                        colors: [Color("MercedesCard"), Color("MercedesBackground").opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+                .frame(height: 110)
+            
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Gestión de Clientes")
+                        .font(.title2).fontWeight(.bold).foregroundColor(.white)
+                    HStack(spacing: 10) {
+                        Label("\(clientes.count) cliente\(clientes.count == 1 ? "" : "s")", systemImage: "person.2.fill")
+                            .font(.footnote).foregroundColor(.gray)
+                        Label("\(totalVehiculos) vehículo\(totalVehiculos == 1 ? "" : "s")", systemImage: "car.2.fill")
+                            .font(.footnote).foregroundColor(.gray)
+                    }
+                }
+                Spacer()
+                Button {
+                    modalMode = .addClienteConVehiculo
+                } label: {
+                    Label("Añadir", systemImage: "plus.circle.fill")
+                        .font(.subheadline)
+                        .padding(.vertical, 6).padding(.horizontal, 10)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .help("Registrar nuevo cliente")
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+    
+    private var filtrosView: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                // Buscar
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                    TextField("Buscar por Nombre, Teléfono, Email, Placas o Modelo...", text: $searchQuery)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .font(.subheadline)
+                        .animation(.easeInOut(duration: 0.15), value: searchQuery)
+                    if !searchQuery.isEmpty {
+                        Button {
+                            withAnimation { searchQuery = "" }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Limpiar búsqueda")
+                    }
+                }
+                .padding(8)
+                .background(Color("MercedesCard"))
+                .cornerRadius(8)
+                
+                // Orden
+                HStack(spacing: 6) {
+                    Picker("Ordenar", selection: $sortOption) {
+                        ForEach(SortOption.allCases) { opt in
+                            Text(opt.rawValue).tag(opt)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 160)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            sortAscending.toggle()
+                        }
+                    } label: {
+                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                            .font(.subheadline)
+                            .padding(6)
+                            .background(Color("MercedesCard"))
+                            .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
+                }
+                
+                // Filtros activos + limpiar (solo si aplica)
+                if !searchQuery.isEmpty || sortOption != .nombre || sortAscending == false {
+                    HStack(spacing: 6) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Text("Filtros activos")
+                        if !searchQuery.isEmpty {
+                            Text("“\(searchQuery)”")
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color("MercedesBackground")).cornerRadius(6)
+                        }
+                        if sortOption != .nombre {
+                            Text("Orden: \(sortOption.rawValue)")
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color("MercedesBackground")).cornerRadius(6)
+                        }
+                        if sortAscending == false {
+                            Text("Descendente")
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color("MercedesBackground")).cornerRadius(6)
+                        }
+                        Button {
+                            withAnimation {
+                                searchQuery = ""
+                                sortOption = .nombre
+                                sortAscending = true
+                            }
+                        } label: {
+                            Text("Limpiar")
+                                .font(.caption2)
+                                .padding(.horizontal, 6).padding(.vertical, 4)
+                                .background(Color("MercedesCard"))
+                                .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.gray)
+                        .help("Quitar filtros activos")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                }
+                
+                Spacer()
+            }
+        }
+    }
+    
     private var emptyStateView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             Image(systemName: "person.badge.key.fill")
-                .font(.system(size: 42, weight: .bold))
+                .font(.system(size: 36, weight: .bold))
                 .foregroundColor(Color("MercedesPetrolGreen"))
             Text(searchQuery.isEmpty ? "No hay clientes registrados aún." :
                  "No se encontraron clientes para “\(searchQuery)”.")
-                .font(.headline)
+                .font(.subheadline)
                 .foregroundColor(.gray)
             if searchQuery.isEmpty {
                 Text("Añade tu primer cliente para empezar a registrar vehículos.")
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundColor(.gray)
             }
         }
     }
 }
 
-// --- Tarjeta de Cliente (UI mejorada) ---
+// --- Tarjeta de Cliente (alineada a ProductoCard/PersonalCard) ---
 fileprivate struct ClienteCard: View {
     let cliente: Cliente
     var onEditCliente: () -> Void
@@ -178,9 +306,9 @@ fileprivate struct ClienteCard: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(cliente.nombre)
-                        .font(.title2).fontWeight(.semibold)
+                        .font(.headline).fontWeight(.semibold)
                     // Chips de contacto
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         if let telURL = URL(string: "tel:\(cliente.telefono)") {
                             Link(destination: telURL) {
                                 chip(text: cliente.telefono, systemImage: "phone.fill")
@@ -206,10 +334,10 @@ fileprivate struct ClienteCard: View {
                     onEditCliente()
                 } label: {
                     Label("Editar", systemImage: "pencil")
-                        .font(.subheadline)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .font(.caption)
+                        .padding(.horizontal, 8).padding(.vertical, 5)
                         .background(Color("MercedesBackground"))
-                        .cornerRadius(8)
+                        .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.white)
@@ -220,11 +348,11 @@ fileprivate struct ClienteCard: View {
             // Lista compacta de vehículos
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Vehículos Registrados").font(.headline)
+                    Text("Vehículos registrados").font(.headline)
                     Spacer()
                     Text("\(cliente.vehiculos.count)")
-                        .font(.caption)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .font(.caption2)
+                        .padding(.horizontal, 6).padding(.vertical, 3)
                         .background(Color("MercedesBackground"))
                         .cornerRadius(6)
                         .foregroundColor(.white)
@@ -232,7 +360,7 @@ fileprivate struct ClienteCard: View {
                 
                 if cliente.vehiculos.isEmpty {
                     Text("No hay vehículos registrados para este cliente.")
-                        .font(.subheadline).foregroundColor(.gray)
+                        .font(.caption).foregroundColor(.gray)
                         .padding(.top, 2)
                 } else {
                     ForEach(cliente.vehiculos) { vehiculo in
@@ -241,41 +369,58 @@ fileprivate struct ClienteCard: View {
                                 .font(.system(.body, design: .monospaced))
                                 .foregroundColor(Color("MercedesPetrolGreen"))
                             Text("\(vehiculo.marca) \(vehiculo.modelo) (\(String(vehiculo.anio)))")
+                                .font(.subheadline)
                             Spacer()
                             Button {
                                 onEditVehiculo(vehiculo)
                             } label: {
                                 Label("Editar Auto", systemImage: "pencil.circle")
                                     .font(.caption)
+                                    .padding(.horizontal, 8).padding(.vertical, 5)
+                                    .background(Color("MercedesBackground"))
+                                    .cornerRadius(6)
                             }
                             .buttonStyle(.plain)
-                            .foregroundColor(.gray)
+                            .foregroundColor(.white)
                         }
                         .padding(.vertical, 4)
-                        .background(Color("MercedesBackground").opacity(0.35))
+                        .background(
+                            ZStack {
+                                Color("MercedesBackground").opacity(0.35)
+                            }
+                        )
                         .cornerRadius(8)
                     }
                 }
             }
             
             // CTA añadir vehículo
-            Button {
-                onAddVehiculo()
-            } label: {
-                Label("+ Añadir Vehículo", systemImage: "car.badge.plus")
-                    .font(.headline)
-                    .padding(.vertical, 8).padding(.horizontal, 12)
-                    .background(Color("MercedesCard"))
-                    .cornerRadius(8)
+            HStack {
+                Button {
+                    onAddVehiculo()
+                } label: {
+                    Label("+ Añadir Vehículo", systemImage: "car.badge.plus")
+                        .font(.subheadline)
+                        .padding(.vertical, 6).padding(.horizontal, 10)
+                        .background(Color("MercedesCard"))
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(Color("MercedesPetrolGreen"))
+                Spacer()
             }
-            .buttonStyle(.plain)
-            .foregroundColor(Color("MercedesPetrolGreen"))
         }
-        .padding(14)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color("MercedesCard"))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+        .background(
+            ZStack {
+                Color("MercedesCard")
+                LinearGradient(colors: [Color.white.opacity(0.012), Color("MercedesBackground").opacity(0.06)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        )
+        .cornerRadius(10)
+        .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
     }
     
     private func chip(text: String, systemImage: String, muted: Bool = false) -> some View {
@@ -285,16 +430,16 @@ fileprivate struct ClienteCard: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .font(.caption)
+        .font(.caption2)
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(Color("MercedesBackground"))
-        .cornerRadius(8)
+        .cornerRadius(6)
         .foregroundColor(muted ? .gray : .white)
     }
 }
 
 
-// --- 1. FORMULARIO COMBINADO (ADD CLIENTE + VEHÍCULO) (¡ACTUALIZADO!) ---
+// --- 1. FORMULARIO COMBINADO (ADD CLIENTE + VEHÍCULO) (alineado a ProductFormView) ---
 fileprivate struct ClienteConVehiculoFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -325,19 +470,19 @@ fileprivate struct ClienteConVehiculoFormView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 4) {
-                Text("Añadir Nuevo Cliente").font(.title).fontWeight(.bold)
+            VStack(spacing: 2) {
+                Text("Añadir Cliente y Vehículo").font(.title2).fontWeight(.bold)
                 Text("Completa los datos. Los campos marcados con • son obligatorios.")
-                    .font(.footnote).foregroundColor(.gray)
+                    .font(.caption).foregroundColor(.gray)
             }
-            .padding(.top, 14).padding(.bottom, 8)
+            .padding(.top, 10).padding(.bottom, 6)
             
             Form {
                 Section {
                     SectionHeader(title: "Datos del Cliente", subtitle: nil)
                     FormField(title: "• Nombre Completo", placeholder: "ej. José Cisneros Torres", text: $nombre)
                         .validationHint(isInvalid: nombreInvalido, message: "Escribe nombre y apellido.")
-                    HStack(spacing: 16) {
+                    HStack(spacing: 12) {
                         FormField(title: "• Teléfono (ID Único)", placeholder: "10 dígitos", text: $telefono)
                             .validationHint(isInvalid: telefonoInvalido, message: "El teléfono es obligatorio.")
                         FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $email)
@@ -346,13 +491,13 @@ fileprivate struct ClienteConVehiculoFormView: View {
                 
                 Section {
                     SectionHeader(title: "Datos del Primer Vehículo", subtitle: nil)
-                    HStack(spacing: 16) {
+                    HStack(spacing: 12) {
                         FormField(title: "• Placas (ID Único)", placeholder: "ej. ABC-123", text: $placas)
                             .validationHint(isInvalid: placasInvalidas, message: "Las placas son obligatorias.")
                         FormField(title: "• Año", placeholder: "ej. 2020", text: $anioString)
                             .validationHint(isInvalid: anioInvalido, message: "Debe ser un número.")
                     }
-                    HStack(spacing: 16) {
+                    HStack(spacing: 12) {
                         FormField(title: "• Marca", placeholder: "ej. Nissan", text: $marca)
                         FormField(title: "• Modelo", placeholder: "ej. Versa", text: $modelo)
                     }
@@ -364,29 +509,29 @@ fileprivate struct ClienteConVehiculoFormView: View {
             
             if let errorMsg {
                 Text(errorMsg)
-                    .font(.caption).foregroundColor(.red).padding(.vertical, 6)
+                    .font(.caption2).foregroundColor(.red).padding(.vertical, 4)
             }
 
             // Botones
             HStack {
                 Button("Cancelar") { dismiss() }
-                    .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 8).foregroundColor(.gray)
+                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.gray)
                 Spacer()
-                Button("Guardar Cliente y Vehículo") {
+                Button("Guardar y Añadir") {
                     guardarCambios()
                 }
-                .buttonStyle(.plain).padding(.vertical, 8).padding(.horizontal, 12)
-                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(8)
+                .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 10)
+                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(6)
                 .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido)
                 .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido) ? 0.6 : 1.0)
             }
-            .padding(.horizontal).padding(.bottom, 8)
+            .padding(.horizontal).padding(.bottom, 6)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 700, minHeight: 500, maxHeight: 600)
-        .cornerRadius(15)
+        .frame(minWidth: 760, minHeight: 520, maxHeight: 580)
+        .cornerRadius(12)
     }
     
     func guardarCambios() {
@@ -420,7 +565,7 @@ fileprivate struct ClienteConVehiculoFormView: View {
         }
         
         let nuevoCliente = Cliente(nombre: nombreTrimmed, telefono: telefonoTrimmed, email: email.trimmingCharacters(in: .whitespaces))
-        let nuevoVehiculo = Vehiculo(placas: placasTrimmed, marca: marcaTrimmed, modelo: modeloTrimmed, anio: anio)
+        let nuevoVehiculo = Vehiculo(placas: placasTrimmed, marca: marcaTrimined(marcaTrimmed), modelo: modeloTrimmed, anio: anio)
         
         nuevoVehiculo.cliente = nuevoCliente
         nuevoCliente.vehiculos.append(nuevoVehiculo)
@@ -428,10 +573,12 @@ fileprivate struct ClienteConVehiculoFormView: View {
         modelContext.insert(nuevoCliente)
         dismiss()
     }
+    
+    private func marcaTrimined(_ s: String) -> String { s } // helper placeholder si deseas normalizar marca
 }
 
 
-// --- 2. FORMULARIO DE CLIENTE (SOLO EDITAR) (¡ACTUALIZADO!) ---
+// --- 2. FORMULARIO DE CLIENTE (SOLO EDITAR) (alineado a ProductFormView) ---
 fileprivate struct ClienteFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -459,8 +606,12 @@ fileprivate struct ClienteFormView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            Text("Editar Cliente").font(.title).fontWeight(.bold)
-                .padding(.top, 14).padding(.bottom, 8)
+            VStack(spacing: 2) {
+                Text("Editar Cliente").font(.title2).fontWeight(.bold)
+                Text("Autoriza para editar el teléfono si es necesario.")
+                    .font(.caption).foregroundColor(.gray)
+            }
+            .padding(.top, 10).padding(.bottom, 6)
             
             Form {
                 Section {
@@ -471,20 +622,20 @@ fileprivate struct ClienteFormView: View {
                     // Teléfono con Candado
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text("• Teléfono (ID Único)").font(.caption).foregroundColor(.gray)
+                            Text("• Teléfono (ID Único)").font(.caption2).foregroundColor(.gray)
                             Image(systemName: isTelefonoUnlocked ? "lock.open.fill" : "lock.fill")
                                 .foregroundColor(isTelefonoUnlocked ? .green : .red)
-                                .font(.caption)
+                                .font(.caption2)
                         }
                         HStack(spacing: 8) {
                             ZStack(alignment: .leading) {
                                 TextField("", text: $cliente.telefono)
                                     .disabled(!isTelefonoUnlocked)
-                                    .padding(8).background(Color("MercedesBackground").opacity(0.9)).cornerRadius(8)
+                                    .padding(6).background(Color("MercedesBackground").opacity(0.9)).cornerRadius(6)
                                 if cliente.telefono.isEmpty {
                                     Text("10 dígitos")
                                         .foregroundColor(Color.white.opacity(0.35))
-                                        .padding(.horizontal, 12).allowsHitTesting(false)
+                                        .padding(.horizontal, 10).allowsHitTesting(false)
                                 }
                             }
                             Button {
@@ -495,7 +646,7 @@ fileprivate struct ClienteFormView: View {
                                 }
                             } label: {
                                 Text(isTelefonoUnlocked ? "Bloquear" : "Desbloquear")
-                                    .font(.caption)
+                                    .font(.caption2)
                             }
                             .buttonStyle(.plain)
                             .foregroundColor(isTelefonoUnlocked ? .green : .red)
@@ -512,17 +663,17 @@ fileprivate struct ClienteFormView: View {
 
             if let errorMsg {
                 Text(errorMsg)
-                    .font(.caption).foregroundColor(.red).padding(.vertical, 6)
+                    .font(.caption2).foregroundColor(.red).padding(.vertical, 4)
             }
             
             HStack {
                 Button("Cancelar") { dismiss() }
-                    .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 8).foregroundColor(.gray)
+                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.gray)
                 Button("Eliminar", role: .destructive) {
                     authReason = .deleteCliente
                     showingAuthModal = true
                 }
-                .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 8).foregroundColor(.red)
+                .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.red)
                 Spacer()
                 Button("Guardar Cambios") {
                     let nameParts = cliente.nombre.trimmingCharacters(in: .whitespaces).split(separator: " ")
@@ -532,31 +683,31 @@ fileprivate struct ClienteFormView: View {
                         errorMsg = "El Nombre Completo debe tener al menos 2 palabras."
                     }
                 }
-                .buttonStyle(.plain).padding(.vertical, 8).padding(.horizontal, 12)
-                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(8)
+                .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 10)
+                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(6)
                 .disabled(nombreInvalido)
                 .opacity(nombreInvalido ? 0.6 : 1.0)
             }
-            .padding(.horizontal).padding(.bottom, 8)
+            .padding(.horizontal).padding(.bottom, 6)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 700, minHeight: 450, maxHeight: 600)
-        .cornerRadius(15)
+        .frame(minWidth: 760, minHeight: 480, maxHeight: 560)
+        .cornerRadius(12)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
         }
     }
     
-    // Modal de Autenticación
+    // Modal de Autenticación (alineado a ProductFormView)
     @ViewBuilder
     func authModalView() -> some View {
         let prompt = (authReason == .unlockTelefono) ? "Autoriza para editar el Teléfono." : "¡Acción irreversible! Autoriza para ELIMINAR a este cliente."
         ZStack {
             Color("MercedesBackground").ignoresSafeArea()
-            VStack(spacing: 16) {
-                Text("Autorización Requerida").font(.title).fontWeight(.bold)
+            VStack(spacing: 12) {
+                Text("Autorización Requerida").font(.title2).fontWeight(.bold)
                 Text(prompt)
                     .font(.callout).foregroundColor(authReason == .deleteCliente ? .red : .gray)
                 if isTouchIDEnabled {
@@ -569,7 +720,7 @@ fileprivate struct ClienteFormView: View {
                 }
                 Text("Usa tu contraseña de administrador:").font(.subheadline)
                 SecureField("Contraseña", text: $passwordAttempt)
-                    .padding(10).background(Color("MercedesCard")).cornerRadius(8)
+                    .padding(8).background(Color("MercedesCard")).cornerRadius(8)
                 if !authError.isEmpty {
                     Text(authError).font(.caption2).foregroundColor(.red)
                 }
@@ -579,9 +730,9 @@ fileprivate struct ClienteFormView: View {
                         .background(Color.gray.opacity(0.4)).foregroundColor(.white).cornerRadius(8)
                 }.buttonStyle(.plain)
             }
-            .padding(28)
+            .padding(22)
         }
-        .frame(minWidth: 520, minHeight: 380)
+        .frame(minWidth: 520, minHeight: 360)
         .preferredColorScheme(.dark)
         .onAppear { authError = ""; passwordAttempt = "" }
     }
@@ -618,7 +769,7 @@ fileprivate struct ClienteFormView: View {
 }
 
 
-// --- 3. FORMULARIO DE VEHÍCULO (AÑADIR 2do+ / EDITAR) (¡ACTUALIZADO!) ---
+// --- 3. FORMULARIO DE VEHÍCULO (AÑADIR/EDITAR) (alineado a ProductFormView) ---
 fileprivate struct VehiculoFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -642,14 +793,14 @@ fileprivate struct VehiculoFormView: View {
     }
     @State private var authReason: AuthReason = .unlockPlacas
     
-    var formTitle: String { esModoEdicion ? "Editar Vehículo" : "Añadir Nuevo Vehículo" }
+    var formTitle: String { esModoEdicion ? "Editar Vehículo" : "Añadir Vehículo" }
     
     // Bools de Validación
     private var placasInvalida: Bool {
         vehiculo.placas.trimmingCharacters(in: .whitespaces).isEmpty
     }
     private var anioInvalido: Bool {
-        vehiculo.anio <= 1900 // Un año razonable
+        vehiculo.anio <= 1900
     }
     
     init(cliente: Cliente) {
@@ -674,32 +825,33 @@ fileprivate struct VehiculoFormView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text(formTitle).font(.title).fontWeight(.bold)
-                .padding(.top, 14).padding(.bottom, 8)
+            VStack(spacing: 2) {
+                Text(formTitle).font(.title2).fontWeight(.bold)
+                Text("Cliente: \(clientePadre?.nombre ?? "Error")")
+                    .font(.caption).foregroundColor(.gray)
+            }
+            .padding(.top, 10).padding(.bottom, 6)
             
             Form {
                 Section {
-                    Text("Cliente: \(clientePadre?.nombre ?? "Error")")
-                        .font(.headline).foregroundColor(.gray)
-                    
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text("• Placas (ID Único)").font(.caption).foregroundColor(.gray)
+                            Text("• Placas (ID Único)").font(.caption2).foregroundColor(.gray)
                             if esModoEdicion {
                                 Image(systemName: isPlacasUnlocked ? "lock.open.fill" : "lock.fill")
                                     .foregroundColor(isPlacasUnlocked ? .green : .red)
-                                    .font(.caption)
+                                    .font(.caption2)
                             }
                         }
                         HStack(spacing: 8) {
                             ZStack(alignment: .leading) {
                                 TextField("", text: $vehiculo.placas)
                                     .disabled(esModoEdicion && !isPlacasUnlocked)
-                                    .padding(8).background(Color("MercedesBackground").opacity(0.9)).cornerRadius(8)
+                                    .padding(6).background(Color("MercedesBackground").opacity(0.9)).cornerRadius(6)
                                 if vehiculo.placas.isEmpty {
                                     Text("ej. ABC-123-D")
                                         .foregroundColor(Color.white.opacity(0.35))
-                                        .padding(.horizontal, 12).allowsHitTesting(false)
+                                        .padding(.horizontal, 10).allowsHitTesting(false)
                                 }
                             }
                             if esModoEdicion {
@@ -711,7 +863,7 @@ fileprivate struct VehiculoFormView: View {
                                     }
                                 } label: {
                                     Text(isPlacasUnlocked ? "Bloquear" : "Desbloquear")
-                                        .font(.caption)
+                                        .font(.caption2)
                                 }
                                 .buttonStyle(.plain)
                                 .foregroundColor(isPlacasUnlocked ? .green : .red)
@@ -720,7 +872,7 @@ fileprivate struct VehiculoFormView: View {
                         .validationHint(isInvalid: placasInvalida, message: "Las placas son obligatorias.")
                     }
                 
-                    HStack(spacing: 16) {
+                    HStack(spacing: 12) {
                         FormField(title: "• Marca", placeholder: "ej. Nissan", text: $vehiculo.marca)
                         FormField(title: "• Modelo", placeholder: "ej. Versa", text: $vehiculo.modelo)
                         FormField(title: "• Año", placeholder: "ej. 2020", text: anioString)
@@ -734,48 +886,48 @@ fileprivate struct VehiculoFormView: View {
             
             if let errorMsg {
                 Text(errorMsg)
-                    .font(.caption).foregroundColor(.red).padding(.vertical, 6)
+                    .font(.caption2).foregroundColor(.red).padding(.vertical, 4)
             }
             
             HStack {
                 Button("Cancelar") { dismiss() }
-                    .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 8).foregroundColor(.gray)
+                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.gray)
                 if esModoEdicion {
                     Button("Eliminar", role: .destructive) {
                         authReason = .deleteVehiculo
                         showingAuthModal = true
                     }
-                    .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 8).foregroundColor(.red)
+                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.red)
                 }
                 Spacer()
                 Button(esModoEdicion ? "Guardar Cambios" : "Añadir Vehículo") {
                     guardarCambios()
                 }
-                .buttonStyle(.plain).padding(.vertical, 8).padding(.horizontal, 12)
-                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(8)
+                .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 10)
+                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(6)
                 .disabled(placasInvalida || anioInvalido || vehiculo.marca.isEmpty || vehiculo.modelo.isEmpty)
                 .opacity((placasInvalida || anioInvalido || vehiculo.marca.isEmpty || vehiculo.modelo.isEmpty) ? 0.6 : 1.0)
             }
-            .padding(.horizontal).padding(.bottom, 8)
+            .padding(.horizontal).padding(.bottom, 6)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 700, minHeight: 450, maxHeight: 600)
-        .cornerRadius(15)
+        .frame(minWidth: 760, minHeight: 480, maxHeight: 560)
+        .cornerRadius(12)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
         }
     }
     
-    // Modal de Autenticación
+    // Modal de Autenticación (alineado a ProductFormView)
     @ViewBuilder
     func authModalView() -> some View {
         let prompt = (authReason == .unlockPlacas) ? "Autoriza para editar las Placas." : "Autoriza para ELIMINAR este vehículo."
         ZStack {
             Color("MercedesBackground").ignoresSafeArea()
-            VStack(spacing: 16) {
-                Text("Autorización Requerida").font(.title).fontWeight(.bold)
+            VStack(spacing: 12) {
+                Text("Autorización Requerida").font(.title2).fontWeight(.bold)
                 Text(prompt)
                     .font(.callout).foregroundColor(authReason == .deleteVehiculo ? .red : .gray)
                 if isTouchIDEnabled {
@@ -788,7 +940,7 @@ fileprivate struct VehiculoFormView: View {
                 }
                 Text("Usa tu contraseña de administrador:").font(.subheadline)
                 SecureField("Contraseña", text: $passwordAttempt)
-                    .padding(10).background(Color("MercedesCard")).cornerRadius(8)
+                    .padding(8).background(Color("MercedesCard")).cornerRadius(8)
                 if !authError.isEmpty {
                     Text(authError).font(.caption2).foregroundColor(.red)
                 }
@@ -798,9 +950,9 @@ fileprivate struct VehiculoFormView: View {
                         .background(Color.gray.opacity(0.4)).foregroundColor(.white).cornerRadius(8)
                 }.buttonStyle(.plain)
             }
-            .padding(28)
+            .padding(22)
         }
-        .frame(minWidth: 520, minHeight: 380)
+        .frame(minWidth: 520, minHeight: 360)
         .preferredColorScheme(.dark)
         .onAppear { authError = ""; passwordAttempt = "" }
     }
@@ -869,7 +1021,7 @@ fileprivate struct VehiculoFormView: View {
 }
 
 
-// --- VISTAS HELPER REUTILIZABLES (¡NUEVAS!) ---
+// --- VISTAS HELPER REUTILIZABLES (alineadas a InventarioView) ---
 fileprivate struct SectionHeader: View {
     var title: String
     var subtitle: String?
@@ -898,14 +1050,14 @@ fileprivate struct FormField: View {
             
             ZStack(alignment: .leading) {
                 TextField("", text: $text)
-                    .padding(8)
+                    .padding(6)
                     .background(Color("MercedesBackground").opacity(0.9))
-                    .cornerRadius(8)
+                    .cornerRadius(6)
                 
-                if text.isEmpty {
+                if text.isEmpty && !placeholder.isEmpty {
                     Text(placeholder)
                         .foregroundColor(Color.white.opacity(0.35))
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 10)
                         .allowsHitTesting(false)
                 }
             }
