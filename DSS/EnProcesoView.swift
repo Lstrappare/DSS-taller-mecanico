@@ -225,49 +225,28 @@ struct EnProcesoView: View {
             return
         }
         
-        // 2) Validar stock usando cantidades exactas si existen
-        if !ticket.productosConCantidad.isEmpty {
-            for ing in ticket.productosConCantidad {
-                guard let p = productos.first(where: { $0.nombre == ing.nombreProducto }) else {
-                    alertaError = "Producto '\(ing.nombreProducto)' no encontrado en inventario."
-                    mostrandoAlerta = true
-                    return
-                }
-                if p.cantidad < ing.cantidadUsada {
-                    alertaError = "Stock insuficiente para '\(p.nombre)'. Requiere \(ing.cantidadUsada) \(p.unidadDeMedida)(s) y hay \(p.cantidad)."
-                    mostrandoAlerta = true
-                    return
-                }
+        // 2) Validar stock contra productosConsumidos
+        for nombre in ticket.productosConsumidos {
+            guard let p = productos.first(where: { $0.nombre == nombre }) else {
+                alertaError = "Producto '\(nombre)' no encontrado en inventario."
+                mostrandoAlerta = true
+                return
             }
-        } else {
-            // Compatibilidad con tickets antiguos: validar por nombres (asumiendo 1 unidad)
-            for nombre in ticket.productosConsumidos {
-                guard let p = productos.first(where: { $0.nombre == nombre }) else {
-                    alertaError = "Producto '\(nombre)' no encontrado en inventario."
-                    mostrandoAlerta = true
-                    return
-                }
-                if p.cantidad <= 0 {
-                    alertaError = "Stock insuficiente para '\(p.nombre)'."
-                    mostrandoAlerta = true
-                    return
-                }
+            // Nota: no tenemos cantidades por producto en el ticket (solo nombres). Si deseas precisión,
+            // guarda cantidades por ingrediente en el ticket. De momento, asumimos cantidad 1.0 como mínima.
+            // Para ser conservadores: no bloqueamos aquí si no hay datos de cantidades.
+            // Si quisieras validar fuerte, necesitaríamos cantidades.
+            if p.cantidad <= 0 {
+                alertaError = "Stock insuficiente para '\(p.nombre)'."
+                mostrandoAlerta = true
+                return
             }
         }
         
-        // 3) Descontar inventario usando cantidades exactas si existen
-        if !ticket.productosConCantidad.isEmpty {
-            for ing in ticket.productosConCantidad {
-                if let p = productos.first(where: { $0.nombre == ing.nombreProducto }) {
-                    p.cantidad = max(0, p.cantidad - ing.cantidadUsada)
-                }
-            }
-        } else {
-            // Compatibilidad: descontar 1 por nombre
-            for nombre in ticket.productosConsumidos {
-                if let p = productos.first(where: { $0.nombre == nombre }) {
-                    p.cantidad = max(0, p.cantidad - 1)
-                }
+        // 3) Descontar inventario (asumimos 1 unidad por producto por limitación actual)
+        for nombre in ticket.productosConsumidos {
+            if let p = productos.first(where: { $0.nombre == nombre }) {
+                p.cantidad = max(0, p.cantidad - 1)
             }
         }
         
@@ -616,17 +595,9 @@ fileprivate struct ProgramarTicketModal: View {
         
         // Advertencia de stock (informativa)
         var faltantes: [String] = []
-        if !ticket.productosConCantidad.isEmpty {
-            for ing in ticket.productosConCantidad {
-                if let p = productos.first(where: { $0.nombre == ing.nombreProducto }), p.cantidad < ing.cantidadUsada {
-                    faltantes.append(ing.nombreProducto)
-                }
-            }
-        } else {
-            for nombre in ticket.productosConsumidos {
-                if let p = productos.first(where: { $0.nombre == nombre }), p.cantidad <= 0 {
-                    faltantes.append(nombre)
-                }
+        for nombre in ticket.productosConsumidos {
+            if let p = productos.first(where: { $0.nombre == nombre }), p.cantidad <= 0 {
+                faltantes.append(nombre)
             }
         }
         if !faltantes.isEmpty {
@@ -982,4 +953,3 @@ fileprivate struct CierreServicioModalView: View {
         return String(format: "%02i:%02i:%02i", horas, minutos, segs)
     }
 }
-

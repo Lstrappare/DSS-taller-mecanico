@@ -23,7 +23,6 @@ fileprivate enum ServiceModalMode: Identifiable {
 struct ServiciosView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppNavigationState
-    // Forzamos el tipo de la key path en el sort para evitar "Cannot infer key path type..."
     @Query(sort: \Servicio.nombre) private var servicios: [Servicio]
     
     @State private var modalMode: ServiceModalMode?
@@ -66,10 +65,16 @@ struct ServiciosView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // Header compacto con métrica y CTA (patrón InventarioView)
             header
+            
+            // Filtros y búsqueda mejorados
             filtrosView
+            
+            // Lista de servicios
             ScrollView {
                 LazyVStack(spacing: 12) {
+                    // Contador de resultados
                     HStack(spacing: 6) {
                         Image(systemName: "number")
                             .foregroundColor(Color("MercedesPetrolGreen"))
@@ -167,6 +172,7 @@ struct ServiciosView: View {
     private var filtrosView: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
+                // Buscar
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(Color("MercedesPetrolGreen"))
@@ -189,6 +195,7 @@ struct ServiciosView: View {
                 .background(Color("MercedesCard"))
                 .cornerRadius(8)
                 
+                // Orden
                 HStack(spacing: 6) {
                     Picker("Ordenar", selection: $sortOption) {
                         ForEach(SortOption.allCases) { opt in
@@ -212,6 +219,7 @@ struct ServiciosView: View {
                     .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
                 }
                 
+                // Filtros activos + limpiar (si aplica)
                 if !searchQuery.isEmpty || sortOption != .nombre || sortAscending == false {
                     HStack(spacing: 6) {
                         Image(systemName: "line.3.horizontal.decrease.circle")
@@ -257,6 +265,7 @@ struct ServiciosView: View {
         }
     }
     
+    // Empty state compacto
     private var emptyStateView: some View {
         VStack(spacing: 8) {
             Image(systemName: "wrench.adjustable")
@@ -274,6 +283,7 @@ struct ServiciosView: View {
         }
     }
     
+    // Calcula costo estimado de insumos para mostrar en la tarjeta
     private func costoEstimadoProductos(_ servicio: Servicio) -> Double {
         let descriptor = FetchDescriptor<Producto>()
         let productos = (try? modelContext.fetch(descriptor)) ?? []
@@ -292,7 +302,7 @@ struct ServiciosView: View {
     }
 }
 
-// Tarjeta individual de servicio
+// Tarjeta individual de servicio (alineada a ProductoCard/PersonalCard)
 fileprivate struct ServicioCard: View {
     let servicio: Servicio
     let costoEstimado: Double
@@ -305,7 +315,9 @@ fileprivate struct ServicioCard: View {
     @Query private var personal: [Personal]
     @Query private var productos: [Producto]
     
+    // Preview rápida: hay candidato y stock?
     private var previewAsignable: (asignable: Bool, motivo: String) {
+        // Candidato
         let candidatos = personal.filter { mec in
             mec.isAsignable &&
             mec.especialidades.contains(servicio.especialidadRequerida) &&
@@ -314,6 +326,7 @@ fileprivate struct ServicioCard: View {
         guard candidatos.first != nil else {
             return (false, "Sin candidato disponible")
         }
+        // Stock
         for ing in servicio.ingredientes {
             guard let p = productos.first(where: { $0.nombre == ing.nombreProducto }) else { continue }
             if p.cantidad < ing.cantidadUsada {
@@ -325,6 +338,7 @@ fileprivate struct ServicioCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // Header
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(servicio.nombre)
@@ -335,7 +349,9 @@ fileprivate struct ServicioCard: View {
                 }
                 Spacer()
                 HStack(spacing: 6) {
-                    Button { onEdit() } label: {
+                    Button {
+                        onEdit()
+                    } label: {
                         Label("Editar", systemImage: "pencil")
                             .font(.caption)
                             .padding(.horizontal, 8).padding(.vertical, 5)
@@ -345,7 +361,9 @@ fileprivate struct ServicioCard: View {
                     .buttonStyle(.plain)
                     .foregroundColor(.white)
                     
-                    Button { onSchedule() } label: {
+                    Button {
+                        onSchedule()
+                    } label: {
                         Label("Programar", systemImage: "calendar.badge.plus")
                             .font(.caption)
                             .padding(.horizontal, 8).padding(.vertical, 5)
@@ -357,6 +375,7 @@ fileprivate struct ServicioCard: View {
                 }
             }
             
+            // Chips de requerimientos
             HStack(spacing: 6) {
                 chip(text: servicio.rolRequerido.rawValue, systemImage: "person.badge.shield.checkmark.fill")
                 chip(text: servicio.especialidadRequerida, systemImage: "wrench.and.screwdriver.fill")
@@ -364,6 +383,7 @@ fileprivate struct ServicioCard: View {
                 Spacer()
             }
             
+            // Productos y costo + precio final
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Label("\(productosCount) producto\(productosCount == 1 ? "" : "s")", systemImage: "shippingbox.fill")
@@ -373,6 +393,7 @@ fileprivate struct ServicioCard: View {
                 .font(.caption2)
                 .foregroundColor(.gray)
                 
+                // Precio final y sugerido (si fue modificado)
                 let sugerido = PricingHelpers.precioSugeridoParaServicio(servicio: servicio, productos: productos)
                 HStack(spacing: 10) {
                     Text("$\(servicio.precioFinalAlCliente, specifier: "%.2f")")
@@ -391,6 +412,7 @@ fileprivate struct ServicioCard: View {
             
             Divider().opacity(0.5)
             
+            // Footer con estado de asignación y CTA
             HStack {
                 let estado = previewAsignable
                 Label(estado.motivo, systemImage: estado.asignable ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
@@ -400,7 +422,9 @@ fileprivate struct ServicioCard: View {
                     .foregroundColor(estado.asignable ? .green : .red)
                     .cornerRadius(6)
                 Spacer()
-                Button { onAssign() } label: {
+                Button {
+                    onAssign()
+                } label: {
                     Label("Asignar", systemImage: "arrow.right.circle.fill")
                         .font(.subheadline)
                         .padding(.vertical, 6).padding(.horizontal, 10)
@@ -437,7 +461,7 @@ fileprivate struct ServicioCard: View {
     }
 }
 
-// --- MODAL DE ASIGNACIÓN ---
+// --- MODAL DE ASIGNACIÓN (UI mejorada, misma lógica) ---
 fileprivate struct AsignarServicioModal: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -449,11 +473,13 @@ fileprivate struct AsignarServicioModal: View {
     var servicio: Servicio
     @ObservedObject var appState: AppNavigationState
     
+    // UI State
     @State private var vehiculoSeleccionadoID: Vehiculo.ID?
     @State private var searchVehiculo = ""
     @State private var alertaError: String?
     @State private var mostrandoAlerta = false
     
+    // Preview calculada
     @State private var candidato: Personal?
     @State private var costoEstimado: Double = 0
     @State private var hayStockInsuficiente: Bool = false
@@ -484,6 +510,7 @@ fileprivate struct AsignarServicioModal: View {
             Text("Asignar Servicio")
                 .font(.title2).fontWeight(.bold)
             
+            // Header con resumen del servicio
             VStack(alignment: .leading, spacing: 8) {
                 Text(servicio.nombre)
                     .font(.headline).fontWeight(.semibold)
@@ -498,6 +525,7 @@ fileprivate struct AsignarServicioModal: View {
             .background(Color("MercedesCard"))
             .cornerRadius(10)
             
+            // Selector de vehículo con búsqueda
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Selecciona el Vehículo")
@@ -534,6 +562,7 @@ fileprivate struct AsignarServicioModal: View {
                 .background(Color("MercedesBackground"))
                 .cornerRadius(8)
                 
+                // Lista de opciones
                 ScrollView {
                     LazyVStack(spacing: 8) {
                         ForEach(vehiculosFiltrados) { vehiculo in
@@ -576,7 +605,9 @@ fileprivate struct AsignarServicioModal: View {
             .background(Color("MercedesCard"))
             .cornerRadius(10)
             
+            // Candidato y productos
             HStack(alignment: .top, spacing: 16) {
+                // Candidato
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Candidato Asignado").font(.headline)
@@ -627,6 +658,7 @@ fileprivate struct AsignarServicioModal: View {
                 .background(Color("MercedesCard"))
                 .cornerRadius(10)
                 
+                // Productos
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Productos a Consumir").font(.headline)
@@ -686,6 +718,7 @@ fileprivate struct AsignarServicioModal: View {
                 .cornerRadius(10)
             }
             
+            // Barra inferior
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Resumen")
@@ -733,7 +766,9 @@ fileprivate struct AsignarServicioModal: View {
         return "Listo para confirmar."
     }
     
+    // Recalcula candidato, costo y stock para pintar la UI
     private func recalcularPreview() {
+        // Candidato
         let candidatos = personal.filter { mec in
             mec.isAsignable &&
             mec.especialidades.contains(servicio.especialidadRequerida) &&
@@ -741,6 +776,7 @@ fileprivate struct AsignarServicioModal: View {
         }
         candidato = candidatos.sorted(by: { $0.rol.rawValue < $1.rol.rawValue }).first
         
+        // Costo y stock
         var costo: Double = 0
         var stockOK = true
         for ing in servicio.ingredientes {
@@ -752,6 +788,7 @@ fileprivate struct AsignarServicioModal: View {
         hayStockInsuficiente = !stockOK
     }
     
+    // Chips helpers
     private func chip(text: String, systemImage: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: systemImage)
@@ -778,6 +815,7 @@ fileprivate struct AsignarServicioModal: View {
         }
     }
     
+    // Lógica de asignación (igual que antes)
     func ejecutarAsignacion() {
         guard let vehiculoID = vehiculoSeleccionadoID,
               let vehiculo = vehiculos.first(where: { $0.id == vehiculoID }) else {
@@ -822,8 +860,7 @@ fileprivate struct AsignarServicioModal: View {
             productosConsumidos: servicio.ingredientes.map { $0.nombreProducto },
             vehiculo: vehiculo
         )
-        // NUEVO: guarda cantidades exactas
-        nuevoServicio.productosConCantidad = servicio.ingredientes
+        // Los nuevos campos se establecen en Models.swift; aquí se asume estado .enProceso por constructor o se setea:
         nuevoServicio.estado = .enProceso
         modelContext.insert(nuevoServicio)
         
@@ -862,10 +899,12 @@ fileprivate struct ProgramarServicioModal: View {
     var servicio: Servicio
     @ObservedObject var appState: AppNavigationState
     
+    // UI State
     @State private var vehiculoSeleccionadoID: Vehiculo.ID?
     @State private var searchVehiculo = ""
     @State private var fechaInicio: Date = Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date()
     
+    // Preview calculada
     @State private var candidato: Personal?
     @State private var conflictoMensaje: String?
     @State private var stockAdvertencia: String?
@@ -886,6 +925,7 @@ fileprivate struct ProgramarServicioModal: View {
             Text("Programar Servicio")
                 .font(.title2).fontWeight(.bold)
             
+            // Resumen Servicio
             VStack(alignment: .leading, spacing: 8) {
                 Text(servicio.nombre)
                     .font(.headline).fontWeight(.semibold)
@@ -900,6 +940,7 @@ fileprivate struct ProgramarServicioModal: View {
             .background(Color("MercedesCard"))
             .cornerRadius(10)
             
+            // Selección de vehículo y fecha
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Selecciona el Vehículo").font(.headline)
@@ -971,6 +1012,7 @@ fileprivate struct ProgramarServicioModal: View {
             .background(Color("MercedesCard"))
             .cornerRadius(10)
             
+            // Candidato sugerido y advertencias
             VStack(alignment: .leading, spacing: 8) {
                 Text("Candidato sugerido").font(.headline)
                 if let c = candidato {
@@ -1001,6 +1043,7 @@ fileprivate struct ProgramarServicioModal: View {
             .background(Color("MercedesCard"))
             .cornerRadius(10)
             
+            // Acciones
             HStack {
                 Button("Cancelar") { dismiss() }
                     .buttonStyle(.plain)
@@ -1042,27 +1085,45 @@ fileprivate struct ProgramarServicioModal: View {
         .cornerRadius(8)
     }
     
+    // Selección automática del mejor candidato sin solapes
     private func recalcularCandidato() {
         conflictoMensaje = nil
         stockAdvertencia = nil
         
+        // 1) Posibles candidatos por rol/especialidad y disponibilidad laboral (día/horas)
         let cal = Calendar.current
-        let endDate = fechaInicio.addingTimeInterval(servicio.duracionHoras * 3600)
         let weekday = cal.component(.weekday, from: fechaInicio)
         let startHour = cal.component(.hour, from: fechaInicio)
+        let endDate = fechaInicio.addingTimeInterval(servicio.duracionHoras * 3600)
         let endHour = cal.component(.hour, from: endDate)
         
         let candidatosBase = personal.filter { mec in
             mec.rol == servicio.rolRequerido &&
             mec.especialidades.contains(servicio.especialidadRequerida) &&
             mec.diasLaborales.contains(weekday) &&
+            // Ventana dentro de su turno (simplificación: misma fecha)
             (mec.horaEntrada <= startHour) && (mec.horaSalida >= endHour)
         }
         
-        let candidatosSinSolape = candidatosBase.filter {
-            !ServicioEnProceso.existeSolape(paraRFC: $0.rfc, inicio: fechaInicio, fin: endDate, tickets: tickets)
+        // 2) Evitar solapes con servicios programados o en proceso
+        func haySolapePara(_ mec: Personal) -> Bool {
+            let inicio = fechaInicio
+            let fin = endDate
+            for t in tickets {
+                guard (t.estado == .programado || t.estado == .enProceso),
+                      t.rfcMecanicoAsignado == mec.rfc || t.rfcMecanicoSugerido == mec.rfc else { continue }
+                let ti = t.fechaProgramadaInicio ?? t.horaInicio
+                let tf = (t.estado == .programado) ? (t.fechaProgramadaInicio?.addingTimeInterval(t.duracionHoras * 3600) ?? t.horaFinEstimada)
+                                                   : t.horaFinEstimada
+                // solape si inicio < tf && fin > ti
+                if inicio < tf && fin > ti { return true }
+            }
+            return false
         }
         
+        let candidatosSinSolape = candidatosBase.filter { !haySolapePara($0) }
+        
+        // 3) Heurística simple: ordenar por nombre/rol (puedes mejorar con carga del día, etc.)
         candidato = candidatosSinSolape.sorted { $0.nombre < $1.nombre }.first
         
         if candidato == nil && !candidatosBase.isEmpty {
@@ -1071,6 +1132,7 @@ fileprivate struct ProgramarServicioModal: View {
             conflictoMensaje = "No hay candidatos con el rol/especialidad y turno adecuado."
         }
         
+        // 4) Advertencia de stock (no reservamos)
         var faltantes: [String] = []
         for ing in servicio.ingredientes {
             if let p = productos.first(where: { $0.nombre == ing.nombreProducto }), p.cantidad < ing.cantidadUsada {
@@ -1087,11 +1149,12 @@ fileprivate struct ProgramarServicioModal: View {
               let vehiculo = vehiculos.first(where: { $0.id == vehiculoID }),
               let candidato else { return }
         
+        // Creamos un ticket programado (no se descuenta inventario; no se cambia estado del mecánico)
         let ticket = ServicioEnProceso(
             nombreServicio: servicio.nombre,
-            rfcMecanicoAsignado: candidato.rfc,
+            rfcMecanicoAsignado: candidato.rfc, // opcionalmente podríamos dejarlo vacío y usar sugerido
             nombreMecanicoAsignado: candidato.nombre,
-            horaInicio: fechaInicio,
+            horaInicio: fechaInicio, // se usa como base; horaInicio real se actualizará al iniciar
             duracionHoras: servicio.duracionHoras,
             productosConsumidos: servicio.ingredientes.map { $0.nombreProducto },
             vehiculo: vehiculo
@@ -1101,8 +1164,6 @@ fileprivate struct ProgramarServicioModal: View {
         ticket.duracionHoras = servicio.duracionHoras
         ticket.rfcMecanicoSugerido = candidato.rfc
         ticket.nombreMecanicoSugerido = candidato.nombre
-        // NUEVO: guarda cantidades exactas para validar al iniciar
-        ticket.productosConCantidad = servicio.ingredientes
         
         modelContext.insert(ticket)
         
@@ -1119,7 +1180,8 @@ fileprivate struct ProgramarServicioModal: View {
     }
 }
 
-// --- HELPERS DE PRECIO Y DESGLOSE ---
+// --- HELPERS DE PRECIO Y PORCENTAJES ---
+// --- HELPERS DE PRECIO Y DESGLOSE (Nueva Lógica) ---
 fileprivate enum PricingHelpers {
     struct DesglosePrecio {
         let costosDirectos: Double
@@ -1141,12 +1203,26 @@ fileprivate enum PricingHelpers {
         aplicarISR: Bool,
         porcentajeISR: Double
     ) -> DesglosePrecio {
+        
+        // A. Suma todos los costos directos
         let costosDirectos = manoDeObra + refacciones + costoInventario
+        
+        // B. Suma las dos partes internas
         let partesInternas = gananciaDeseada + gastosAdmin
+        
+        // C. Calcula el subtotal antes de IVA
         let subtotal = costosDirectos + partesInternas
+        
+        // D. Calcula el IVA al 16% sobre el subtotal
         let iva = aplicarIVA ? (subtotal * 0.16) : 0.0
+        
+        // E. Calcula el precio final
         let precioFinal = subtotal + iva
+        
+        // F. Calcula el ISR solo sobre la ganancia
         let isr = aplicarISR ? (gananciaDeseada * (porcentajeISR / 100.0)) : 0.0
+        
+        // Ganancia real después de ISR
         let gananciaNeta = gananciaDeseada - isr
         
         return DesglosePrecio(
@@ -1169,6 +1245,7 @@ fileprivate enum PricingHelpers {
         }
     }
     
+    // Helper para obtener precio sugerido rápido (usado en listas)
     static func precioSugeridoParaServicio(servicio: Servicio, productos: [Producto]) -> Double {
         let costoInsumos = costoIngredientes(servicio: servicio, productos: productos)
         let desglose = calcularDesglose(
@@ -1185,44 +1262,715 @@ fileprivate enum PricingHelpers {
     }
 }
 
-// --- PLACEHOLDER TEMPORAL PARA SERVICIOFORMVIEW ---
-// Sustituye esto por tu implementación real del formulario.
+// --- VISTA DEL FORMULARIO (Actualizada a porcentajes e impuestos) ---
+// --- VISTA DEL FORMULARIO (Actualizada a Montos Fijos) ---
 fileprivate struct ServicioFormView: View {
-    enum Mode {
-        case add
-        case edit(Servicio)
-    }
-    let mode: Mode
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
-    var body: some View {
-        VStack(spacing: 16) {
-            Text(title)
-                .font(.title2).bold()
-            Text("Este es un placeholder temporal. Reemplázalo por tu ServicioFormView real.")
-                .foregroundColor(.gray)
-                .multilineTextAlignment(.center)
-            Button("Cerrar") { dismiss() }
-                .buttonStyle(.plain)
-                .padding()
-                .background(Color("MercedesPetrolGreen"))
-                .foregroundColor(.white)
-                .cornerRadius(8)
+    @AppStorage("user_password") private var userPassword = ""
+    @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
+    
+    @Query private var productos: [Producto]
+    @Query private var personal: [Personal]
+
+    let mode: ServiceModalMode
+    
+    // Datos base
+    @State private var nombre = ""
+    @State private var descripcion = ""
+    @State private var especialidadRequerida = ""
+    @State private var rolRequerido: Rol = .ayudante
+    @State private var duracionString = "1.0"
+    
+    // Ingredientes
+    @State private var cantidadesProductos: [String: Double] = [:]
+    @State private var especialidadesDisponibles: [String] = []
+
+    // Costos y configuración (Montos Fijos)
+    @State private var costoManoDeObraString = "0.0"
+    @State private var gananciaDeseadaString = "0.0"
+    @State private var gastosAdminString = "0.0"
+    
+    @State private var requiereRefacciones = false
+    @State private var costoRefaccionesString = "0.0"
+    
+    @State private var aplicarIVA = false
+    @State private var aplicarISR = false
+    @State private var porcentajeISRString = "10.0" // configurable
+
+    // Precio final editable
+    @State private var precioFinalString = "0.0"
+    @State private var precioModificadoManualmente = false
+    
+    // Seguridad para editar nombre en modo edición
+    @State private var isNombreUnlocked = false
+    @State private var showingAuthModal = false
+    @State private var authError = ""
+    @State private var passwordAttempt = ""
+    @State private var errorMsg: String?
+    
+    private enum AuthReason {
+        case unlockNombre, deleteServicio
+    }
+    @State private var authReason: AuthReason = .unlockNombre
+    
+    private var servicioAEditar: Servicio?
+    var formTitle: String {
+        switch mode {
+        case .add: return "Añadir Nuevo Servicio"
+        case .edit: return "Editar Servicio"
+        case .assign: return "Editar Servicio"
+        case .schedule: return "Editar Servicio"
         }
-        .padding(24)
-        .frame(minWidth: 420, minHeight: 240)
-        .background(Color("MercedesBackground"))
-        .preferredColorScheme(.dark)
     }
     
-    private var title: String {
-        switch mode {
-        case .add: return "Añadir Servicio"
-        case .edit(let s): return "Editar Servicio: \(s.nombre)"
+    // Validaciones
+    private var nombreInvalido: Bool { nombre.trimmingCharacters(in: .whitespaces).count < 3 }
+    private var duracionInvalida: Bool { Double(duracionString) == nil || (Double(duracionString) ?? 0) <= 0 }
+    private var costoMOInvalido: Bool { Double(costoManoDeObraString) == nil || (Double(costoManoDeObraString) ?? -1) < 0 }
+    private var gananciaInvalida: Bool { Double(gananciaDeseadaString) == nil || (Double(gananciaDeseadaString) ?? -1) < 0 }
+    private var gastosAdminInvalido: Bool { Double(gastosAdminString) == nil || (Double(gastosAdminString) ?? -1) < 0 }
+    private var costoRefInvalido: Bool { Double(costoRefaccionesString) == nil || (Double(costoRefaccionesString) ?? -1) < 0 }
+    private var pISRInvalido: Bool { porcentajeInvalido(porcentajeISRString) }
+    
+    private func porcentajeInvalido(_ s: String) -> Bool {
+        guard let v = Double(s.replacingOccurrences(of: ",", with: ".")) else { return true }
+        return v < 0 || v > 100
+    }
+    
+    // Cálculos automáticos (Desglose)
+    private var costoIngredientes: Double {
+        PricingHelpers.costoIngredientes(servicio: servicioPreview, productos: productos)
+    }
+    
+    private var desglose: PricingHelpers.DesglosePrecio {
+        PricingHelpers.calcularDesglose(
+            manoDeObra: Double(costoManoDeObraString) ?? 0,
+            refacciones: requiereRefacciones ? (Double(costoRefaccionesString) ?? 0) : 0,
+            costoInventario: costoIngredientes,
+            gananciaDeseada: Double(gananciaDeseadaString) ?? 0,
+            gastosAdmin: Double(gastosAdminString) ?? 0,
+            aplicarIVA: aplicarIVA,
+            aplicarISR: aplicarISR,
+            porcentajeISR: Double(porcentajeISRString) ?? 0
+        )
+    }
+    
+    // Servicio “preview” para cálculo de ingredientes
+    private var servicioPreview: Servicio {
+        let ingredientesArray: [Ingrediente] = cantidadesProductos.compactMap { (nombre, cantidad) in
+            guard cantidad > 0 else { return nil }
+            return Ingrediente(nombreProducto: nombre, cantidadUsada: cantidad)
+        }
+        // Construimos un objeto efímero solo para helpers (no se inserta)
+        let dummy = Servicio(
+            nombre: nombre.isEmpty ? "tmp" : nombre,
+            descripcion: descripcion,
+            especialidadRequerida: especialidadRequerida,
+            rolRequerido: rolRequerido,
+            ingredientes: ingredientesArray,
+            precioAlCliente: Double(precioFinalString) ?? 0,
+            duracionHoras: Double(duracionString) ?? 1.0,
+            
+            costoBase: 0, // Deprecado
+            requiereRefacciones: requiereRefacciones,
+            costoRefacciones: Double(costoRefaccionesString) ?? 0,
+            
+            // Nuevos campos
+            costoManoDeObra: Double(costoManoDeObraString) ?? 0,
+            gananciaDeseada: Double(gananciaDeseadaString) ?? 0,
+            gastosAdministrativos: Double(gastosAdminString) ?? 0,
+            
+            aplicarIVA: aplicarIVA,
+            aplicarISR: aplicarISR,
+            isrPorcentajeEstimado: Double(porcentajeISRString) ?? 0,
+            precioFinalAlCliente: Double(precioFinalString) ?? 0,
+            precioModificadoManualmente: precioModificadoManualmente
+        )
+        return dummy
+    }
+    
+    init(mode: ServiceModalMode) {
+        self.mode = mode
+        
+        if case .edit(let servicio) = mode {
+            self.servicioAEditar = servicio
+            _nombre = State(initialValue: servicio.nombre)
+            _descripcion = State(initialValue: servicio.descripcion)
+            _especialidadRequerida = State(initialValue: servicio.especialidadRequerida)
+            _rolRequerido = State(initialValue: servicio.rolRequerido)
+            _duracionString = State(initialValue: String(format: "%.2f", servicio.duracionHoras))
+            let cantidades = Dictionary(uniqueKeysWithValues: servicio.ingredientes.map { ($0.nombreProducto, $0.cantidadUsada) })
+            _cantidadesProductos = State(initialValue: cantidades)
+            
+            // Nuevos campos (Montos)
+            _costoManoDeObraString = State(initialValue: String(format: "%.2f", servicio.costoManoDeObra))
+            _gananciaDeseadaString = State(initialValue: String(format: "%.2f", servicio.gananciaDeseada))
+            _gastosAdminString = State(initialValue: String(format: "%.2f", servicio.gastosAdministrativos))
+            
+            _requiereRefacciones = State(initialValue: servicio.requiereRefacciones)
+            _costoRefaccionesString = State(initialValue: String(format: "%.2f", servicio.costoRefacciones))
+            
+            _aplicarIVA = State(initialValue: servicio.aplicarIVA)
+            _aplicarISR = State(initialValue: servicio.aplicarISR)
+            _porcentajeISRString = State(initialValue: String(format: "%.2f", servicio.isrPorcentajeEstimado))
+            _precioFinalString = State(initialValue: String(format: "%.2f", servicio.precioFinalAlCliente))
+            _precioModificadoManualmente = State(initialValue: servicio.precioModificadoManualmente)
+        } else {
+            // defaults para alta
+            _costoManoDeObraString = State(initialValue: "0.0")
+            _gananciaDeseadaString = State(initialValue: "0.0")
+            _gastosAdminString = State(initialValue: "0.0")
+            _porcentajeISRString = State(initialValue: "10.0")
+            _precioFinalString = State(initialValue: "0.0")
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 4) {
+                Text(formTitle).font(.title2).fontWeight(.bold)
+                Text("Completa los datos. Los campos marcados con • son obligatorios.")
+                    .font(.caption).foregroundColor(.gray)
+            }
+            .padding(.top, 10).padding(.bottom, 6)
+
+            Form {
+                Section {
+                    SectionHeader(title: "Detalles del Servicio", subtitle: nil)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text("• Nombre del Servicio").font(.caption2).foregroundColor(.gray)
+                            if servicioAEditar != nil {
+                                Image(systemName: isNombreUnlocked ? "lock.open.fill" : "lock.fill")
+                                    .foregroundColor(isNombreUnlocked ? .green : .red)
+                                    .font(.caption2)
+                            }
+                        }
+                        HStack(spacing: 8) {
+                            ZStack(alignment: .leading) {
+                                TextField("", text: $nombre)
+                                    .disabled(servicioAEditar != nil && !isNombreUnlocked)
+                                    .padding(6).background(Color("MercedesBackground").opacity(0.9)).cornerRadius(6)
+                                if nombre.isEmpty {
+                                    Text("ej. Cambio de Frenos Delanteros")
+                                        .foregroundColor(Color.white.opacity(0.35))
+                                        .padding(.horizontal, 10).allowsHitTesting(false)
+                                }
+                            }
+                            if servicioAEditar != nil {
+                                Button {
+                                    if isNombreUnlocked { isNombreUnlocked = false }
+                                    else {
+                                        authReason = .unlockNombre
+                                        showingAuthModal = true
+                                    }
+                                } label: {
+                                    Text(isNombreUnlocked ? "Bloquear" : "Desbloquear")
+                                        .font(.caption2)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(isNombreUnlocked ? .green : .red)
+                            }
+                        }
+                        .validationHint(isInvalid: nombreInvalido, message: "El nombre debe tener al menos 3 caracteres.")
+                    }
+                    
+                    FormField(title: "Descripción", placeholder: "ej. Reemplazo de balatas y rectificación de discos", text: $descripcion)
+                    
+                    HStack(spacing: 12) {
+                        FormField(title: "• Duración Estimada (Horas)", placeholder: "ej. 2.5", text: $duracionString)
+                            .validationHint(isInvalid: duracionInvalida, message: "Debe ser un número > 0.")
+                        Picker("• Especialidad Requerida", selection: $especialidadRequerida) {
+                            Text("Seleccionar...").tag("")
+                            ForEach(especialidadesDisponibles, id: \.self) { Text($0).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: .infinity)
+                        Picker("• Rol Requerido", selection: $rolRequerido) {
+                            ForEach(Rol.allCases, id: \.self) { rol in
+                                Text(rol.rawValue).tag(rol)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+                
+                // 1. Costos Directos
+                Section {
+                    SectionHeader(title: "1. Costos Directos", subtitle: "Mano de obra, refacciones e inventario")
+                    HStack(spacing: 12) {
+                        FormField(title: "• Costo Mano de Obra ($)", placeholder: "ej. 500.00", text: $costoManoDeObraString)
+                            .validationHint(isInvalid: costoMOInvalido, message: "Número válido ≥ 0")
+                        
+                        Toggle("¿Refacciones?", isOn: $requiereRefacciones)
+                            .toggleStyle(.switch)
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        
+                        FormField(title: "Costo Refacciones ($)", placeholder: "ej. 300.00", text: $costoRefaccionesString)
+                            .validationHint(isInvalid: costoRefInvalido, message: "Número válido ≥ 0")
+                            .disabled(!requiereRefacciones)
+                            .opacity(requiereRefacciones ? 1 : 0.5)
+                    }
+                    HStack {
+                        Text("Costo de inventario (automático): $\(costoIngredientes, specifier: "%.2f")")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        Spacer()
+                    }
+                }
+                
+                // 2. Partes Internas (Ganancia y Gastos)
+                Section {
+                    SectionHeader(title: "2. Partes Internas", subtitle: "Ganancia y gastos operativos")
+                    HStack(spacing: 12) {
+                        FormField(title: "• Ganancia Deseada ($)", placeholder: "ej. 400.00", text: $gananciaDeseadaString)
+                            .validationHint(isInvalid: gananciaInvalida, message: "Número válido ≥ 0")
+                        
+                        FormField(title: "• Gastos Administrativos ($)", placeholder: "ej. 150.00", text: $gastosAdminString)
+                            .validationHint(isInvalid: gastosAdminInvalido, message: "Número válido ≥ 0")
+                    }
+                }
+                
+                // Configuración de Impuestos
+                Section {
+                    SectionHeader(title: "Impuestos", subtitle: "IVA e ISR")
+                    HStack(spacing: 12) {
+                        Toggle("Aplicar IVA (16%)", isOn: $aplicarIVA)
+                        Toggle("Aplicar ISR (sobre ganancia)", isOn: $aplicarISR)
+                        FormField(title: "% ISR", placeholder: "ej. 10", text: $porcentajeISRString)
+                            .validationHint(isInvalid: pISRInvalido, message: "0 a 100.")
+                            .disabled(!aplicarISR)
+                            .opacity(aplicarISR ? 1 : 0.5)
+                    }
+                    Text("El ISR se calcula solo sobre la ganancia deseada y NO se suma al precio final (es gasto interno).")
+                        .font(.caption2)
+                        .foregroundColor(.yellow)
+                }
+                
+                // Ingredientes
+                Section {
+                    SectionHeader(title: "Productos del Inventario", subtitle: "Selecciona los productos a utilizar")
+                    
+                    List(productos) { producto in
+                        HStack {
+                            Text("\(producto.nombre) (\(producto.unidadDeMedida))")
+                            Spacer()
+                            HStack(spacing: 6) {
+                                TextField("0.0", text: Binding(
+                                    get: {
+                                        cantidadesProductos[producto.nombre].map { String(format: "%.2f", $0) } ?? ""
+                                    },
+                                    set: {
+                                        cantidadesProductos[producto.nombre] = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0
+                                    }
+                                ))
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 80)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                
+                                if (cantidadesProductos[producto.nombre] ?? 0) > 0 {
+                                    Button {
+                                        cantidadesProductos[producto.nombre] = 0
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.gray)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .listRowBackground(Color("MercedesCard"))
+                    }
+                    .frame(minHeight: 150, maxHeight: 250)
+                }
+                
+                // Desglose Final
+                Section {
+                    SectionHeader(title: "Desglose de Precio", subtitle: "Cálculo automático")
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 6) {
+                        roField("Costos Directos", desglose.costosDirectos)
+                        roField("Ganancia Real", desglose.partesInternas - (Double(gastosAdminString) ?? 0)) // Ganancia + Gastos - Gastos = Ganancia
+                        roField("Gastos Administrativos", Double(gastosAdminString) ?? 0)
+                        roField("Subtotal (Sin IVA)", desglose.subtotal)
+                        roField("IVA (16%)", desglose.iva)
+                        roField("Precio Final", desglose.precioFinal)
+                        roField("ISR (Gasto Interno)", desglose.isrSobreGanancia)
+                        roField("Ganancia Neta (Post ISR)", desglose.gananciaNeta)
+                    }
+                    
+                    // Precio sugerido y final
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Precio Calculado: $\(desglose.precioFinal, specifier: "%.2f")")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        HStack(spacing: 10) {
+                            FormField(title: "Precio final al cliente (editable)", placeholder: "ej. 2500.00", text: $precioFinalString)
+                                .onChange(of: precioFinalString) { _, new in
+                                    let final = Double(new.replacingOccurrences(of: ",", with: ".")) ?? 0
+                                    precioModificadoManualmente = abs(final - desglose.precioFinal) > 0.009
+                                }
+                            if precioModificadoManualmente {
+                                Text("Modificado manualmente")
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6).padding(.vertical, 3)
+                                    .background(Color.yellow.opacity(0.2))
+                                    .foregroundColor(.yellow)
+                                    .cornerRadius(6)
+                            }
+                        }
+                        Text("El precio calculado se mantiene como referencia si editas el precio final.")
+                            .font(.caption2).foregroundColor(.gray)
+                    }
+                }
+            }
+            .textFieldStyle(PlainTextFieldStyle())
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            .onAppear {
+                let todasLasHabilidades = personal.flatMap { $0.especialidades }
+                especialidadesDisponibles = Array(Set(todasLasHabilidades)).sorted()
+                
+                if servicioAEditar == nil {
+                    rolRequerido = .ayudante
+                    if let primera = especialidadesDisponibles.first {
+                        especialidadRequerida = primera
+                    }
+                    // Inicializar precio final con el sugerido al abrir "add"
+                    precioFinalString = String(format: "%.2f", desglose.precioFinal)
+                }
+            }
+            // Sincronización automática
+            .onChange(of: costoManoDeObraString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: gananciaDeseadaString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: gastosAdminString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: requiereRefacciones) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: costoRefaccionesString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: aplicarIVA) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: aplicarISR) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: porcentajeISRString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            .onChange(of: cantidadesProductos) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
+            
+            if let errorMsg {
+                Text(errorMsg)
+                    .font(.caption2)
+                    .foregroundColor(.red)
+                    .padding(.vertical, 4)
+            }
+            
+            HStack {
+                Button("Cancelar") { dismiss() }
+                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.gray)
+                
+                if case .edit = mode {
+                    Button("Eliminar", role: .destructive) {
+                        authReason = .deleteServicio
+                        showingAuthModal = true
+                    }
+                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.red)
+                }
+                Spacer()
+                Button(servicioAEditar == nil ? "Añadir Servicio" : "Guardar Cambios") {
+                    guardarCambios()
+                }
+                .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 10)
+                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(6)
+                .disabled(nombreInvalido || duracionInvalida || costoMOInvalido || gananciaInvalida || gastosAdminInvalido || costoRefInvalido || pISRInvalido || especialidadRequerida.isEmpty)
+                .opacity((nombreInvalido || duracionInvalida || costoMOInvalido || gananciaInvalida || gastosAdminInvalido || costoRefInvalido || pISRInvalido || especialidadRequerida.isEmpty) ? 0.6 : 1.0)
+            }
+            .padding(.horizontal).padding(.bottom, 6)
+            .background(Color("MercedesCard"))
+        }
+        .background(Color("MercedesBackground"))
+        .preferredColorScheme(.dark)
+        .frame(minWidth: 760, minHeight: 600, maxHeight: 600)
+        .cornerRadius(12)
+        .sheet(isPresented: $showingAuthModal) {
+            authModalView()
+        }
+    }
+    
+    private func roField(_ title: String, _ value: Double) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title).font(.caption2).foregroundColor(.gray)
+            Text(value.formatted(.number.precision(.fractionLength(2))))
+                .font(.subheadline)
+                .foregroundColor(.white)
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color("MercedesBackground").opacity(0.6))
+                .cornerRadius(6)
+        }
+    }
+    
+    private func syncPrecioFinalConSugeridoSiNoManual() {
+        if !precioModificadoManualmente {
+            precioFinalString = String(format: "%.2f", desglose.precioFinal)
+        }
+    }
+    
+    @ViewBuilder
+    func authModalView() -> some View {
+        let prompt = (authReason == .unlockNombre) ?
+            "Autoriza para editar el Nombre del Servicio." :
+            "Autoriza para ELIMINAR este servicio."
+        
+        ZStack {
+            Color("MercedesBackground").ignoresSafeArea()
+            VStack(spacing: 12) {
+                Text("Autorización Requerida").font(.title2).fontWeight(.bold)
+                Text(prompt)
+                    .font(.callout)
+                    .foregroundColor(authReason == .deleteServicio ? .red : .gray)
+                
+                if isTouchIDEnabled {
+                    Button { Task { await authenticateWithTouchID() } } label: {
+                        Label("Usar Huella (Touch ID)", systemImage: "touchid")
+                            .font(.headline).padding().frame(maxWidth: .infinity)
+                            .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    Text("o").foregroundColor(.gray)
+                }
+                
+                Text("Usa tu contraseña de administrador:").font(.subheadline)
+                SecureField("Contraseña", text: $passwordAttempt)
+                    .padding(8).background(Color("MercedesCard")).cornerRadius(8)
+                
+                if !authError.isEmpty {
+                    Text(authError).font(.caption2).foregroundColor(.red)
+                }
+                
+                Button { authenticateWithPassword() } label: {
+                    Label("Autorizar con Contraseña", systemImage: "lock.fill")
+                    .font(.headline).padding().frame(maxWidth: .infinity)
+                    .background(Color.gray.opacity(0.4)).foregroundColor(.white).cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(22)
+        }
+        .frame(minWidth: 520, minHeight: 360)
+        .preferredColorScheme(.dark)
+        .onAppear { authError = ""; passwordAttempt = "" }
+    }
+    
+    func guardarCambios() {
+        errorMsg = nil
+        let trimmedNombre = nombre.trimmingCharacters(in: .whitespaces)
+        
+        guard trimmedNombre.count >= 3 else {
+            errorMsg = "El nombre del servicio debe tener al menos 3 caracteres."
+            return
+        }
+        guard let duracion = Double(duracionString), duracion > 0 else {
+            errorMsg = "La Duración debe ser un número mayor a 0."
+            return
+        }
+        guard let costoMO = Double(costoManoDeObraString.replacingOccurrences(of: ",", with: ".")), costoMO >= 0 else {
+            errorMsg = "Costo Mano de Obra inválido."
+            return
+        }
+        guard let ganancia = Double(gananciaDeseadaString.replacingOccurrences(of: ",", with: ".")), ganancia >= 0 else {
+            errorMsg = "Ganancia deseada inválida."
+            return
+        }
+        guard let gastosAdmin = Double(gastosAdminString.replacingOccurrences(of: ",", with: ".")), gastosAdmin >= 0 else {
+            errorMsg = "Gastos administrativos inválidos."
+            return
+        }
+        guard let costoRef = Double(costoRefaccionesString.replacingOccurrences(of: ",", with: ".")), (!requiereRefacciones || costoRef >= 0) else {
+            errorMsg = "Costo de refacciones inválido."
+            return
+        }
+        guard let pISR = Double(porcentajeISRString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pISR) else {
+            errorMsg = "% ISR inválido."
+            return
+        }
+        
+        let ingredientesArray: [Ingrediente] = cantidadesProductos.compactMap { (nombre, cantidad) in
+            guard cantidad > 0 else { return nil }
+            return Ingrediente(nombreProducto: nombre, cantidadUsada: cantidad)
+        }
+        
+        let final = Double(precioFinalString.replacingOccurrences(of: ",", with: ".")) ?? desglose.precioFinal
+        
+        if let servicio = servicioAEditar {
+            // Actualiza todos los campos
+            servicio.nombre = trimmedNombre
+            servicio.descripcion = descripcion
+            servicio.especialidadRequerida = especialidadRequerida
+            servicio.rolRequerido = rolRequerido
+            servicio.duracionHoras = duracion
+            servicio.ingredientes = ingredientesArray
+            
+            // Nuevos campos
+            servicio.costoManoDeObra = costoMO
+            servicio.gananciaDeseada = ganancia
+            servicio.gastosAdministrativos = gastosAdmin
+            
+            servicio.requiereRefacciones = requiereRefacciones
+            servicio.costoRefacciones = costoRef
+            
+            servicio.aplicarIVA = aplicarIVA
+            servicio.aplicarISR = aplicarISR
+            servicio.isrPorcentajeEstimado = pISR
+            
+            servicio.precioFinalAlCliente = final
+            servicio.precioModificadoManualmente = precioModificadoManualmente
+            
+            // Compatibilidad
+            servicio.precioAlCliente = final
+        } else {
+            let nuevoServicio = Servicio(
+                nombre: trimmedNombre,
+                descripcion: descripcion,
+                especialidadRequerida: especialidadRequerida,
+                rolRequerido: rolRequerido,
+                ingredientes: ingredientesArray,
+                precioAlCliente: final, // compat
+                duracionHoras: duracion,
+                
+                costoBase: 0.0,
+                requiereRefacciones: requiereRefacciones,
+                costoRefacciones: costoRef,
+                
+                costoManoDeObra: costoMO,
+                gananciaDeseada: ganancia,
+                gastosAdministrativos: gastosAdmin,
+                
+                aplicarIVA: aplicarIVA,
+                aplicarISR: aplicarISR,
+                isrPorcentajeEstimado: pISR,
+                precioFinalAlCliente: final,
+                precioModificadoManualmente: precioModificadoManualmente
+            )
+            modelContext.insert(nuevoServicio)
+        }
+        dismiss()
+    }
+    
+    func eliminarServicio(_ servicio: Servicio) {
+        modelContext.delete(servicio)
+        dismiss()
+    }
+    
+    func authenticateWithTouchID() async {
+        let context = LAContext()
+        let reason = (authReason == .unlockNombre) ? "Autoriza la edición del Nombre." : "Autoriza la ELIMINACIÓN del servicio."
+        do {
+            if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
+                let success = try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
+                if success { await MainActor.run { onAuthSuccess() } }
+            }
+        } catch { await MainActor.run { authError = "Huella no reconocida." } }
+    }
+    
+    func authenticateWithPassword() {
+        if passwordAttempt == userPassword {
+            onAuthSuccess()
+        } else {
+            authError = "Contraseña incorrecta."
+            passwordAttempt = ""
+        }
+    }
+    
+    func onAuthSuccess() {
+        switch authReason {
+        case .unlockNombre:
+            isNombreUnlocked = true
+        case .deleteServicio:
+            if case .edit(let servicio) = mode {
+                eliminarServicio(servicio)
+            }
+        }
+        showingAuthModal = false
+        authError = ""
+        passwordAttempt = ""
+    }
+}
+
+// --- Helpers de UI reutilizados ---
+fileprivate struct SectionHeader: View {
+    var title: String
+    var subtitle: String?
+    var body: some View {
+        HStack {
+            Text(title).font(.headline).foregroundColor(.white)
+            Spacer()
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle).font(.caption2).foregroundColor(.gray)
+            }
+        }
+        .padding(.bottom, 2)
+    }
+}
+
+fileprivate struct FormField: View {
+    var title: String
+    var placeholder: String
+    @Binding var text: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundColor(.gray)
+            ZStack(alignment: .leading) {
+                TextField("", text: $text)
+                    .padding(6)
+                    .background(Color("MercedesBackground").opacity(0.9))
+                    .cornerRadius(6)
+                if text.isEmpty {
+                    Text(placeholder)
+                        .foregroundColor(Color.white.opacity(0.35))
+                        .padding(.horizontal, 10)
+                        .allowsHitTesting(false)
+                }
+            }
         }
     }
 }
 
-// --- FORMULARIO DE SERVICIO (comentado en tu versión original) ---
-// Copié arriba un placeholder para compilar. Sustitúyelo por tu ServicioFormView real cuando lo tengas.
+fileprivate extension View {
+    func validationHint(isInvalid: Bool, message: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            self
+            if isInvalid {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundColor(.red.opacity(0.9))
+            }
+        }
+    }
+}
 
+// --- FormModal usado por AsignarServicioModal ---
+fileprivate struct FormModal<Content: View>: View {
+    var title: String
+    var minHeight: CGFloat
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text(title)
+                .font(.largeTitle).fontWeight(.bold)
+            
+            Form {
+                content()
+            }
+            .textFieldStyle(PlainTextFieldStyle())
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+        }
+        .padding(30)
+        .frame(minWidth: 500, minHeight: minHeight)
+        .background(Color("MercedesCard"))
+        .cornerRadius(15)
+        .preferredColorScheme(.dark)
+    }
+}
