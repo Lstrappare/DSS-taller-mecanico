@@ -1149,12 +1149,13 @@ fileprivate struct ProgramarServicioModal: View {
               let vehiculo = vehiculos.first(where: { $0.id == vehiculoID }),
               let candidato else { return }
         
-        // Creamos un ticket programado (no se descuenta inventario; no se cambia estado del mecánico)
+        // Creamos un ticket programado (NO debe arrancar ya; horaInicio real se fijará al iniciar)
+        let placeholderInicio = Date() // no se usa para mostrar
         let ticket = ServicioEnProceso(
             nombreServicio: servicio.nombre,
-            rfcMecanicoAsignado: candidato.rfc, // opcionalmente podríamos dejarlo vacío y usar sugerido
+            rfcMecanicoAsignado: candidato.rfc, // puedes dejarlo así o vacío; sugerencia queda abajo
             nombreMecanicoAsignado: candidato.nombre,
-            horaInicio: fechaInicio, // se usa como base; horaInicio real se actualizará al iniciar
+            horaInicio: placeholderInicio,
             duracionHoras: servicio.duracionHoras,
             productosConsumidos: servicio.ingredientes.map { $0.nombreProducto },
             vehiculo: vehiculo
@@ -1164,6 +1165,7 @@ fileprivate struct ProgramarServicioModal: View {
         ticket.duracionHoras = servicio.duracionHoras
         ticket.rfcMecanicoSugerido = candidato.rfc
         ticket.nombreMecanicoSugerido = candidato.nombre
+        // Nota: horaFinEstimada calculada en el init no aplica para programados; al iniciar se recalculará
         
         modelContext.insert(ticket)
         

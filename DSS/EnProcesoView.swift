@@ -22,6 +22,9 @@ struct EnProcesoView: View {
     @State private var alertaError: String?
     @State private var mostrandoAlerta = false
     
+    // Timer de auto-inicio (cada 30s revisa programados vencidos)
+    private let autoStartTimer = Timer.publish(every: 0, on: .main, in: .common).autoconnect()
+    
     enum UrgenciaFiltro: String, CaseIterable, Identifiable {
         case todos = "Todos"
         case menosDe30 = "< 30 min"
@@ -195,9 +198,127 @@ struct EnProcesoView: View {
         } message: { mensaje in
             Text(mensaje)
         }
+        // Auto-inicio: cada 30s intenta arrancar los programados cuya hora llegó
+        .onReceive(autoStartTimer) { _ in
+            autoIniciarTicketsProgramadosSiCorresponde()
+        }
+        .onAppear {
+            // Primer chequeo inmediato al entrar
+            autoIniciarTicketsProgramadosSiCorresponde()
+        }
     }
     
-    // MARK: - Acciones Programados
+    // MARK: - Auto-inicio programados
+    
+    private func autoIniciarTicketsProgramadosSiCorresponde() {
+        let ahora = Date()
+        let pendientes = todosLosTickets.filter {
+            $0.estado == .programado && ($0.fechaProgramadaInicio ?? Date.distantFuture) <= ahora
+        }
+        guard !pendientes.isEmpty else { return }
+        for t in pendientes {
+            iniciarTicketProgramadoSiEsHora(t, silencioso: true)
+        }
+    }
+    
+    // Intenta iniciar un ticket programado. Si silencioso == true, no muestra alertas; solo registra.
+    private func iniciarTicketProgramadoSiEsHora(_ ticket: ServicioEnProceso, silencioso: Bool) {
+        // Validar que siga programado y que la hora ya llegó
+        guard ticket.estado == .programado,
+              let inicioProgramado = ticket.fechaProgramadaInicio,
+              inicioProgramado <= Date() else { return }
+        
+        // Reutilizamos la lógica de asignación similar a iniciarTicketAhora, pero preferimos el sugerido si cuadra.
+        let ahora = Date()
+        let fin = ahora.addingTimeInterval(ticket.duracionHoras * 3600)
+        let cal = Calendar.current
+        let weekday = cal.component(.weekday, from: ahora)
+        let startHour = cal.component(.hour, from: ahora)
+        let endHour = cal.component(.hour, from: fin)
+        
+        // Candidatos por turno; aquí no conocemos rol requerido exacto del servicio catálogo, usamos sugerido/asignado si posible
+        let candidatosBase = personal
+        
+        let candidatosElegibles = candidatosBase.filter { mec in
+            // Si hay sugerido, prioriza ese RFC; si no, cualquiera que cumpla turno y sin solape
+            let coincideSugerido = (ticket.rfcMecanicoSugerido == nil) || (ticket.rfcMecanicoSugerido == mec.rfc)
+            let horarioOK = mec.diasLaborales.contains(weekday) && (mec.horaEntrada <= startHour) && (mec.horaSalida >= endHour)
+            let sinSolape = !ServicioEnProceso.existeSolape(paraRFC: mec.rfc, inicio: ahora, fin: fin, tickets: todosLosTickets)
+            return coincideSugerido && horarioOK && (mec.estado == .disponible) && sinSolape
+        }
+        
+        guard let mecanico = candidatosElegibles.first ?? personal.first(where: { $0.rfc == ticket.rfcMecanicoSugerido ?? "" && $0.estado == .disponible }) else {
+            if !silencioso {
+                alertaError = "No hay mecánico disponible para iniciar el ticket programado."
+                mostrandoAlerta = true
+            }
+            let registro = DecisionRecord(
+                fecha: Date(),
+                titulo: "Auto-inicio fallido: \(ticket.nombreServicio)",
+                razon: "No hay mecánico disponible sin solapes para vehículo [\(ticket.vehiculo?.placas ?? "N/A")]. Se reintentará.",
+                queryUsuario: "Scheduler de Programados"
+            )
+            modelContext.insert(registro)
+            return
+        }
+        
+        // Validar stock (informativo en auto-inicio). Por ahora, mismo criterio que manual: nombres sin cantidades.
+        for nombre in ticket.productosConsumidos {
+            guard let p = productos.first(where: { $0.nombre == nombre }) else {
+                if !silencioso {
+                    alertaError = "Producto '\(nombre)' no encontrado en inventario."
+                    mostrandoAlerta = true
+                }
+                let registro = DecisionRecord(
+                    fecha: Date(),
+                    titulo: "Auto-inicio fallido: \(ticket.nombreServicio)",
+                    razon: "Producto '\(nombre)' no encontrado.",
+                    queryUsuario: "Scheduler de Programados"
+                )
+                modelContext.insert(registro)
+                return
+            }
+            if p.cantidad <= 0 {
+                if !silencioso {
+                    alertaError = "Stock insuficiente para '\(p.nombre)'."
+                    mostrandoAlerta = true
+                }
+                let registro = DecisionRecord(
+                    fecha: Date(),
+                    titulo: "Auto-inicio fallido: \(ticket.nombreServicio)",
+                    razon: "Stock insuficiente de '\(p.nombre)'.",
+                    queryUsuario: "Scheduler de Programados"
+                )
+                modelContext.insert(registro)
+                return
+            }
+        }
+        
+        // Descontar inventario (1 unidad por producto listado, por la limitación actual)
+        for nombre in ticket.productosConsumidos {
+            if let p = productos.first(where: { $0.nombre == nombre }) {
+                p.cantidad = max(0, p.cantidad - 1)
+            }
+        }
+        
+        // Cambiar estados
+        mecanico.estado = .ocupado
+        ticket.estado = .enProceso
+        ticket.rfcMecanicoAsignado = mecanico.rfc
+        ticket.nombreMecanicoAsignado = mecanico.nombre
+        ticket.horaInicio = ahora
+        ticket.horaFinEstimada = fin
+        
+        let registro = DecisionRecord(
+            fecha: Date(),
+            titulo: "Auto-iniciado: \(ticket.nombreServicio)",
+            razon: "Ticket programado iniciado para [\(ticket.vehiculo?.placas ?? "N/A")] por \(mecanico.nombre).",
+            queryUsuario: "Scheduler de Programados"
+        )
+        modelContext.insert(registro)
+    }
+    
+    // MARK: - Acciones Programados (manual)
     
     private func iniciarTicketAhora(_ ticket: ServicioEnProceso) {
         // 1) Recalcular candidato actual sin solapes y en turno
@@ -232,10 +353,6 @@ struct EnProcesoView: View {
                 mostrandoAlerta = true
                 return
             }
-            // Nota: no tenemos cantidades por producto en el ticket (solo nombres). Si deseas precisión,
-            // guarda cantidades por ingrediente en el ticket. De momento, asumimos cantidad 1.0 como mínima.
-            // Para ser conservadores: no bloqueamos aquí si no hay datos de cantidades.
-            // Si quisieras validar fuerte, necesitaríamos cantidades.
             if p.cantidad <= 0 {
                 alertaError = "Stock insuficiente para '\(p.nombre)'."
                 mostrandoAlerta = true
@@ -567,9 +684,6 @@ fileprivate struct ProgramarTicketModal: View {
         let startHour = cal.component(.hour, from: fechaInicio)
         let endHour = cal.component(.hour, from: endDate)
         
-        // Aquí no tenemos el Servicio catálogo original con rol/especialidad.
-        // Usamos el rol y disponibilidad del personal; si quieres filtrar por rol,
-        // podrías guardar rol requerido en el ticket al crearlo.
         let candidatosBase = personal.filter { mec in
             mec.diasLaborales.contains(weekday) &&
             (mec.horaEntrada <= startHour) && (mec.horaSalida >= endHour)
@@ -579,7 +693,6 @@ fileprivate struct ProgramarTicketModal: View {
             !ServicioEnProceso.existeSolape(paraRFC: $0.rfc, inicio: fechaInicio, fin: endDate, tickets: todosLosTickets)
         }
         
-        // Priorizar sugerido si está disponible
         if let rfcSug = ticket.rfcMecanicoSugerido,
            let sug = candidatosSinSolape.first(where: { $0.rfc == rfcSug }) {
             candidato = sug
@@ -593,7 +706,6 @@ fileprivate struct ProgramarTicketModal: View {
             conflictoMensaje = "No hay candidatos con turno adecuado."
         }
         
-        // Advertencia de stock (informativa)
         var faltantes: [String] = []
         for nombre in ticket.productosConsumidos {
             if let p = productos.first(where: { $0.nombre == nombre }), p.cantidad <= 0 {
@@ -953,3 +1065,4 @@ fileprivate struct CierreServicioModalView: View {
         return String(format: "%02i:%02i:%02i", horas, minutos, segs)
     }
 }
+
