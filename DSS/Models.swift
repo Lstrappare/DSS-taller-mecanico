@@ -48,11 +48,18 @@ enum FrecuenciaPago: String, Codable, CaseIterable {
     case mes = "Mes"
 }
 
+// Estado del ticket/servicio
+enum EstadoServicio: String, Codable, CaseIterable {
+    case programado
+    case enProceso
+    case completado
+    case cancelado
+}
+
 // MARK: - Modelos
 
 @Model
 class Personal {
-    // Identidad
     @Attribute(.unique) var rfc: String
     var curp: String?
     var nombre: String
@@ -60,7 +67,6 @@ class Personal {
     var telefono: String
     var telefonoActivo: Bool
 
-    // Trabajo
     var horaEntrada: Int
     var horaSalida: Int
     var rol: Rol
@@ -68,21 +74,16 @@ class Personal {
     var especialidades: [String]
     var fechaIngreso: Date
     var tipoContrato: TipoContrato
-    // Días laborables: Calendar weekday (1=Dom, 7=Sáb)
     var diasLaborales: [Int]
 
-    // Nómina - configuración y snapshots
     var prestacionesMinimas: Bool
     var tipoSalario: TipoSalario
     var frecuenciaPago: FrecuenciaPago
     var salarioMinimoReferencia: Double
 
-    // Nuevo: comisiones acumuladas (editable y automatizable)
     var comisiones: Double
-    // Nuevo: factor de integración configurable
     var factorIntegracion: Double
 
-    // Campos automáticos (persistidos como snapshot de cálculo)
     var salarioDiario: Double
     var sbc: Double
     var isrMensualEstimado: Double
@@ -96,20 +97,16 @@ class Personal {
     var manoDeObraSugerida: Double
     var ultimoCalculoNomina: Date?
 
-    // Documentación (rutas opcionales a archivos)
     var ineAdjuntoPath: String?
     var comprobanteDomicilioPath: String?
     var comprobanteEstudiosPath: String?
 
-    // Antigüedad / Asistencia
     var antiguedadDias: Int
     var bloqueoAsistenciaFecha: Date?
 
-    // Relación de asistencias
     @Relationship(deleteRule: .cascade, inverse: \AsistenciaDiaria.empleado)
     var asistencias: [AsistenciaDiaria] = []
 
-    // Calculadas
     var estaEnHorario: Bool {
         let calendario = Calendar.current
         let ahora = Date()
@@ -138,14 +135,13 @@ class Personal {
         especialidades: [String] = [],
         fechaIngreso: Date = Date(),
         tipoContrato: TipoContrato = .indefinido,
-        diasLaborales: [Int] = [2,3,4,5,6], // L-V por defecto
+        diasLaborales: [Int] = [2,3,4,5,6],
 
         prestacionesMinimas: Bool = true,
         tipoSalario: TipoSalario = .minimo,
         frecuenciaPago: FrecuenciaPago = .quincena,
         salarioMinimoReferencia: Double = 248.93,
 
-        // Nuevos
         comisiones: Double = 0.0,
         factorIntegracion: Double = 1.0452,
 
@@ -213,21 +209,11 @@ class Personal {
         self.bloqueoAsistenciaFecha = bloqueoAsistenciaFecha
     }
 
-    // MARK: - Nómina: Funciones de negocio
-
-    // 1) Promedio de comisiones según días (quincena 15, mes 30.4)
-    func calcularComisiones(promedioSobreDias dias: Double) -> Double {
-        guard dias > 0 else { return 0 }
-        return comisiones / dias
-    }
-
-    // 2) SBC = (Salario Diario + Comisiones Promediadas) / FactorIntegracion
     static func calcularSBC(salarioDiario: Double, comisionesPromedioDiarias: Double, factorIntegracion: Double) -> Double {
         let factor = max(factorIntegracion, 0.0001)
         return max(0, (salarioDiario + comisionesPromedioDiarias) / factor)
     }
 
-    // 3) IMSS aproximado desde SBC y salario diario (coherente con UI actual)
     static func calcularIMSS(desdeSBC sbc: Double, salarioDiario: Double, prestacionesMinimas: Bool) -> (obrera: Double, patronal: Double, total: Double) {
         let ingresoMensual = salarioDiario * 30.4
         let factorPrest = prestacionesMinimas ? 1.0452 : 1.0
@@ -237,7 +223,6 @@ class Personal {
         return (obrera, patronal, obrera + patronal)
     }
 
-    // 4) ISR aproximado: 0 si mínimo; si mixto, 10% sobre excedente del mínimo
     static func calcularISR(salarioDiario: Double, comisionesPromedioDiarias: Double, tipoSalario: TipoSalario) -> Double {
         guard tipoSalario == .mixto else { return 0 }
         let ingresoMensual = (salarioDiario + comisionesPromedioDiarias) * 30.4
@@ -246,49 +231,38 @@ class Personal {
         return max(0, ingresoMensual - baseMinimo) * 0.10
     }
 
-    // 5) Recalcular y actualizar snapshots encadenando todas las reglas
     func recalcularYActualizarSnapshots() {
-        // Salario diario base = salario mínimo de referencia
         let salarioDiarioBase = salarioMinimoReferencia
-
-        // Promedio de comisiones según frecuencia
         let diasPromedio: Double = (frecuenciaPago == .quincena) ? 15.0 : 30.4
-        let comisionesPromedioDiarias = (tipoSalario == .mixto) ? calcularComisiones(promedioSobreDias: diasPromedio) : 0.0
+        let comisionesPromedioDiarias = (tipoSalario == .mixto) ? (comisiones / diasPromedio) : 0.0
 
-        // SBC
         let sbcCalc = Personal.calcularSBC(
             salarioDiario: salarioDiarioBase,
             comisionesPromedioDiarias: comisionesPromedioDiarias,
             factorIntegracion: factorIntegracion
         )
 
-        // IMSS
         let (obrera, patronal, imssTotal) = Personal.calcularIMSS(
             desdeSBC: sbcCalc,
             salarioDiario: salarioDiarioBase,
             prestacionesMinimas: prestacionesMinimas
         )
 
-        // ISR
         let isr = Personal.calcularISR(
             salarioDiario: salarioDiarioBase,
             comisionesPromedioDiarias: comisionesPromedioDiarias,
             tipoSalario: tipoSalario
         )
 
-        // Ingreso mensual bruto (salario + comisiones del periodo)
         let ingresoMensualBruto = (salarioDiarioBase * 30.4) + (tipoSalario == .mixto ? comisiones : 0.0)
 
-        // Sueldo neto y costo real
         let sueldoNeto = max(0, ingresoMensualBruto - isr - obrera)
         let costoReal = ingresoMensualBruto + patronal
         let horasMes = max(1, horasSemanalesRequeridas) * 4.0
         let costoHoraCalc = costoReal / horasMes
 
-        // Sugerencia de mano de obra (markup)
         let moSug = costoHoraCalc * 2.2
 
-        // Asignar snapshots
         self.salarioDiario = salarioDiarioBase
         self.sbc = sbcCalc
         self.isrMensualEstimado = max(0, isr)
@@ -306,31 +280,20 @@ class Personal {
 @Model
 class AsistenciaDiaria {
     @Attribute(.unique) var id: UUID
-    // Relación inversa con Personal
     var empleado: Personal
-
-    // Día (normalizado a medianoche)
     var fecha: Date
-
-    // Control de jornada
     var horaEntrada: Date?
     var horaSalida: Date?
-    // Pausas como pares inicio/fin serializados
-    var pausasJSON: Data? // Codable [(inicio: Date, fin: Date?)]
+    var pausasJSON: Data?
     var minutosProductivos: Int
     var minutosImproductivos: Int
-
-    // Estado final y bloqueo
     var estadoFinal: EstadoAsistencia
     var bloqueada: Bool
-
-    // Auditoría
     var timestampCreacion: Date
 
     init(empleado: Personal, fecha: Date) {
         self.id = UUID()
         self.empleado = empleado
-        // Normalizar fecha a medianoche
         self.fecha = Calendar.current.startOfDay(for: fecha)
         self.horaEntrada = nil
         self.horaSalida = nil
@@ -353,7 +316,7 @@ class PayrollSettings {
 
     init(
         salarioMinimoVigente: Double = 248.93,
-        proporcionPatronDefault: Double = 0.77, // ejemplo aproximado
+        proporcionPatronDefault: Double = 0.77,
         proporcionTrabajadorDefault: Double = 0.23,
         fechaUltimaActualizacion: Date = Date()
     ) {
@@ -365,7 +328,6 @@ class PayrollSettings {
     }
 }
 
-// Tipo fiscal del producto
 enum TipoFiscalProducto: String, Codable, CaseIterable {
     case iva16 = "IVA 16%"
     case exento = "Exento"
@@ -379,8 +341,6 @@ enum TipoFiscalProducto: String, Codable, CaseIterable {
     }
 }
 
-// Productos
-
 @Model
 class Producto {
     @Attribute(.unique) var nombre: String
@@ -390,7 +350,6 @@ class Producto {
     var unidadDeMedida: String
     var informacion: String
 
-    // Nuevos campos
     var categoria: String
     var proveedor: String
     var lote: String
@@ -445,8 +404,6 @@ class Producto {
     }
 }
 
-// Servicios catálogo
-
 struct Ingrediente: Codable, Hashable {
     var nombreProducto: String
     var cantidadUsada: Double
@@ -462,17 +419,14 @@ class Servicio {
     var precioAlCliente: Double
     var duracionHoras: Double
 
-    // Nuevos campos de configuración y precios (Actualizado para montos fijos)
-    var costoBase: Double // Deprecado o usado como backup
+    var costoBase: Double
     var requiereRefacciones: Bool
     var costoRefacciones: Double
     
-    // Nuevos campos por montos (Requerimiento actual)
     var costoManoDeObra: Double
     var gananciaDeseada: Double
     var gastosAdministrativos: Double
     
-    // Campos deprecados (mantener para migración si es necesario, o ignorar)
     var porcentajeManoDeObra: Double
     var porcentajeGastosAdministrativos: Double
     var porcentajeMargen: Double
@@ -494,7 +448,6 @@ class Servicio {
          requiereRefacciones: Bool = false,
          costoRefacciones: Double = 0.0,
          
-         // Nuevos parámetros con defaults
          costoManoDeObra: Double = 0.0,
          gananciaDeseada: Double = 0.0,
          gastosAdministrativos: Double = 0.0,
@@ -531,13 +484,10 @@ class Servicio {
         self.aplicarIVA = aplicarIVA
         self.aplicarISR = aplicarISR
         self.isrPorcentajeEstimado = isrPorcentajeEstimado
-        // Si no viene un precio final, usa el precioAlCliente como inicial para compatibilidad
         self.precioFinalAlCliente = precioFinalAlCliente ?? precioAlCliente
         self.precioModificadoManualmente = precioModificadoManualmente
     }
 }
-
-// Decisiones (historial)
 
 @Model
 class DecisionRecord {
@@ -554,8 +504,6 @@ class DecisionRecord {
     }
 }
 
-// Tickets en proceso
-
 @Model
 class ServicioEnProceso {
     @Attribute(.unique) var id: UUID
@@ -565,7 +513,15 @@ class ServicioEnProceso {
     var horaInicio: Date
     var horaFinEstimada: Date
     var productosConsumidos: [String]
+    // NUEVO: cantidades exactas por producto
+    var productosConCantidad: [Ingrediente]
     var vehiculo: Vehiculo?
+    
+    var estado: EstadoServicio
+    var fechaProgramadaInicio: Date?
+    var duracionHoras: Double
+    var rfcMecanicoSugerido: String?
+    var nombreMecanicoSugerido: String?
 
     init(nombreServicio: String,
          rfcMecanicoAsignado: String,
@@ -583,7 +539,14 @@ class ServicioEnProceso {
         let segundosDeDuracion = duracionHoras * 3600
         self.horaFinEstimada = horaInicio.addingTimeInterval(segundosDeDuracion)
         self.productosConsumidos = productosConsumidos
+        self.productosConCantidad = [] // default vacío para compatibilidad
         self.vehiculo = vehiculo
+        
+        self.estado = .enProceso
+        self.fechaProgramadaInicio = nil
+        self.duracionHoras = duracionHoras
+        self.rfcMecanicoSugerido = nil
+        self.nombreMecanicoSugerido = nil
     }
 
     var tiempoRestanteSegundos: Double {
@@ -593,9 +556,24 @@ class ServicioEnProceso {
     var estaCompletado: Bool {
         return tiempoRestanteSegundos == 0
     }
+    
+    static func existeSolape(paraRFC rfc: String, inicio: Date, fin: Date, tickets: [ServicioEnProceso]) -> Bool {
+        for t in tickets {
+            guard (t.estado == .programado || t.estado == .enProceso) else { continue }
+            guard t.rfcMecanicoAsignado == rfc || t.rfcMecanicoSugerido == rfc else { continue }
+            let ti = t.fechaProgramadaInicio ?? t.horaInicio
+            let tf: Date = {
+                if t.estado == .programado {
+                    return (t.fechaProgramadaInicio ?? t.horaInicio).addingTimeInterval(t.duracionHoras * 3600)
+                } else {
+                    return t.horaFinEstimada
+                }
+            }()
+            if inicio < tf && fin > ti { return true }
+        }
+        return false
+    }
 }
-
-// Chat / Consulta
 
 @Model
 class ChatMessage {
@@ -613,8 +591,6 @@ class ChatMessage {
         self.isFromUser = isFromUser
     }
 }
-
-// Clientes y vehículos
 
 @Model
 class Vehiculo {
