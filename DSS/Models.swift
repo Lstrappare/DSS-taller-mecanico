@@ -462,13 +462,21 @@ class Servicio {
     var precioAlCliente: Double
     var duracionHoras: Double
 
-    // Nuevos campos de configuración y precios
-    var costoBase: Double
+    // Nuevos campos de configuración y precios (Actualizado para montos fijos)
+    var costoBase: Double // Deprecado o usado como backup
     var requiereRefacciones: Bool
     var costoRefacciones: Double
+    
+    // Nuevos campos por montos (Requerimiento actual)
+    var costoManoDeObra: Double
+    var gananciaDeseada: Double
+    var gastosAdministrativos: Double
+    
+    // Campos deprecados (mantener para migración si es necesario, o ignorar)
     var porcentajeManoDeObra: Double
     var porcentajeGastosAdministrativos: Double
     var porcentajeMargen: Double
+    
     var aplicarIVA: Bool
     var aplicarISR: Bool
     var isrPorcentajeEstimado: Double
@@ -485,6 +493,12 @@ class Servicio {
          costoBase: Double = 0.0,
          requiereRefacciones: Bool = false,
          costoRefacciones: Double = 0.0,
+         
+         // Nuevos parámetros con defaults
+         costoManoDeObra: Double = 0.0,
+         gananciaDeseada: Double = 0.0,
+         gastosAdministrativos: Double = 0.0,
+         
          porcentajeManoDeObra: Double = 40.0,
          porcentajeGastosAdministrativos: Double = 20.0,
          porcentajeMargen: Double = 30.0,
@@ -505,9 +519,15 @@ class Servicio {
         self.costoBase = costoBase
         self.requiereRefacciones = requiereRefacciones
         self.costoRefacciones = costoRefacciones
+        
+        self.costoManoDeObra = costoManoDeObra
+        self.gananciaDeseada = gananciaDeseada
+        self.gastosAdministrativos = gastosAdministrativos
+        
         self.porcentajeManoDeObra = porcentajeManoDeObra
         self.porcentajeGastosAdministrativos = porcentajeGastosAdministrativos
         self.porcentajeMargen = porcentajeMargen
+        
         self.aplicarIVA = aplicarIVA
         self.aplicarISR = aplicarISR
         self.isrPorcentajeEstimado = isrPorcentajeEstimado
