@@ -25,6 +25,16 @@ struct PersonalView: View {
     @State private var filtroRol: Rol? = nil
     @State private var filtroEstado: EstadoEmpleado? = nil
     
+    // Ordenamiento (en línea con InventarioView)
+    enum SortOption: String, CaseIterable, Identifiable {
+        case nombre = "Nombre"
+        case rol = "Rol"
+        case estado = "Estado"
+        var id: String { rawValue }
+    }
+    @State private var sortOption: SortOption = .nombre
+    @State private var sortAscending: Bool = true
+    
     var filteredPersonal: [Personal] {
         var base = personal
         
@@ -44,61 +54,171 @@ struct PersonalView: View {
         // Filtro por estado
         if let filtroEstado { base = base.filter { $0.estado == filtroEstado } }
         
+        // Ordenamiento similar a InventarioView
+        base.sort { a, b in
+            switch sortOption {
+            case .nombre:
+                let cmp = a.nombre.localizedCaseInsensitiveCompare(b.nombre)
+                return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
+            case .rol:
+                let cmp = a.rol.rawValue.localizedCaseInsensitiveCompare(b.rol.rawValue)
+                return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
+            case .estado:
+                let cmp = a.estado.rawValue.localizedCaseInsensitiveCompare(b.estado.rawValue)
+                return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
+            }
+        }
+        
         return base
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Cabecera con métricas y CTA
+        VStack(alignment: .leading, spacing: 12) {
+            // Header compacto como en InventarioView
+            header
+            
+            // Barra única: búsqueda + orden + filtros + limpiar
+            filtrosView
+            
+            // Lista
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    // Contador de resultados
+                    HStack(spacing: 6) {
+                        Image(systemName: "number")
+                            .foregroundColor(Color("MercedesPetrolGreen"))
+                        Text("\(filteredPersonal.count) resultado\(filteredPersonal.count == 1 ? "" : "s")")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        Spacer()
+                    }
+                    
+                    if filteredPersonal.isEmpty {
+                        emptyStateView
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 12)
+                    } else {
+                        ForEach(filteredPersonal) { mecanico in
+                            PersonalCard(mecanico: mecanico) {
+                                modalMode = .edit(mecanico)
+                            }
+                            .onTapGesture { modalMode = .edit(mecanico) }
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                }
+                .padding(.top, 2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .background(
+            LinearGradient(colors: [Color("MercedesBackground"), Color("MercedesBackground").opacity(0.9)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+        )
+        .sheet(item: $modalMode) { incomingMode in
+            PersonalFormView(mode: incomingMode)
+                .environment(\.modelContext, modelContext)
+        }
+    }
+    
+    // Header compacto (alineado al de InventarioView)
+    private var header: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(
+                    LinearGradient(
+                        colors: [Color("MercedesCard"), Color("MercedesBackground").opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+                .frame(height: 110)
+            
             HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Gestión de Personal")
-                        .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
+                        .font(.title2).fontWeight(.bold).foregroundColor(.white)
                     HStack(spacing: 10) {
                         Label("\(personal.count) empleado\(personal.count == 1 ? "" : "s")", systemImage: "person.2.fill")
-                            .font(.subheadline).foregroundColor(.gray)
+                            .font(.footnote).foregroundColor(.gray)
                         let disponibles = personal.filter { $0.estado == .disponible && $0.estaEnHorario }.count
                         Label("\(disponibles) disponibles ahora", systemImage: "checkmark.seal.fill")
-                            .font(.subheadline).foregroundColor(.gray)
+                            .font(.footnote).foregroundColor(.gray)
                     }
                 }
                 Spacer()
                 Button {
                     modalMode = .add
                 } label: {
-                    Label("Añadir Personal", systemImage: "plus.circle.fill")
-                        .font(.headline)
-                        .padding(.vertical, 10).padding(.horizontal, 14)
+                    Label("Añadir", systemImage: "plus.circle.fill")
+                        .font(.subheadline)
+                        .padding(.vertical, 6).padding(.horizontal, 10)
                         .background(Color("MercedesPetrolGreen"))
                         .foregroundColor(.white)
-                        .cornerRadius(10)
+                        .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
+                .help("Registrar nuevo empleado")
             }
-            
-            // Buscador
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(Color("MercedesPetrolGreen"))
-                TextField("Buscar por Nombre, RFC, CURP, Rol o Especialidad...", text: $searchQuery)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .animation(.easeInOut(duration: 0.15), value: searchQuery)
-                if !searchQuery.isEmpty {
+            .padding(.horizontal, 12)
+        }
+    }
+    
+    // Filtros compactos (patrón InventarioView)
+    private var filtrosView: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                // Buscar
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                    TextField("Buscar por Nombre, RFC, CURP, Rol o Especialidad...", text: $searchQuery)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .font(.subheadline)
+                        .animation(.easeInOut(duration: 0.15), value: searchQuery)
+                    if !searchQuery.isEmpty {
+                        Button {
+                            searchQuery = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Limpiar búsqueda")
+                    }
+                }
+                .padding(8)
+                .background(Color("MercedesCard"))
+                .cornerRadius(8)
+                
+                // Orden
+                HStack(spacing: 6) {
+                    Picker("Ordenar", selection: $sortOption) {
+                        ForEach(SortOption.allCases) { opt in
+                            Text(opt.rawValue).tag(opt)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 140)
                     Button {
-                        searchQuery = ""
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            sortAscending.toggle()
+                        }
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.gray)
+                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                            .font(.subheadline)
+                            .padding(6)
+                            .background(Color("MercedesCard"))
+                            .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
+                    .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
                 }
-            }
-            .padding(12)
-            .background(Color("MercedesCard"))
-            .cornerRadius(10)
-            
-            // Filtros rápidos
-            HStack(spacing: 12) {
+                
+                // Rol
                 Picker("Rol", selection: Binding(
                     get: { filtroRol ?? Rol?.none ?? nil },
                     set: { newValue in filtroRol = newValue }
@@ -109,7 +229,10 @@ struct PersonalView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                .frame(maxWidth: 220)
+                .help("Filtrar por rol")
                 
+                // Estado
                 Picker("Estado", selection: Binding(
                     get: { filtroEstado ?? EstadoEmpleado?.none ?? nil },
                     set: { newValue in filtroEstado = newValue }
@@ -120,63 +243,68 @@ struct PersonalView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                .frame(maxWidth: 240)
+                .help("Filtrar por estado")
                 
-                if filtroRol != nil || filtroEstado != nil {
-                    Button {
-                        withAnimation {
-                            filtroRol = nil
-                            filtroEstado = nil
+                // Filtros activos + limpiar
+                if filtroRol != nil || filtroEstado != nil || !searchQuery.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Text("Filtros activos")
+                        if let r = filtroRol {
+                            Text("Rol: \(r.rawValue)")
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color("MercedesBackground")).cornerRadius(6)
                         }
-                    } label: {
-                        Label("Limpiar filtros", systemImage: "line.3.horizontal.decrease.circle")
-                            .font(.caption)
+                        if let e = filtroEstado {
+                            Text("Estado: \(e.rawValue)")
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color("MercedesBackground")).cornerRadius(6)
+                        }
+                        if !searchQuery.isEmpty {
+                            Text("“\(searchQuery)”")
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color("MercedesBackground")).cornerRadius(6)
+                        }
+                        Button {
+                            withAnimation {
+                                filtroRol = nil
+                                filtroEstado = nil
+                                searchQuery = ""
+                            }
+                        } label: {
+                            Text("Limpiar")
+                                .font(.caption2)
+                                .padding(.horizontal, 6).padding(.vertical, 4)
+                                .background(Color("MercedesCard"))
+                                .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.gray)
+                        .help("Quitar filtros activos")
                     }
-                    .buttonStyle(.plain)
+                    .font(.caption2)
                     .foregroundColor(.gray)
                 }
+                
                 Spacer()
             }
-            
-            // Lista
-            ScrollView {
-                LazyVStack(spacing: 14) {
-                    if filteredPersonal.isEmpty {
-                        emptyStateView
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 40)
-                    } else {
-                        ForEach(filteredPersonal) { mecanico in
-                            PersonalCard(mecanico: mecanico) {
-                                modalMode = .edit(mecanico)
-                            }
-                            .onTapGesture { modalMode = .edit(mecanico) }
-                        }
-                    }
-                }
-                .padding(.top, 4)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(30)
-        .sheet(item: $modalMode) { incomingMode in
-            PersonalFormView(mode: incomingMode)
-                .environment(\.modelContext, modelContext)
         }
     }
     
     // Empty state agradable
     private var emptyStateView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             Image(systemName: "person.crop.circle.badge.questionmark")
-                .font(.system(size: 42, weight: .bold))
+                .font(.system(size: 36, weight: .bold))
                 .foregroundColor(Color("MercedesPetrolGreen"))
             Text(searchQuery.isEmpty ? "No hay personal registrado aún." :
                  "No se encontraron empleados para “\(searchQuery)”.")
-                .font(.headline)
+                .font(.subheadline)
                 .foregroundColor(.gray)
             if searchQuery.isEmpty {
                 Text("Añade tu primer empleado para comenzar a asignar servicios.")
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundColor(.gray)
             }
         }
@@ -192,7 +320,7 @@ struct PersonalView: View {
     }
 }
 
-// Tarjeta individual de personal
+// Tarjeta individual de personal (estilo alineado a InventarioView)
 fileprivate struct PersonalCard: View {
     let mecanico: Personal
     var onEdit: () -> Void
@@ -228,10 +356,10 @@ fileprivate struct PersonalCard: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text(mecanico.nombre)
-                            .font(.title3).fontWeight(.semibold)
+                            .font(.headline).fontWeight(.semibold)
                         Spacer()
                         Text(mecanico.estaEnHorario ? mecanico.estado.rawValue : "Fuera de Turno")
-                            .font(.caption)
+                            .font(.caption2)
                             .padding(.horizontal, 8).padding(.vertical, 4)
                             .background((mecanico.estaEnHorario ? estadoColor : .gray).opacity(0.18))
                             .foregroundColor(mecanico.estaEnHorario ? estadoColor : .gray)
@@ -242,18 +370,19 @@ fileprivate struct PersonalCard: View {
                             onEdit()
                         } label: {
                             Label("Editar", systemImage: "pencil")
-                                .font(.subheadline)
-                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .font(.caption)
+                                .padding(.horizontal, 8).padding(.vertical, 5)
                                 .background(Color("MercedesBackground"))
-                                .cornerRadius(8)
+                                .cornerRadius(6)
                         }
                         .buttonStyle(.plain)
+                        .foregroundColor(.white)
                     }
                     
                     HStack(spacing: 8) {
                         chip(text: mecanico.rol.rawValue, icon: "person.badge.shield.checkmark.fill")
                         Text("Turno: \(mecanico.horaEntrada) - \(mecanico.horaSalida)")
-                            .font(.caption).foregroundColor(.gray)
+                            .font(.caption2).foregroundColor(.gray)
                     }
                 }
             }
@@ -261,27 +390,27 @@ fileprivate struct PersonalCard: View {
             // Contacto
             HStack(spacing: 12) {
                 Link(destination: URL(string: "mailto:\(mecanico.email)")!) {
-                    Label(mecanico.email, systemImage: "envelope.fill")
+                    Label(mecanico.email.isEmpty ? "Email: N/A" : mecanico.email, systemImage: "envelope.fill")
                 }
                 .buttonStyle(.plain)
-                .font(.caption)
-                .foregroundColor(Color("MercedesPetrolGreen"))
+                .font(.caption2)
+                .foregroundColor(mecanico.email.isEmpty ? .gray : Color("MercedesPetrolGreen"))
                 
                 if mecanico.telefonoActivo && !mecanico.telefono.isEmpty {
                     Link(destination: URL(string: "tel:\(mecanico.telefono)")!) {
                         Label(mecanico.telefono, systemImage: "phone.fill")
                     }
                     .buttonStyle(.plain)
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundColor(Color("MercedesPetrolGreen"))
                 } else {
                     Label("Tel: N/A", systemImage: "phone.fill")
-                        .font(.caption).foregroundColor(.gray)
+                        .font(.caption2).foregroundColor(.gray)
                 }
                 
                 Spacer()
                 Text("RFC: \(mecanico.rfc)")
-                    .font(.caption).foregroundColor(.gray)
+                    .font(.caption2).foregroundColor(.gray)
             }
             
             // Especialidades como chips
@@ -299,10 +428,17 @@ fileprivate struct PersonalCard: View {
                 }
             }
         }
-        .padding(14)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color("MercedesCard"))
-        .cornerRadius(12)
+        .background(
+            ZStack {
+                Color("MercedesCard")
+                LinearGradient(colors: [Color.white.opacity(0.012), Color("MercedesBackground").opacity(0.06)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        )
+        .cornerRadius(10)
+        .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
     }
     
     private func chip(text: String, icon: String) -> some View {
@@ -310,10 +446,10 @@ fileprivate struct PersonalCard: View {
             Image(systemName: icon)
             Text(text)
         }
-        .font(.caption)
+        .font(.caption2)
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(Color("MercedesBackground"))
-        .cornerRadius(8)
+        .cornerRadius(6)
         .foregroundColor(.white)
     }
 }
@@ -410,7 +546,6 @@ fileprivate struct PersonalFormView: View {
             _diasLaborales = State(initialValue: Set(personal.diasLaborales))
             
             _prestacionesMinimas = State(initialValue: personal.prestacionesMinimas)
-            // Migración lógica: superior/comision -> mixto (si existiera legado)
             let ts: TipoSalario = personal.tipoSalario
             _tipoSalario = State(initialValue: ts)
             _frecuenciaPago = State(initialValue: personal.frecuenciaPago)
@@ -451,8 +586,11 @@ fileprivate struct PersonalFormView: View {
         !RFCValidator.isValidRFC(rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
     }
     private var horasInvalidas: Bool {
-        !(Int(horaEntradaString).map { (0...23).contains($0) } ?? false) ||
-        !(Int(horaSalidaString).map { (0...23).contains($0) } ?? false)
+        // Ambas válidas en 0...23 y no permitir duración cero
+        guard let he = Int(horaEntradaString), let hs = Int(horaSalidaString),
+              (0...23).contains(he), (0...23).contains(hs) else { return true }
+        // Entrada == Salida => inválido (turno de 0 horas)
+        return he == hs
     }
     private var salarioMinimoInvalido: Bool {
         Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) == nil
@@ -572,9 +710,9 @@ fileprivate struct PersonalFormView: View {
                     }
                     HStack(spacing: 16) {
                         FormField(title: "• Entrada (0-23)", placeholder: "ej. 9", text: $horaEntradaString)
-                            .validationHint(isInvalid: horasInvalidas, message: "0 a 23.")
+                            .validationHint(isInvalid: horasInvalidas, message: "0 a 23 y distinto de salida.")
                         FormField(title: "• Salida (0-23)", placeholder: "ej. 18", text: $horaSalidaString)
-                            .validationHint(isInvalid: horasInvalidas, message: "0 a 23.")
+                            .validationHint(isInvalid: horasInvalidas, message: "0 a 23 y distinto de entrada.")
                     }
                     // Días laborables
                     VStack(alignment: .leading, spacing: 6) {
@@ -625,7 +763,6 @@ fileprivate struct PersonalFormView: View {
                                 .foregroundColor(.gray)
                         }
                     } else {
-                        // Si es mínimo, UI oculta y mantenemos 0
                         EmptyView()
                     }
                     
@@ -685,9 +822,9 @@ fileprivate struct PersonalFormView: View {
                     }
                 }
                 
-                // Sección: Asistencia (controles simples)
+                // Sección: Asistencia (solo botón de ausencia)
                 Section {
-                    SectionHeader(title: "Asistencia (automática)", subtitle: "Botones de jornada")
+                    SectionHeader(title: "Asistencia (automática)", subtitle: "Acciones del día")
                     AssistToolbar(
                         estado: $estado,
                         asistenciaBloqueada: $asistenciaBloqueada,
@@ -705,7 +842,6 @@ fileprivate struct PersonalFormView: View {
             .onChange(of: salarioMinimoReferenciaString) { _, _ in recalcularNominaPreview() }
             .onChange(of: prestacionesMinimas) { _, _ in recalcularNominaPreview() }
             .onChange(of: tipoSalario) { _, _ in
-                // Si es mínimo, forzamos comisiones = 0 en la UI
                 if tipoSalario == .minimo {
                     comisionesString = "0.00"
                 }
@@ -826,6 +962,11 @@ fileprivate struct PersonalFormView: View {
               (0...23).contains(horaEntrada),
               (0...23).contains(horaSalida) else {
             errorMsg = "Las horas deben ser números válidos entre 0 y 23."
+            return
+        }
+        // Rechazar duración cero
+        guard horaEntrada != horaSalida else {
+            errorMsg = "La hora de entrada y salida no pueden ser iguales."
             return
         }
         guard let salarioMinimoRef = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) else {
@@ -1207,48 +1348,7 @@ fileprivate struct AssistToolbar: View {
     
     var body: some View {
         HStack(spacing: 8) {
-            Button {
-                if !asistenciaBloqueada { estado = .disponible }
-            } label: { Label("INICIAR JORNADA", systemImage: "play.circle.fill") }
-            .buttonStyle(.plain)
-            .padding(8).background(Color("MercedesBackground")).cornerRadius(8)
-            .foregroundColor(asistenciaBloqueada ? .gray : Color("MercedesPetrolGreen"))
-            .disabled(asistenciaBloqueada)
-            
-            Button {
-                if !asistenciaBloqueada { estado = .descanso }
-            } label: { Label("PAUSA / COMIDA", systemImage: "pause.circle.fill") }
-            .buttonStyle(.plain)
-            .padding(8).background(Color("MercedesBackground")).cornerRadius(8)
-            .foregroundColor(asistenciaBloqueada ? .gray : .yellow)
-            .disabled(asistenciaBloqueada)
-            
-            Button {
-                if !asistenciaBloqueada { estado = .ocupado }
-            } label: { Label("OCUPADO / SALIDA", systemImage: "wrench.and.screwdriver") }
-            .buttonStyle(.plain)
-            .padding(8).background(Color("MercedesBackground")).cornerRadius(8)
-            .foregroundColor(asistenciaBloqueada ? .gray : .orange)
-            .disabled(asistenciaBloqueada)
-            
-            Button {
-                if !asistenciaBloqueada { estado = .disponible }
-            } label: { Label("REANUDAR", systemImage: "arrow.clockwise.circle.fill") }
-            .buttonStyle(.plain)
-            .padding(8).background(Color("MercedesBackground")).cornerRadius(8)
-            .foregroundColor(asistenciaBloqueada ? .gray : .green)
-            .disabled(asistenciaBloqueada)
-            
-            Button {
-                if !asistenciaBloqueada { estado = .descanso }
-            } label: { Label("FIN JORNADA", systemImage: "stop.circle.fill") }
-            .buttonStyle(.plain)
-            .padding(8).background(Color("MercedesBackground")).cornerRadius(8)
-            .foregroundColor(asistenciaBloqueada ? .gray : .red)
-            .disabled(asistenciaBloqueada)
-            
             Spacer()
-            
             Button {
                 onMarcarAusencia()
             } label: {
@@ -1263,3 +1363,4 @@ fileprivate struct AssistToolbar: View {
         .font(.caption)
     }
 }
+
