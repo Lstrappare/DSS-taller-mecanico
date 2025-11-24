@@ -14,77 +14,111 @@ fileprivate enum ProductModalMode: Identifiable {
     }
 }
 
-// --- Helpers de precio para productos (flujo corregido) ---
+// --- Helpers de precio para productos (flujo confirmado) ---
 fileprivate enum ProductPricingHelpers {
-    // 1) Base sin IVA con margen: base = costo + margen(costo)
-    static func baseConMargen(costo: Double, porcentajeMargen: Double) -> Double {
-        costo + (costo * (porcentajeMargen / 100.0))
-    }
-    // 2) IVA sobre base
-    static func ivaSobreBase(base: Double, ivaTasa: Double) -> Double {
-        base * ivaTasa
-    }
-    // 3) Precio final sugerido: base + iva
-    static func precioSugerido(base: Double, iva: Double) -> Double {
-        base + iva
-    }
-    // 4) Gastos administrativos sobre base (sin IVA)
-    static func gastoAdministrativo(base: Double, porcentajeAdmin: Double) -> Double {
-        base * (porcentajeAdmin / 100.0)
-    }
-    // 5) Utilidad bruta antes de gastos
-    static func utilidadAntesDeGastos(base: Double, costo: Double) -> Double {
-        base - costo
-    }
-    // 6) Utilidad después de gastos
-    static func utilidadDespuesDeGastos(utilidadAntes: Double, gastoAdmin: Double) -> Double {
-        utilidadAntes - gastoAdmin
-    }
-    // 7) ISR aproximado sobre utilidad después de gastos
-    static func isrAproximado(utilidadDespuesGastos: Double, tasaISR: Double) -> Double {
-        max(0, utilidadDespuesGastos) * (tasaISR / 100.0)
-    }
-    // 8) Margen real respecto al precio final (editable)
-    static func margenReal(utilidadDespuesGastos: Double, precioFinal: Double) -> Double {
-        guard precioFinal > 0 else { return 0 }
-        return utilidadDespuesGastos / precioFinal
-    }
-    // Utilidad práctica si el precio final fue editado (base desde precio final)
-    static func utilidadDespuesDeGastosConPrecioFinal(precioFinalSinIVA: Double, costo: Double, porcentajeAdmin: Double) -> Double {
-        // precioFinalSinIVA representa la base (sin IVA) cuando el usuario edita el precio final
-        let utilidadAntes = utilidadAntesDeGastos(base: precioFinalSinIVA, costo: costo)
-        let gastoAdmin = gastoAdministrativo(base: precioFinalSinIVA, porcentajeAdmin: porcentajeAdmin)
-        return utilidadDespuesDeGastos(utilidadAntes: utilidadAntes, gastoAdmin: gastoAdmin)
-    }
     // Diferencia final vs sugerido
     static func variacionPrecio(final: Double, sugerido: Double) -> Double {
         final - sugerido
     }
-    // Si el costo incluye IVA y queremos recuperar el costo neto (no usado en el nuevo flujo, pero útil si se necesitara)
-    static func costoSinIVA(desdeCostoConIVA costo: Double, ivaTasa: Double) -> Double {
-        costo / max(1 + ivaTasa, 0.0001)
+    // NUEVO: Flujo según reglas confirmadas por el usuario
+    // 1) Partimos del costo
+    // 2) Ganancia y gastos admin calculados sobre el costo
+    // 3) IVA del 16% sobre el subtotal (costo + ganancia + admin)
+    // 4) ISR sobre la utilidad total (ganancia + admin)
+    struct ReglaCalculoResultado {
+        let ganancia: Double
+        let gastosAdmin: Double
+        let subtotalAntesIVA: Double
+        let iva: Double
+        let precioSugeridoConIVA: Double
+        let utilidadTotal: Double
+        let isr: Double
+        let precioNetoDespuesISR: Double
+        // NUEVO: Reparto proporcional de la utilidad después del ISR
+        let utilidadRealDespuesISR: Double
+        let proporcionGanancia: Double
+        let proporcionAdmin: Double
+        let gananciaRealDespuesISR: Double
+        let gastosAdminRealesDespuesISR: Double
+    }
+    
+    static func calcularPrecioVentaSegunReglas(costo: Double,
+                                               porcentajeGanancia: Double,
+                                               porcentajeGastosAdmin: Double,
+                                               isrPorcentaje: Double,
+                                               ivaTasaFija: Double = 0.16) -> ReglaCalculoResultado {
+        let ganancia = costo * (porcentajeGanancia / 100.0)
+        let gastosAdmin = costo * (porcentajeGastosAdmin / 100.0)
+        let subtotal = costo + ganancia + gastosAdmin
+        let iva = subtotal * ivaTasaFija
+        let precioConIVA = subtotal + iva
+        let utilidadTotal = ganancia + gastosAdmin
+        let isr = utilidadTotal * (isrPorcentaje / 100.0)
+        let precioNetoDespuesISR = precioConIVA - isr
+        
+        // NUEVO: Reparto proporcional de utilidad después del ISR
+        let utilidadRealDespuesISR = max(0, utilidadTotal - isr)
+        let denominador = max(utilidadTotal, 0.0000001) // evitar división por cero
+        let proporcionGanancia = ganancia / denominador
+        let proporcionAdmin = gastosAdmin / denominador
+        let gananciaRealDespuesISR = utilidadRealDespuesISR * proporcionGanancia
+        let gastosAdminRealesDespuesISR = utilidadRealDespuesISR * proporcionAdmin
+        
+        return ReglaCalculoResultado(
+            ganancia: ganancia,
+            gastosAdmin: gastosAdmin,
+            subtotalAntesIVA: subtotal,
+            iva: iva,
+            precioSugeridoConIVA: precioConIVA,
+            utilidadTotal: utilidadTotal,
+            isr: isr,
+            precioNetoDespuesISR: precioNetoDespuesISR,
+            utilidadRealDespuesISR: utilidadRealDespuesISR,
+            proporcionGanancia: proporcionGanancia,
+            proporcionAdmin: proporcionAdmin,
+            gananciaRealDespuesISR: gananciaRealDespuesISR,
+            gastosAdminRealesDespuesISR: gastosAdminRealesDespuesISR
+        )
     }
 }
 
-// --- VISTA PRINCIPAL (Mejorada UI) ---
+// --- VISTA PRINCIPAL (UI simplificada y clara) ---
 struct InventarioView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Producto.nombre) private var productos: [Producto]
     
     @State private var modalMode: ProductModalMode?
     @State private var searchQuery = ""
+    @State private var filtroCategoria: String = "Todas"
     @State private var productoAEliminar: Producto?
     @State private var mostrandoConfirmacionBorrado = false
+    
+    // NUEVO: Ordenamiento
+    enum SortOption: String, CaseIterable, Identifiable {
+        case nombre = "Nombre"
+        case precio = "Precio"
+        case stock = "Stock"
+        var id: String { rawValue }
+    }
+    @State private var sortOption: SortOption = .nombre
+    @State private var sortAscending: Bool = true
     
     // Configuración de UI
     private let lowStockThreshold: Double = 2.0
     
+    private var categorias: [String] {
+        let set = Set(productos.map { $0.categoria }.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+        return ["Todas"] + set.sorted()
+    }
+    
     var filteredProductos: [Producto] {
-        if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return productos
-        } else {
+        var base = productos
+        if filtroCategoria != "Todas" {
+            base = base.filter { $0.categoria == filtroCategoria }
+        }
+        if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let query = searchQuery.lowercased()
-            return productos.filter { producto in
+            base = base.filter { producto in
                 producto.nombre.lowercased().contains(query) ||
                 producto.unidadDeMedida.lowercased().contains(query) ||
                 producto.informacion.lowercased().contains(query) ||
@@ -93,6 +127,19 @@ struct InventarioView: View {
                 producto.lote.lowercased().contains(query)
             }
         }
+        // Ordenamiento
+        base.sort { a, b in
+            switch sortOption {
+            case .nombre:
+                return sortAscending ? (a.nombre.localizedCaseInsensitiveCompare(b.nombre) == .orderedAscending)
+                                    : (a.nombre.localizedCaseInsensitiveCompare(b.nombre) == .orderedDescending)
+            case .precio:
+                return sortAscending ? (a.precioVenta < b.precioVenta) : (a.precioVenta > b.precioVenta)
+            case .stock:
+                return sortAscending ? (a.cantidad < b.cantidad) : (a.cantidad > b.cantidad)
+            }
+        }
+        return base
     }
     
     // Métricas
@@ -108,67 +155,29 @@ struct InventarioView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Cabecera con métricas y CTA
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Gestión de Inventario")
-                        .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
-                    HStack(spacing: 10) {
-                        Label("\(totalProductos) producto\(totalProductos == 1 ? "" : "s")", systemImage: "shippingbox.fill")
-                            .font(.subheadline).foregroundColor(.gray)
-                        Label("Valor: $\(valorInventario, specifier: "%.2f")", systemImage: "banknote.fill")
-                            .font(.subheadline).foregroundColor(.gray)
-                        Label("Costo: $\(costoTotal, specifier: "%.2f")", systemImage: "creditcard.fill")
-                            .font(.subheadline).foregroundColor(.gray)
-                        Label("Utilidad: $\(utilidadEstimada, specifier: "%.2f")", systemImage: "chart.line.uptrend.xyaxis")
-                            .font(.subheadline).foregroundColor(.gray)
-                    }
-                }
-                Spacer()
-                Button { modalMode = .add } label: {
-                    Label("Añadir Producto", systemImage: "plus.circle.fill")
-                        .font(.headline)
-                        .padding(.vertical, 10).padding(.horizontal, 14)
-                        .background(Color("MercedesPetrolGreen"))
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .buttonStyle(.plain)
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            // Header compacto
+            header
             
-            // Descripción
-            Text("Registra y modifica tus productos.")
-                .font(.title3).foregroundColor(.gray)
-            
-            // Buscador
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(Color("MercedesPetrolGreen"))
-                TextField("Buscar por Nombre, Unidad, Categoría, Proveedor o Información...", text: $searchQuery)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .animation(.easeInOut(duration: 0.15), value: searchQuery)
-                if !searchQuery.isEmpty {
-                    Button {
-                        searchQuery = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.gray)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(12)
-            .background(Color("MercedesCard"))
-            .cornerRadius(10)
+            // Filtros y búsqueda mejorados
+            filtrosView
             
             // Lista
             ScrollView {
-                LazyVStack(spacing: 14) {
+                LazyVStack(spacing: 12) {
+                    // Contador de resultados
+                    HStack(spacing: 6) {
+                        Image(systemName: "number")
+                            .foregroundColor(Color("MercedesPetrolGreen"))
+                        Text("\(filteredProductos.count) resultado\(filteredProductos.count == 1 ? "" : "s")")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        Spacer()
+                    }
                     if filteredProductos.isEmpty {
                         emptyStateView
                             .frame(maxWidth: .infinity)
-                            .padding(.top, 40)
+                            .padding(.top, 12)
                     } else {
                         ForEach(filteredProductos) { producto in
                             ProductoCard(
@@ -180,14 +189,20 @@ struct InventarioView: View {
                                     mostrandoConfirmacionBorrado = true
                                 }
                             )
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
                 }
-                .padding(.top, 4)
+                .padding(.top, 2)
             }
             Spacer(minLength: 0)
         }
-        .padding(30)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .background(
+            LinearGradient(colors: [Color("MercedesBackground"), Color("MercedesBackground").opacity(0.9)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+        )
         .sheet(item: $modalMode) { mode in
             ProductFormView(mode: mode)
                 .environment(\.modelContext, modelContext)
@@ -208,160 +223,364 @@ struct InventarioView: View {
         }
     }
     
+    private var header: some View {
+        ZStack {
+            // Fondo más sutil y compacto
+            RoundedRectangle(cornerRadius: 12)
+                .fill(
+                    LinearGradient(
+                        colors: [Color("MercedesCard"), Color("MercedesBackground").opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+                .frame(height: 110) // altura compacta
+            
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Inventario")
+                        .font(.title2).fontWeight(.bold).foregroundColor(.white) // antes largeTitle
+                    Text("Controla tus productos, precios y stock.")
+                        .font(.footnote).foregroundColor(.gray) // antes subheadline
+                }
+                Spacer()
+                Button { modalMode = .add } label: {
+                    Label("Añadir", systemImage: "plus.circle.fill")
+                        .font(.subheadline)
+                        .padding(.vertical, 6).padding(.horizontal, 10)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .help("Crear un nuevo producto")
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+    
+    private func kpi(title: String, value: String, icon: String, color: Color) -> some View {
+        HStack(spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8).fill(color.opacity(0.15)).frame(width: 32, height: 32) // antes 38
+                Image(systemName: icon).foregroundColor(color).font(.system(size: 14, weight: .semibold)) // antes 16
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.caption2).foregroundColor(.gray) // antes caption
+                Text(value).font(.subheadline).foregroundColor(.white) // antes headline
+            }
+            Spacer(minLength: 6)
+        }
+        .padding(8) // antes 10
+        .background(
+            ZStack {
+                Color("MercedesCard")
+                LinearGradient(colors: [Color.white.opacity(0.015), color.opacity(0.05)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        )
+        .cornerRadius(8) // antes 10
+        .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
+    }
+    
+    private var filtrosView: some View {
+        VStack(spacing: 8) {
+            // Única barra: búsqueda + orden + categoría + limpiar
+            HStack(spacing: 8) {
+                // Buscar
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                    TextField("Buscar por Nombre, Unidad, Categoría, Proveedor o Información...", text: $searchQuery)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .font(.subheadline)
+                        .animation(.easeInOut(duration: 0.15), value: searchQuery)
+                    if !searchQuery.isEmpty {
+                        Button {
+                            searchQuery = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Limpiar búsqueda")
+                    }
+                }
+                .padding(8)
+                .background(Color("MercedesCard"))
+                .cornerRadius(8)
+                
+                // Orden
+                HStack(spacing: 6) {
+                    Picker("Ordenar", selection: $sortOption) {
+                        ForEach(SortOption.allCases) { opt in
+                            Text(opt.rawValue).tag(opt)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 140)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            sortAscending.toggle()
+                        }
+                    } label: {
+                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                            .font(.subheadline)
+                            .padding(6)
+                            .background(Color("MercedesCard"))
+                            .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
+                }
+                
+                // Categoría
+                Picker("Categoría", selection: $filtroCategoria) {
+                    ForEach(categorias, id: \.self) { Text($0) }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: 200)
+                .help("Filtrar por categoría")
+                
+                // Filtros activos + limpiar (solo si aplica)
+                if filtroCategoria != "Todas" || !searchQuery.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Text("Filtros activos")
+                        if filtroCategoria != "Todas" {
+                            Text("Categoría: \(filtroCategoria)")
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color("MercedesBackground")).cornerRadius(6)
+                        }
+                        if !searchQuery.isEmpty {
+                            Text("“\(searchQuery)”")
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color("MercedesBackground")).cornerRadius(6)
+                        }
+                        Button {
+                            withAnimation {
+                                filtroCategoria = "Todas"
+                                searchQuery = ""
+                            }
+                        } label: {
+                            Text("Limpiar")
+                                .font(.caption2)
+                                .padding(.horizontal, 6).padding(.vertical, 4)
+                                .background(Color("MercedesCard"))
+                                .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.gray)
+                        .help("Quitar filtros activos")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                }
+                
+                Spacer()
+            }
+        }
+    }
+    
     // Empty state agradable
     private var emptyStateView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             Image(systemName: "shippingbox")
-                .font(.system(size: 42, weight: .bold))
+                .font(.system(size: 36, weight: .bold))
                 .foregroundColor(Color("MercedesPetrolGreen"))
             Text(searchQuery.isEmpty ? "No hay productos registrados aún." :
                  "No se encontraron productos para “\(searchQuery)”.")
-                .font(.headline)
+                .font(.subheadline)
                 .foregroundColor(.gray)
             if searchQuery.isEmpty {
                 Text("Añade tu primer producto para empezar a gestionar el inventario.")
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundColor(.gray)
             }
         }
     }
 }
 
-// Tarjeta individual de producto
+// Tarjeta individual de producto (UI más clara)
 fileprivate struct ProductoCard: View {
     let producto: Producto
     let lowStockThreshold: Double
     var onEdit: () -> Void
     var onDelete: () -> Void
     
-    private var margenColor: Color {
-        producto.margen > 50 ? .green : (producto.margen > 20 ? .yellow : .red)
-    }
-    private var margenTexto: String {
-        if producto.margen > 50 { return "Alto" }
-        if producto.margen > 20 { return "Medio" }
-        return "Crítico"
-    }
     private var isLowStock: Bool {
         producto.cantidad <= lowStockThreshold
+    }
+    // Expiración (compara contra inicio de día para evitar falsos positivos por hora)
+    private var isExpired: Bool {
+        guard let cad = producto.fechaCaducidad else { return false }
+        let startOfToday = Calendar.current.startOfDay(for: Date())
+        return cad < startOfToday
+    }
+    // NUEVO: ¿Caduca este mes?
+    private var isExpiringThisMonth: (flag: Bool, daysLeft: Int)? {
+        guard let cad = producto.fechaCaducidad else { return nil }
+        let cal = Calendar.current
+        let now = Date()
+        let startOfToday = cal.startOfDay(for: now)
+        guard cad >= startOfToday else { return (false, 0) } // si ya caducó, no aplica aquí
+        let nowComp = cal.dateComponents([.year, .month], from: now)
+        let cadComp = cal.dateComponents([.year, .month], from: cad)
+        guard nowComp.year == cadComp.year, nowComp.month == cadComp.month else { return (false, 0) }
+        let days = cal.dateComponents([.day], from: startOfToday, to: cal.startOfDay(for: cad)).day ?? 0
+        return (true, max(0, days))
+    }
+    // Desglose real: Ganancia y Gastos Admin sobre el costo del producto
+    private var desglose: ProductPricingHelpers.ReglaCalculoResultado {
+        ProductPricingHelpers.calcularPrecioVentaSegunReglas(
+            costo: producto.costo,
+            porcentajeGanancia: producto.porcentajeMargenSugerido,
+            porcentajeGastosAdmin: producto.porcentajeGastosAdministrativos,
+            isrPorcentaje: producto.isrPorcentajeEstimado,
+            ivaTasaFija: 0.16
+        )
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             // Header
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        Text(producto.nombre)
-                            .font(.title2).fontWeight(.semibold)
-                        if !producto.categoria.isEmpty {
-                            Text(producto.categoria)
-                                .font(.caption)
-                                .padding(.horizontal, 8).padding(.vertical, 4)
-                                .background(Color("MercedesBackground"))
-                                .cornerRadius(6)
-                        }
-                    }
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(producto.nombre)
+                        .font(.headline).fontWeight(.semibold)
                     if !producto.informacion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(producto.informacion)
-                            .font(.subheadline).foregroundColor(.gray)
+                            .font(.caption2).foregroundColor(.gray)
                             .lineLimit(2)
                     }
                 }
                 Spacer()
-                HStack(spacing: 8) {
+                // Precio y costo
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("$\(producto.precioVenta, specifier: "%.2f")")
+                        .font(.headline).fontWeight(.bold)
+                        .foregroundColor(.white)
+                    Text("Costo: $\(producto.costo, specifier: "%.2f")")
+                        .font(.caption2).foregroundColor(.gray)
+                }
+            }
+            
+            // Avisos de caducidad
+            if isExpired {
+                banner(text: "Producto caducado", color: .red, systemImage: "exclamationmark.triangle.fill")
+            } else if let exp = isExpiringThisMonth, exp.flag {
+                banner(text: "Caduca este mes (\(exp.daysLeft) día\(exp.daysLeft == 1 ? "" : "s") restantes)", color: .orange, systemImage: "calendar.badge.exclamationmark")
+            }
+            
+            // Desglose de utilidad real
+            HStack(spacing: 6) {
+                chip(text: "Ganancia: $\(desglose.ganancia, default: "%.2f")", icon: "chart.line.uptrend.xyaxis")
+                chip(text: "Admin: $\(desglose.gastosAdmin, default: "%.2f")", icon: "gearshape.2.fill")
+                Spacer()
+            }
+            
+            // Reparto real después del ISR
+            HStack(spacing: 6) {
+                chip(text: "Ganancia real: $\(desglose.gananciaRealDespuesISR, default: "%.2f")", icon: "dollarsign.arrow.circlepath")
+                chip(text: "Admin real: $\(desglose.gastosAdminRealesDespuesISR, default: "%.2f")", icon: "slider.horizontal.3")
+                Spacer()
+            }
+            
+            // Chips y datos
+            HStack(spacing: 6) {
+                if !producto.categoria.isEmpty { chip(text: producto.categoria, icon: "tag.fill") }
+                chip(text: producto.unidadDeMedida, icon: "cube.box.fill")
+                if !producto.proveedor.isEmpty { chip(text: producto.proveedor, icon: "building.2.fill") }
+                if !producto.lote.isEmpty { chip(text: "Lote \(producto.lote)", icon: "number") }
+                if isLowStock {
+                    chip(text: "Reponer", icon: "exclamationmark.triangle.fill", color: .red)
+                }
+                Spacer()
+                if let cad = producto.fechaCaducidad {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar")
+                        Text("Caduca: \(cad.formatted(date: .abbreviated, time: .omitted))")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                }
+            }
+            
+            // Footer acciones
+            HStack {
+                Text("Stock: \(producto.cantidad, specifier: "%.2f") \(producto.unidadDeMedida)(s)")
+                    .font(.caption2).foregroundColor(.gray)
+                Spacer()
+                HStack(spacing: 6) {
                     Button {
                         onEdit()
                     } label: {
                         Label("Editar", systemImage: "pencil")
-                            .font(.subheadline)
-                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .font(.caption)
+                            .padding(.horizontal, 8).padding(.vertical, 5)
                             .background(Color("MercedesBackground"))
-                            .cornerRadius(8)
+                            .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
                     .foregroundColor(.white)
+                    .help("Editar este producto")
                     
                     Button(role: .destructive) {
                         onDelete()
                     } label: {
                         Label("Eliminar", systemImage: "trash")
-                            .font(.subheadline)
-                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .font(.caption)
+                            .padding(.horizontal, 8).padding(.vertical, 5)
                             .background(Color.red.opacity(0.18))
-                            .cornerRadius(8)
+                            .cornerRadius(6)
                     }
                     .buttonStyle(.plain)
                     .foregroundColor(.red)
+                    .help("Eliminar este producto")
                 }
-            }
-            
-            // Detalles
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        chip(text: producto.unidadDeMedida, icon: "cube.box.fill")
-                        if isLowStock {
-                            chip(text: "Stock bajo", icon: "exclamationmark.triangle.fill", color: .red)
-                        }
-                        if !producto.proveedor.isEmpty {
-                            chip(text: producto.proveedor, icon: "building.2.fill")
-                        }
-                        if !producto.lote.isEmpty {
-                            chip(text: "Lote \(producto.lote)", icon: "number")
-                        }
-                    }
-                    Text("Cantidad: \(producto.cantidad, specifier: "%.2f") \(producto.unidadDeMedida)(s)")
-                        .font(.body).foregroundColor(.gray)
-                    if let cad = producto.fechaCaducidad {
-                        Text("Caduca: \(cad.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.caption).foregroundColor(.gray)
-                    }
-                }
-                Spacer()
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Costo: $\(producto.costo, specifier: "%.2f")")
-                    Text("Precio: $\(producto.precioVenta, specifier: "%.2f")")
-                    HStack(spacing: 8) {
-                        Text(String(format: "Margen: %.0f%%", producto.margen))
-                            .font(.headline).foregroundColor(margenColor)
-                        Text(margenTexto)
-                            .font(.caption2)
-                            .padding(.horizontal, 8).padding(.vertical, 4)
-                            .background(margenColor.opacity(0.18))
-                            .foregroundColor(margenColor)
-                            .cornerRadius(6)
-                    }
-                    Text(producto.tipoFiscal.rawValue)
-                        .font(.caption2)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(Color("MercedesBackground"))
-                        .cornerRadius(6)
-                }
-                .font(.body).foregroundColor(.gray)
             }
         }
-        .padding(14)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color("MercedesCard"))
-        .cornerRadius(12)
+        .background(
+            ZStack {
+                Color("MercedesCard")
+                LinearGradient(colors: [Color.white.opacity(0.012), Color("MercedesBackground").opacity(0.06)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        )
+        .cornerRadius(10)
+        .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
     }
     
     private func chip(text: String, icon: String, color: Color = Color("MercedesBackground")) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             Image(systemName: icon)
             Text(text)
         }
-        .font(.caption)
-        .padding(.horizontal, 8).padding(.vertical, 4)
+        .font(.caption2)
+        .padding(.horizontal, 6).padding(.vertical, 3)
         .background(color)
-        .cornerRadius(8)
+        .cornerRadius(6)
         .foregroundColor(.white)
+    }
+    
+    private func banner(text: String, color: Color, systemImage: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+            Text(text)
+        }
+        .font(.caption2)
+        .padding(.horizontal, 8).padding(.vertical, 5)
+        .background(color.opacity(0.18))
+        .cornerRadius(6)
+        .foregroundColor(color)
     }
 }
 
 
-// --- VISTA DEL FORMULARIO (Mejorada) ---
+// --- VISTA DEL FORMULARIO (UI guiada y sin ambigüedad) ---
 fileprivate struct ProductFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -382,9 +601,8 @@ fileprivate struct ProductFormView: View {
     @State private var costoString = ""
     @State private var cantidadString = ""
     @State private var informacion = ""
-    @State private var tipoFiscal: TipoFiscalProducto = .iva16
     
-    // Configuraciones financieras
+    // Configuraciones financieras (todas en %)
     @State private var porcentajeMargenSugeridoString = "30.0"
     @State private var porcentajeAdminString = "10.0"
     @State private var isrPorcentajeString = "10.0"
@@ -411,7 +629,7 @@ fileprivate struct ProductFormView: View {
     private var productoAEditar: Producto?
     var formTitle: String {
         switch mode {
-        case .add: return "Añadir Nuevo Producto"
+        case .add: return "Añadir Producto"
         case .edit: return "Editar Producto"
         }
     }
@@ -434,53 +652,27 @@ fileprivate struct ProductFormView: View {
         return v < 0 || v > 100
     }
     
-    // --- Cálculos automáticos (solo lectura, basados en inputs) ---
+    // --- Cálculos automáticos (solo lectura) ---
     private var costo: Double { Double(costoString.replacingOccurrences(of: ",", with: ".")) ?? 0 }
     private var cantidad: Double { Double(cantidadString.replacingOccurrences(of: ",", with: ".")) ?? 0 }
     private var pMargen: Double { Double(porcentajeMargenSugeridoString.replacingOccurrences(of: ",", with: ".")) ?? 0 }
     private var pAdmin: Double { Double(porcentajeAdminString.replacingOccurrences(of: ",", with: ".")) ?? 0 }
     private var pISR: Double { Double(isrPorcentajeString.replacingOccurrences(of: ",", with: ".")) ?? 0 }
-    private var ivaTasa: Double { tipoFiscal.tasa }
     
-    // Flujo exacto solicitado
-    private var baseSinIVAConMargen: Double {
-        ProductPricingHelpers.baseConMargen(costo: costo, porcentajeMargen: pMargen)
-    }
-    private var ivaMonto: Double {
-        ProductPricingHelpers.ivaSobreBase(base: baseSinIVAConMargen, ivaTasa: ivaTasa)
+    private var resultadoReglas: ProductPricingHelpers.ReglaCalculoResultado {
+        ProductPricingHelpers.calcularPrecioVentaSegunReglas(
+            costo: costo,
+            porcentajeGanancia: pMargen,
+            porcentajeGastosAdmin: pAdmin,
+            isrPorcentaje: pISR,
+            ivaTasaFija: 0.16
+        )
     }
     private var precioSugerido: Double {
-        ProductPricingHelpers.precioSugerido(base: baseSinIVAConMargen, iva: ivaMonto)
+        resultadoReglas.precioSugeridoConIVA
     }
     private var precioFinalEditable: Double {
         Double(precioFinalString.replacingOccurrences(of: ",", with: ".")) ?? precioSugerido
-    }
-    private var gastoAdminMonto: Double {
-        ProductPricingHelpers.gastoAdministrativo(base: baseSinIVAConMargen, porcentajeAdmin: pAdmin)
-    }
-    private var utilidadAntesDeGastos: Double {
-        ProductPricingHelpers.utilidadAntesDeGastos(base: baseSinIVAConMargen, costo: costo)
-    }
-    private var utilidadDespuesDeGastos: Double {
-        ProductPricingHelpers.utilidadDespuesDeGastos(utilidadAntes: utilidadAntesDeGastos, gastoAdmin: gastoAdminMonto)
-    }
-    private var isrAproxMonto: Double {
-        ProductPricingHelpers.isrAproximado(utilidadDespuesGastos: utilidadDespuesDeGastos, tasaISR: pISR)
-    }
-    private var margenRealPct: Double {
-        // Para margen real usamos la utilidad después de gastos, sobre el precio final editable
-        ProductPricingHelpers.margenReal(utilidadDespuesGastos: utilidadDespuesDeGastos, precioFinal: max(precioFinalEditable, 0.0001))
-    }
-    private var variacionVsSugerido: Double {
-        ProductPricingHelpers.variacionPrecio(final: precioFinalEditable, sugerido: precioSugerido)
-    }
-    // NUEVO: Margen de ganancia neto (restando ISR)
-    private var margenDeGananciaMonto: Double {
-        utilidadDespuesDeGastos - isrAproxMonto
-    }
-    private var margenDeGananciaPct: Double {
-        let denom = max(precioFinalEditable, 0.0001)
-        return margenDeGananciaMonto / denom
     }
     
     // Inicializador
@@ -498,7 +690,6 @@ fileprivate struct ProductFormView: View {
             _proveedor = State(initialValue: producto.proveedor)
             _lote = State(initialValue: producto.lote)
             _fechaCaducidad = State(initialValue: producto.fechaCaducidad)
-            _tipoFiscal = State(initialValue: producto.tipoFiscal)
             _porcentajeMargenSugeridoString = State(initialValue: String(format: "%.2f", producto.porcentajeMargenSugerido))
             _porcentajeAdminString = State(initialValue: String(format: "%.2f", producto.porcentajeGastosAdministrativos))
             _isrPorcentajeString = State(initialValue: String(format: "%.2f", producto.isrPorcentajeEstimado))
@@ -510,40 +701,37 @@ fileprivate struct ProductFormView: View {
     // --- CUERPO DEL MODAL ---
     var body: some View {
         VStack(spacing: 0) {
-            // Título
-            VStack(spacing: 4) {
-                Text(formTitle).font(.title).fontWeight(.bold)
-                Text("Completa los datos. Los campos marcados con • son obligatorios.")
-                    .font(.footnote).foregroundColor(.gray)
+            // Título y guía
+            VStack(spacing: 2) {
+                Text(formTitle).font(.title2).fontWeight(.bold)
+                Text("Completa los datos básicos. IVA 16% fijo.")
+                    .font(.caption).foregroundColor(.gray)
             }
-            .padding(.top, 14).padding(.bottom, 8)
+            .padding(.top, 10).padding(.bottom, 6)
 
             Form {
-                // Detalles del Producto
+                // Sección 1: Datos básicos del producto
                 Section {
-                    SectionHeader(title: "Datos del Producto", subtitle: nil)
+                    SectionHeader(title: "Datos del Producto", subtitle: "Nombre, categoría, unidad y proveedor")
                     
-                    // --- Nombre (ID Único) con Candado ---
-                    VStack(alignment: .leading, spacing: 2) {
+                    // Nombre con candado en edición
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
-                            Text("• Nombre del Producto").font(.caption).foregroundColor(.gray)
+                            Text("• Nombre del Producto").font(.caption2).foregroundColor(.gray)
                             if productoAEditar != nil {
                                 Image(systemName: isNombreUnlocked ? "lock.open.fill" : "lock.fill")
                                     .foregroundColor(isNombreUnlocked ? .green : .red)
-                                    .font(.caption)
+                                    .font(.caption2)
                             }
                         }
-                        HStack(spacing: 8) {
-                            ZStack(alignment: .leading) {
-                                TextField("", text: $nombre)
-                                    .disabled(productoAEditar != nil && !isNombreUnlocked)
-                                    .padding(8).background(Color("MercedesBackground").opacity(0.9)).cornerRadius(8)
-                                if nombre.isEmpty {
-                                    Text("ej. Filtro de Aceite X-123")
-                                        .foregroundColor(Color.white.opacity(0.35))
-                                        .padding(.horizontal, 12).allowsHitTesting(false)
-                                }
-                            }
+                        HStack(spacing: 6) {
+                            TextField("", text: $nombre)
+                                .disabled(productoAEditar != nil && !isNombreUnlocked)
+                                .padding(6)
+                                .background(Color("MercedesBackground").opacity(0.9))
+                                .cornerRadius(6)
+                                .help("Identificador único del producto")
+                            
                             if productoAEditar != nil {
                                 Button {
                                     if isNombreUnlocked { isNombreUnlocked = false }
@@ -553,141 +741,140 @@ fileprivate struct ProductFormView: View {
                                     }
                                 } label: {
                                     Text(isNombreUnlocked ? "Bloquear" : "Desbloquear")
-                                        .font(.caption)
+                                        .font(.caption2)
                                 }
                                 .buttonStyle(.plain)
                                 .foregroundColor(isNombreUnlocked ? .green : .red)
+                                .help(isNombreUnlocked ? "Bloquear edición del nombre" : "Requiere autorización")
                             }
                         }
                         .validationHint(isInvalid: nombreInvalido, message: "El nombre debe tener al menos 3 caracteres.")
-                        if productoAEditar != nil && !isNombreUnlocked {
-                            Text("Campo protegido. Desbloquéalo para editar.")
-                                .font(.caption2).foregroundColor(.gray)
-                        }
                     }
                     
-                    // Categoría y Unidad
-                    HStack(spacing: 16) {
-                        FormField(title: "Categoría", placeholder: "ej. Aceites, Filtros...", text: $categoria)
+                    HStack(spacing: 12) {
+                        FormField(title: "Categoría", placeholder: "", text: $categoria)
+                            .help("Clasifica el producto para filtrar más fácil")
                         Picker("• Unidad de Medida", selection: $unidadDeMedida) {
                             ForEach(opcionesUnidad, id: \.self) { Text($0) }
                         }
                         .pickerStyle(.menu)
                         .frame(maxWidth: .infinity)
+                        .help("Unidad en la que controlas el stock")
                     }
                     
-                    // Proveedor / Lote / Caducidad
-                    HStack(spacing: 16) {
-                        FormField(title: "Proveedor", placeholder: "Nombre comercial", text: $proveedor)
-                        FormField(title: "Lote", placeholder: "ej. A123-45", text: $lote)
-                        DatePicker("Caducidad (opcional)", selection: Binding(
-                            get: { fechaCaducidad ?? Date() },
-                            set: { fechaCaducidad = $0 }
-                        ), displayedComponents: .date)
-                        .labelsHidden()
-                        .frame(maxWidth: .infinity)
-                        Toggle("Sin fecha", isOn: Binding(
-                            get: { fechaCaducidad == nil },
-                            set: { noDate in fechaCaducidad = noDate ? nil : Date() }
-                        ))
-                        .toggleStyle(.switch)
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                    }
-                    
-                    // Costo y Cantidad
-                    HStack(spacing: 16) {
-                        FormField(title: "• Costo de compra", placeholder: "$ 0.00", text: $costoString)
-                            .validationHint(isInvalid: costoInvalido, message: "Debe ser un número.")
-                        FormField(title: "• Cantidad", placeholder: "ej. 10.5", text: $cantidadString)
-                            .validationHint(isInvalid: cantidadInvalida, message: "Debe ser un número.")
-                    }
-                    
-                    // Tipo fiscal
-                    Picker("• Tipo fiscal del producto", selection: $tipoFiscal) {
-                        ForEach(TipoFiscalProducto.allCases, id: \.self) { t in
-                            Text(t.rawValue).tag(t)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    
-                    FormField(title: "Información (opcional)", placeholder: "ej. Para motores V6 2.5L", text: $informacion)
-                }
-                
-                // Configuraciones financieras
-                Section {
-                    SectionHeader(title: "Configuraciones financieras", subtitle: "Porcentajes entre 0 y 100")
-                    HStack(spacing: 16) {
-                        FormField(title: "• % Margen sugerido", placeholder: "ej. 30", text: $porcentajeMargenSugeridoString)
-                            .validationHint(isInvalid: pMargenInvalido, message: "0 a 100.")
-                        FormField(title: "• % Gastos administrativos", placeholder: "ej. 10", text: $porcentajeAdminString)
-                            .validationHint(isInvalid: pAdminInvalido, message: "0 a 100.")
-                        FormField(title: "% ISR (aprox.)", placeholder: "ej. 10", text: $isrPorcentajeString)
-                            .validationHint(isInvalid: pISRInvalido, message: "0 a 100.")
-                    }
-                }
-                
-                // Cálculos automáticos y Precio
-                Section {
-                    SectionHeader(title: "Cálculos automáticos", subtitle: "Solo lectura y precio final editable")
-                    
-                    // Costo y precio
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Costo y precio").font(.headline)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 8) {
-                            roField("Costo de compra", costo)
-                            roField("Base sin IVA (con margen)", baseSinIVAConMargen)
-                            roField("IVA (\(Int(ivaTasa * 100))%)", ivaMonto)
-                            roField("Precio sugerido", precioSugerido)
-                        }
-                    }
-                    
-                    // Administración y fiscal
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Administración y fiscal").font(.headline)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 8) {
-                            roField("% administrativo", pAdmin)
-                            roField("Gasto administrativo (monto)", gastoAdminMonto)
-                            roField("Utilidad antes de gastos", utilidadAntesDeGastos)
-                            roField("Utilidad después de gastos", utilidadDespuesDeGastos)
-                            roField("ISR aproximado", isrAproxMonto)
-                            roField("Margen de ganancia (monto)", margenDeGananciaMonto)
-                            roField("Margen de ganancia (%)", margenDeGananciaPct * 100)
-                        }
-                        HStack {
-                            Text("El cálculo de ISR es aproximado. Verifique las tablas oficiales del SAT.")
+                    HStack(spacing: 12) {
+                        FormField(title: "Proveedor", placeholder: "", text: $proveedor)
+                        FormField(title: "Lote", placeholder: "", text: $lote)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Fecha de caducidad")
                                 .font(.caption2)
-                                .foregroundColor(.yellow)
-                            Spacer()
-                            Link("SAT (Portal oficial)", destination: URL(string: "https://www.sat.gob.mx/portal/public/home")!)
-                                .font(.caption)
-                                .foregroundColor(Color("MercedesPetrolGreen"))
-                        }
-                    }
-                    
-                    // Utilidad y precio final
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Precio final y variaciones").font(.headline)
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 8) {
-                            roField("Variación vs sugerido", variacionVsSugerido)
-                        }
-                        HStack(spacing: 12) {
-                            FormField(title: "Precio final al cliente (editable)", placeholder: "ej. 301.60", text: $precioFinalString)
-                                .onChange(of: precioFinalString) { _, new in
-                                    let final = Double(new.replacingOccurrences(of: ",", with: ".")) ?? 0
-                                    precioModificadoManualmente = abs(final - precioSugerido) > 0.009
-                                }
-                            if precioModificadoManualmente {
-                                Text("Modificado manualmente")
-                                    .font(.caption)
-                                    .padding(.horizontal, 8).padding(.vertical, 4)
-                                    .background(Color.yellow.opacity(0.2))
-                                    .foregroundColor(.yellow)
-                                    .cornerRadius(6)
+                                .foregroundColor(.gray)
+                            HStack {
+                                DatePicker("", selection: Binding(
+                                    get: { fechaCaducidad ?? Date() },
+                                    set: { fechaCaducidad = $0 }
+                                ), displayedComponents: .date)
+                                .labelsHidden()
+                                Toggle("Sin fecha", isOn: Binding(
+                                    get: { fechaCaducidad == nil },
+                                    set: { noDate in fechaCaducidad = noDate ? nil : Date() }
+                                ))
+                                .toggleStyle(.switch)
+                                .font(.caption2)
+                                .foregroundColor(.gray)
                             }
                         }
-                        Text("El precio sugerido se mantiene como referencia si editas el precio final.")
-                            .font(.caption).foregroundColor(.gray)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .help("Selecciona la fecha de caducidad si aplica")
+                    }
+                    
+                    HStack(spacing: 12) {
+                        FormField(title: "• Costo de compra", placeholder: "$0.00", text: $costoString)
+                            .validationHint(isInvalid: costoInvalido, message: "Debe ser un número.")
+                            .help("Costo unitario de adquisición")
+                        FormField(title: "• Cantidad en stock", placeholder: "0", text: $cantidadString)
+                            .validationHint(isInvalid: cantidadInvalida, message: "Debe ser un número.")
+                            .help("Cantidad actual disponible")
+                    }
+                    
+                    FormField(title: "Información (opcional)", placeholder: "", text: $informacion)
+                        .help("Notas útiles para identificar/usar el producto")
+                }
+                
+                // Sección 2: Porcentajes y reglas
+                Section {
+                    SectionHeader(title: "Reglas de Precio", subtitle: "Porcentajes aplicados sobre el costo")
+                    HStack(spacing: 12) {
+                        FormField(title: "• % Ganancia", placeholder: "0-100", text: $porcentajeMargenSugeridoString)
+                            .validationHint(isInvalid: pMargenInvalido, message: "0 a 100.")
+                            .help("Porcentaje de ganancia sobre el costo")
+                        FormField(title: "• % Gastos administrativos", placeholder: "0-100", text: $porcentajeAdminString)
+                            .validationHint(isInvalid: pAdminInvalido, message: "0 a 100.")
+                            .help("Porcentaje para cubrir administración sobre el costo")
+                        FormField(title: "% ISR (aprox.)", placeholder: "0-100", text: $isrPorcentajeString)
+                            .validationHint(isInvalid: pISRInvalido, message: "0 a 100.")
+                            .help("Se calcula sobre la utilidad (ganancia + administrativos)")
+                    }
+                    HStack(spacing: 6) {
+                        Label("IVA: 16% (fijo)", systemImage: "info.circle")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        Spacer()
+                    }
+                }
+                
+                // Sección 3: Cálculo automático (compacto)
+                Section {
+                    SectionHeader(title: "Cálculo Automático", subtitle: "Lectura")
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 6) {
+                        roField("Ganancia (monto)", resultadoReglas.ganancia)
+                        roField("Gastos administrativos (monto)", resultadoReglas.gastosAdmin)
+                        roField("Subtotal antes de IVA", resultadoReglas.subtotalAntesIVA)
+                        roField("IVA (16%)", resultadoReglas.iva)
+                        roField("Precio sugerido (con IVA)", resultadoReglas.precioSugeridoConIVA)
+                    }
+                    HStack(spacing: 10) {
+                        roField("ISR (sobre utilidad)", resultadoReglas.isr)
+                        roField("Precio neto después de ISR", resultadoReglas.precioNetoDespuesISR)
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                    
+                    // NUEVO: Reparto real después del ISR
+                    VStack(alignment: .leading, spacing: 6) {
+                        SectionHeader(title: "Reparto real después del ISR", subtitle: "Proporción original aplicada a la utilidad real")
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 6) {
+                            roField("Utilidad real después de ISR", resultadoReglas.utilidadRealDespuesISR)
+                            roField("Gastos administrativos reales (después de ISR)", resultadoReglas.gastosAdminRealesDespuesISR)
+                            roField("Ganancia real (después de ISR)", resultadoReglas.gananciaRealDespuesISR)
+                        }
+                        Text("La utilidad real se reparte según la proporción original: Ganancia = \(resultadoReglas.proporcionGanancia.formatted(.percent)) • Admin = \(resultadoReglas.proporcionAdmin.formatted(.percent)).")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
+                // Sección 4: Precio final editable
+                Section {
+                    SectionHeader(title: "Precio Final", subtitle: "Ajustable")
+                    HStack(spacing: 10) {
+                        FormField(title: "Precio final al cliente", placeholder: "", text: $precioFinalString)
+                            .onChange(of: precioFinalString) { _, new in
+                                let final = Double(new.replacingOccurrences(of: ",", with: ".")) ?? 0
+                                precioModificadoManualmente = abs(final - precioSugerido) > 0.009
+                            }
+                            .help("Si lo editas, se marcará como modificado manualmente")
+                        if precioModificadoManualmente {
+                            Text("Modificado manualmente")
+                                .font(.caption2)
+                                .padding(.horizontal, 6).padding(.vertical, 3)
+                                .background(Color.yellow.opacity(0.2))
+                                .foregroundColor(.yellow)
+                                .cornerRadius(6)
+                        }
+                    }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 6) {
+                        roField("Variación vs sugerido", ProductPricingHelpers.variacionPrecio(final: precioFinalEditable, sugerido: precioSugerido))
                     }
                 }
             }
@@ -695,68 +882,69 @@ fileprivate struct ProductFormView: View {
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
             .onAppear {
-                // En modo add, inicializa precio final con el sugerido
                 if productoAEditar == nil {
                     precioFinalString = String(format: "%.2f", precioSugerido)
                 }
             }
             .onChange(of: costoString) { _, _ in syncFinalIfNotManual() }
-            .onChange(of: tipoFiscal) { _, _ in syncFinalIfNotManual() }
             .onChange(of: porcentajeMargenSugeridoString) { _, _ in syncFinalIfNotManual() }
-            .onChange(of: porcentajeAdminString) { _, _ in /* no cambia el precio sugerido (afecta utilidad e ISR) */ }
-            .onChange(of: isrPorcentajeString) { _, _ in /* solo ISR */ }
+            .onChange(of: porcentajeAdminString) { _, _ in syncFinalIfNotManual() }
+            .onChange(of: isrPorcentajeString) { _, _ in /* solo afecta ISR y precio neto */ }
             
             // Mensaje de Error
             if let errorMsg {
                 Text(errorMsg)
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundColor(.red)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 4)
             }
             
             // --- Barra de Botones ---
             HStack {
                 Button("Cancelar") { dismiss() }
-                    .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 8).foregroundColor(.gray)
+                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.gray)
+                    .help("Cerrar sin guardar cambios")
                 
                 if case .edit = mode {
                     Button("Eliminar", role: .destructive) {
                         authReason = .deleteProduct
                         showingAuthModal = true
                     }
-                    .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 8).foregroundColor(.red)
+                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.red)
+                    .help("Eliminar este producto")
                 }
                 Spacer()
-                Button(productoAEditar == nil ? "Añadir Producto" : "Guardar Cambios") {
+                Button(productoAEditar == nil ? "Guardar y Añadir" : "Guardar Cambios") {
                     guardarCambios()
                 }
-                .buttonStyle(.plain).padding(.vertical, 8).padding(.horizontal, 12)
-                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(8)
+                .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 10)
+                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(6)
                 .disabled(nombreInvalido || costoInvalido || cantidadInvalida || pMargenInvalido || pAdminInvalido || pISRInvalido)
                 .opacity((nombreInvalido || costoInvalido || cantidadInvalida || pMargenInvalido || pAdminInvalido || pISRInvalido) ? 0.6 : 1.0)
+                .help("Guardar los cambios realizados")
             }
-            .padding(.horizontal).padding(.bottom, 8)
+            .padding(.horizontal).padding(.bottom, 6)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 760, minHeight: 580, maxHeight: 820)
-        .cornerRadius(15)
+        .frame(minWidth: 760, minHeight: 600, maxHeight: 600)
+        .cornerRadius(12)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
         }
     }
     
     private func roField(_ title: String, _ value: Double) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 1) {
             Text(title).font(.caption2).foregroundColor(.gray)
             Text(value.formatted(.number.precision(.fractionLength(2))))
-                .font(.headline)
+                .font(.subheadline)
                 .foregroundColor(.white)
-                .padding(8)
+                .padding(6)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color("MercedesBackground").opacity(0.6))
-                .cornerRadius(8)
+                .cornerRadius(6)
         }
     }
     
@@ -775,8 +963,8 @@ fileprivate struct ProductFormView: View {
         
         ZStack {
             Color("MercedesBackground").ignoresSafeArea()
-            VStack(spacing: 16) {
-                Text("Autorización Requerida").font(.title).fontWeight(.bold)
+            VStack(spacing: 12) {
+                Text("Autorización Requerida").font(.title2).fontWeight(.bold)
                 Text(prompt)
                     .font(.callout)
                     .foregroundColor(authReason == .deleteProduct ? .red : .gray)
@@ -793,7 +981,7 @@ fileprivate struct ProductFormView: View {
                 
                 Text("Usa tu contraseña de administrador:").font(.subheadline)
                 SecureField("Contraseña", text: $passwordAttempt)
-                    .padding(10).background(Color("MercedesCard")).cornerRadius(8)
+                    .padding(8).background(Color("MercedesCard")).cornerRadius(8)
                 
                 if !authError.isEmpty {
                     Text(authError).font(.caption2).foregroundColor(.red)
@@ -806,9 +994,9 @@ fileprivate struct ProductFormView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(28)
+            .padding(22)
         }
-        .frame(minWidth: 520, minHeight: 380)
+        .frame(minWidth: 520, minHeight: 360)
         .preferredColorScheme(.dark)
         .onAppear { authError = ""; passwordAttempt = "" }
     }
@@ -831,7 +1019,7 @@ fileprivate struct ProductFormView: View {
             return
         }
         guard let pMargen = Double(porcentajeMargenSugeridoString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pMargen) else {
-            errorMsg = "% Margen inválido."
+            errorMsg = "% Ganancia inválido."
             return
         }
         guard let pAdmin = Double(porcentajeAdminString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pAdmin) else {
@@ -855,10 +1043,11 @@ fileprivate struct ProductFormView: View {
             producto.proveedor = proveedor
             producto.lote = lote
             producto.fechaCaducidad = fechaCaducidad
-            producto.tipoFiscal = tipoFiscal
+            // Mantener campos de configuración financiera
             producto.porcentajeMargenSugerido = pMargen
             producto.porcentajeGastosAdministrativos = pAdmin
             producto.isrPorcentajeEstimado = pISR
+            // Precio final
             producto.precioVenta = finalEditable
             producto.precioModificadoManualmente = precioModificadoManualmente
         } else {
@@ -873,10 +1062,10 @@ fileprivate struct ProductFormView: View {
                 proveedor: proveedor,
                 lote: lote,
                 fechaCaducidad: fechaCaducidad,
-                costoIncluyeIVA: true, // ya no lo usamos en el nuevo flujo, pero conservamos compatibilidad
+                costoIncluyeIVA: true,
                 porcentajeMargenSugerido: pMargen,
                 porcentajeGastosAdministrativos: pAdmin,
-                tipoFiscal: tipoFiscal,
+                tipoFiscal: .iva16, // fijo en 16% para el cálculo
                 isrPorcentajeEstimado: pISR,
                 precioModificadoManualmente: precioModificadoManualmente
             )
@@ -956,14 +1145,13 @@ fileprivate struct FormField: View {
             
             ZStack(alignment: .leading) {
                 TextField("", text: $text)
-                    .padding(8)
+                    .padding(6)
                     .background(Color("MercedesBackground").opacity(0.9))
-                    .cornerRadius(8)
-                
-                if text.isEmpty {
+                    .cornerRadius(6)
+                if text.isEmpty && !placeholder.isEmpty {
                     Text(placeholder)
                         .foregroundColor(Color.white.opacity(0.35))
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 10)
                         .allowsHitTesting(false)
                 }
             }

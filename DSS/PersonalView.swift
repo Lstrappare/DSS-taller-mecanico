@@ -758,7 +758,7 @@ fileprivate struct PersonalFormView: View {
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 800, minHeight: 600, maxHeight: 900)
+        .frame(minWidth: 800, minHeight: 600, maxHeight: 600)
         .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()

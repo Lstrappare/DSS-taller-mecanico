@@ -1175,7 +1175,7 @@ fileprivate struct ServicioFormView: View {
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 760, minHeight: 650, maxHeight: 900)
+        .frame(minWidth: 760, minHeight: 600, maxHeight: 600)
         .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
