@@ -11,6 +11,7 @@ struct EnProcesoView: View {
     // --- CONSULTAS ---
     @Query private var personal: [Personal]
     @Query private var productos: [Producto]
+    @Query private var servicios: [Servicio]
     @Query(sort: \ServicioEnProceso.horaFinEstimada) private var todosLosTickets: [ServicioEnProceso]
     
     @State private var searchQuery = ""
@@ -181,7 +182,8 @@ struct EnProcesoView: View {
             CierreServicioModalView(
                 servicio: servicio,
                 personal: personal,
-                modelContext: modelContext
+                modelContext: modelContext,
+                servicios: servicios
             )
         }
         .sheet(item: $ticketAReprogramar) { ticket in
@@ -916,6 +918,7 @@ fileprivate struct CierreServicioModalView: View {
     let servicio: ServicioEnProceso
     let personal: [Personal]
     let modelContext: ModelContext
+    let servicios: [Servicio]
     
     @State private var observaciones = ""
     @State private var mostrandoConfirmacion = false
@@ -1039,10 +1042,47 @@ fileprivate struct CierreServicioModalView: View {
     
     // --- LÓGICA DE CIERRE FINAL ---
     func completarServicio() {
+        // 1) Liberar mecánico y sumar comisión por mano de obra
         if let mecanico = personal.first(where: { $0.rfc == servicio.rfcMecanicoAsignado }) {
             mecanico.estado = .disponible
+            
+            // Buscar el servicio catálogo por nombre y sumar su costo de mano de obra
+            // Fallback case-insensitive si no hay match exacto
+            let servicioCatalogo: Servicio? = {
+                if let exact = servicios.first(where: { $0.nombre == servicio.nombreServicio }) {
+                    return exact
+                }
+                let lower = servicio.nombreServicio.lowercased()
+                return servicios.first(where: { $0.nombre.lowercased() == lower })
+            }()
+            
+            if let servicioCatalogo {
+                let montoMO = max(0, servicioCatalogo.costoManoDeObra)
+                mecanico.comisiones += montoMO
+                // Opcional: actualizar snapshots para reflejar la nueva comisión en nómina
+                mecanico.recalcularYActualizarSnapshots()
+                
+                // Registrar detalle de la comisión sumada
+                let registroComision = DecisionRecord(
+                    fecha: Date(),
+                    titulo: "Comisión sumada: \(servicioCatalogo.nombre)",
+                    razon: "Se sumaron $\(String(format: "%.2f", montoMO)) de mano de obra al empleado \(mecanico.nombre) (RFC \(mecanico.rfc)).",
+                    queryUsuario: "Cierre de Servicio"
+                )
+                modelContext.insert(registroComision)
+            } else {
+                // Si no se encontró el catálogo, registramos aviso (no bloqueante)
+                let registroAviso = DecisionRecord(
+                    fecha: Date(),
+                    titulo: "Aviso: Servicio no encontrado para comisión",
+                    razon: "No se encontró en el catálogo el servicio '\(servicio.nombreServicio)'; no se pudo sumar comisión automáticamente.",
+                    queryUsuario: "Cierre de Servicio"
+                )
+                modelContext.insert(registroAviso)
+            }
         }
         
+        // 2) Registrar cierre general y eliminar ticket
         let registro = DecisionRecord(
             fecha: Date(),
             titulo: "Completado: \(servicio.nombreServicio)",
@@ -1065,4 +1105,3 @@ fileprivate struct CierreServicioModalView: View {
         return String(format: "%02i:%02i:%02i", horas, minutos, segs)
     }
 }
-

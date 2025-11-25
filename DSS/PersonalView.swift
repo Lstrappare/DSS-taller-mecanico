@@ -383,6 +383,8 @@ fileprivate struct PersonalCard: View {
                         chip(text: mecanico.rol.rawValue, icon: "person.badge.shield.checkmark.fill")
                         Text("Turno: \(mecanico.horaEntrada) - \(mecanico.horaSalida)")
                             .font(.caption2).foregroundColor(.gray)
+                        // NUEVO: comisiones acumuladas
+                        chip(text: "Comisiones: $\(mecanico.comisiones, default: "%.2f")", icon: "dollarsign.circle.fill")
                     }
                 }
             }
@@ -753,7 +755,7 @@ fileprivate struct PersonalFormView: View {
                             .validationHint(isInvalid: factorIntegracionInvalido, message: "Debe ser > 0.")
                     }
                     
-                    // Comisiones: visible solo en tipoSalario .mixto
+                    // Comisiones: editable si tipoSalario == .mixto; de solo lectura si .minimo (visibilidad)
                     if tipoSalario == .mixto {
                         HStack(spacing: 16) {
                             FormField(title: "• Comisiones (acumuladas)", placeholder: "0.00", text: $comisionesString)
@@ -763,7 +765,24 @@ fileprivate struct PersonalFormView: View {
                                 .foregroundColor(.gray)
                         }
                     } else {
-                        EmptyView()
+                        // Solo lectura para visibilidad cuando es salario mínimo
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Comisiones acumuladas (solo lectura)")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                                Text(String(format: "$%.2f", Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0))
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .padding(8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color("MercedesBackground").opacity(0.9))
+                                    .cornerRadius(8)
+                            }
+                            Text("Visible aunque el tipo de salario sea mínimo.")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
                     }
                     
                     // Campos automáticos: solo lectura
@@ -843,7 +862,8 @@ fileprivate struct PersonalFormView: View {
             .onChange(of: prestacionesMinimas) { _, _ in recalcularNominaPreview() }
             .onChange(of: tipoSalario) { _, _ in
                 if tipoSalario == .minimo {
-                    comisionesString = "0.00"
+                    // Si cambia a mínimo, mantener visible el valor actual como solo lectura
+                    // y evitar edición manual.
                 }
                 recalcularNominaPreview()
             }
@@ -1039,7 +1059,7 @@ fileprivate struct PersonalFormView: View {
             mec.frecuenciaPago = frecuenciaPago
             mec.salarioMinimoReferencia = salarioMinimoRef
             mec.factorIntegracion = factorIntegracionValor
-            mec.comisiones = (tipoSalario == .mixto) ? comisionesValor : 0.0
+            mec.comisiones = (tipoSalario == .mixto) ? comisionesValor : comisionesValor // mantenemos el valor acumulado como está, solo se hace no editable en UI
             
             // Delega el cálculo al modelo (también guarda snapshots)
             mec.recalcularYActualizarSnapshots()
@@ -1076,7 +1096,7 @@ fileprivate struct PersonalFormView: View {
                 tipoSalario: tipoSalario,
                 frecuenciaPago: frecuenciaPago,
                 salarioMinimoReferencia: salarioMinimoRef,
-                comisiones: (tipoSalario == .mixto) ? comisionesValor : 0.0,
+                comisiones: (Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0),
                 factorIntegracion: factorIntegracionValor,
                 salarioDiario: salarioDiario,
                 sbc: sbc,
@@ -1168,7 +1188,7 @@ fileprivate struct PersonalFormView: View {
     func recalcularNominaPreview() {
         let sm = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) ?? 0
         let factor = max(Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) ?? 1.0452, 0.0001)
-        let com = (tipoSalario == .mixto) ? (Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0) : 0
+        let com = (Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0)
         let salarioDiarioBase = sm
         let promCom = (tipoSalario == .mixto) ? (com / diasPromedio) : 0
         
@@ -1363,4 +1383,3 @@ fileprivate struct AssistToolbar: View {
         .font(.caption)
     }
 }
-
