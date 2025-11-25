@@ -24,7 +24,7 @@ fileprivate enum ProductPricingHelpers {
     // 1) Partimos del costo
     // 2) Ganancia y gastos admin calculados sobre el costo
     // 3) IVA del 16% sobre el subtotal (costo + ganancia + admin)
-    // 4) ISR sobre la utilidad total (ganancia + admin)
+    // 4) ISR SOLO sobre la ganancia (margen), NO sobre los gastos administrativos
     struct ReglaCalculoResultado {
         let ganancia: Double
         let gastosAdmin: Double
@@ -34,7 +34,7 @@ fileprivate enum ProductPricingHelpers {
         let utilidadTotal: Double
         let isr: Double
         let precioNetoDespuesISR: Double
-        // NUEVO: Reparto proporcional de la utilidad después del ISR
+        // NUEVO: Reparto directo después del ISR (sin proporciones)
         let utilidadRealDespuesISR: Double
         let proporcionGanancia: Double
         let proporcionAdmin: Double
@@ -52,17 +52,25 @@ fileprivate enum ProductPricingHelpers {
         let subtotal = costo + ganancia + gastosAdmin
         let iva = subtotal * ivaTasaFija
         let precioConIVA = subtotal + iva
+        
+        // Utilidad total antes de ISR
         let utilidadTotal = ganancia + gastosAdmin
-        let isr = utilidadTotal * (isrPorcentaje / 100.0)
+        
+        // ISR SOLO sobre la ganancia (margen)
+        let isr = ganancia * (isrPorcentaje / 100.0)
+        
+        // El precio al cliente no cambia por ISR (gasto interno)
         let precioNetoDespuesISR = precioConIVA - isr
         
-        // NUEVO: Reparto proporcional de utilidad después del ISR
-        let utilidadRealDespuesISR = max(0, utilidadTotal - isr)
-        let denominador = max(utilidadTotal, 0.0000001) // evitar división por cero
+        // Utilidad real después de ISR: ganancia neta + gastos admin (sin tocar)
+        let gananciaRealDespuesISR = max(0, ganancia - isr)
+        let gastosAdminRealesDespuesISR = gastosAdmin
+        let utilidadRealDespuesISR = max(0, gananciaRealDespuesISR + gastosAdminRealesDespuesISR)
+        
+        // Mantener proporciones solo para referencia visual (opcionales)
+        let denominador = max(utilidadTotal, 0.0000001)
         let proporcionGanancia = ganancia / denominador
         let proporcionAdmin = gastosAdmin / denominador
-        let gananciaRealDespuesISR = utilidadRealDespuesISR * proporcionGanancia
-        let gastosAdminRealesDespuesISR = utilidadRealDespuesISR * proporcionAdmin
         
         return ReglaCalculoResultado(
             ganancia: ganancia,
@@ -475,15 +483,14 @@ fileprivate struct ProductoCard: View {
             
             // Desglose de utilidad real
             HStack(spacing: 6) {
-                chip(text: "Ganancia: $\(desglose.ganancia, default: "%.2f")", icon: "chart.line.uptrend.xyaxis")
-                chip(text: "Admin: $\(desglose.gastosAdmin, default: "%.2f")", icon: "gearshape.2.fill")
+                chip(text: "Margen de Ganancia: $\(desglose.ganancia, default: "%.2f")", icon: "chart.line.uptrend.xyaxis")
+                chip(text: "Gastos de Administración: $\(desglose.gastosAdmin, default: "%.2f")", icon: "gearshape.2.fill")
                 Spacer()
             }
             
             // Reparto real después del ISR
             HStack(spacing: 6) {
-                chip(text: "Ganancia real: $\(desglose.gananciaRealDespuesISR, default: "%.2f")", icon: "dollarsign.arrow.circlepath")
-                chip(text: "Admin real: $\(desglose.gastosAdminRealesDespuesISR, default: "%.2f")", icon: "slider.horizontal.3")
+                chip(text: "Ganancia real (después de ISR): $\(desglose.gananciaRealDespuesISR, default: "%.2f")", icon: "dollarsign.arrow.circlepath")
                 Spacer()
             }
             
@@ -813,7 +820,7 @@ fileprivate struct ProductFormView: View {
                             .help("Porcentaje para cubrir administración sobre el costo")
                         FormField(title: "% ISR (aprox.)", placeholder: "0-100", text: $isrPorcentajeString)
                             .validationHint(isInvalid: pISRInvalido, message: "0 a 100.")
-                            .help("Se calcula sobre la utilidad (ganancia + administrativos)")
+                            .help("Se calcula solo sobre la GANANCIA (margen)")
                     }
                     HStack(spacing: 6) {
                         Label("IVA: 16% (fijo)", systemImage: "info.circle")
@@ -834,7 +841,7 @@ fileprivate struct ProductFormView: View {
                         roField("Precio sugerido (con IVA)", resultadoReglas.precioSugeridoConIVA)
                     }
                     HStack(spacing: 10) {
-                        roField("ISR (sobre utilidad)", resultadoReglas.isr)
+                        roField("ISR (solo sobre ganancia)", resultadoReglas.isr)
                         roField("Precio neto después de ISR", resultadoReglas.precioNetoDespuesISR)
                     }
                     .font(.caption2)
@@ -842,13 +849,11 @@ fileprivate struct ProductFormView: View {
                     
                     // NUEVO: Reparto real después del ISR
                     VStack(alignment: .leading, spacing: 6) {
-                        SectionHeader(title: "Reparto real después del ISR", subtitle: "Proporción original aplicada a la utilidad real")
+                        SectionHeader(title: "Reparto real después del ISR", subtitle: "Ganancia neta")
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 6) {
                             roField("Utilidad real después de ISR", resultadoReglas.utilidadRealDespuesISR)
-                            roField("Gastos administrativos reales (después de ISR)", resultadoReglas.gastosAdminRealesDespuesISR)
-                            roField("Ganancia real (después de ISR)", resultadoReglas.gananciaRealDespuesISR)
                         }
-                        Text("La utilidad real se reparte según la proporción original: Ganancia = \(resultadoReglas.proporcionGanancia.formatted(.percent)) • Admin = \(resultadoReglas.proporcionAdmin.formatted(.percent)).")
+                        Text("El ISR solo afecta al margen de ganancia.")
                             .font(.caption2)
                             .foregroundColor(.gray)
                     }
