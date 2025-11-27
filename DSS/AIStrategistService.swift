@@ -1,3 +1,11 @@
+//
+//  AIStrategistService.swift
+//  DSS
+//
+//  Created by Jose Cisneros on 26/11/25.
+//
+
+
 import Foundation
 import MLXLLM
 import MLXLMCommon
@@ -28,7 +36,7 @@ class AIStrategistService {
             
             // 2. Iniciamos una sesión de chat (mantiene el contexto)
             if let container = self.modelContainer {
-                self.chatSession = ChatSession(model: container)
+                self.chatSession = ChatSession(container)
                 
                 await MainActor.run {
                     self.isModelLoaded = true
