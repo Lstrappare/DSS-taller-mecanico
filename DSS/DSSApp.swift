@@ -9,7 +9,7 @@ struct TallerDSSApp: App {
     @AppStorage("hasCompletedRegistration") private var hasCompletedRegistration = false
     
     // Servicio de IA compartido en toda la app
-    @StateObject private var strategistService = AIStrategistService()
+    @StateObject private var strategistService = AIStrategistService.shared
     
     // --- Contenedor de Base de Datos ---
     var sharedModelContainer: ModelContainer = {

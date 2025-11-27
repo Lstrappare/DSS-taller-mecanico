@@ -29,6 +29,13 @@ struct ConsultaView: View {
     @Query(filter: #Predicate<ChatMessage> { $0.conversationID == strategicConversationID },
            sort: \ChatMessage.date) private var messages: [ChatMessage]
     
+    // Observadores de datos para refrescar el contexto maestro automáticamente
+    @Query private var personal: [Personal]
+    @Query private var productos: [Producto]
+    @Query private var servicios: [Servicio]
+    @Query private var tickets: [ServicioEnProceso]
+    @Query(sort: \DecisionRecord.fecha, order: .reverse) private var decisiones: [DecisionRecord]
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
@@ -56,6 +63,8 @@ struct ConsultaView: View {
         )
         .onAppear {
             startWifiMonitor()
+            // Construir el contexto maestro inicial lo antes posible
+            Task { await service.refreshMasterContext(modelContext: modelContext) }
             // Auto-arranque OFFLINE si ya fue inicializado alguna vez
             if aiModelInitialized && !service.isModelLoaded {
                 Task {
@@ -73,6 +82,12 @@ struct ConsultaView: View {
         .onDisappear {
             monitor.cancel()
         }
+        // Refrescar el contexto maestro en cuanto cambie algo relevante
+        .onChange(of: personal) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
+        .onChange(of: productos) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
+        .onChange(of: servicios) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
+        .onChange(of: tickets) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
+        .onChange(of: decisiones) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
         .preferredColorScheme(.dark)
     }
     
@@ -188,6 +203,12 @@ struct ConsultaView: View {
                     Text("Haz preguntas sobre precios, servicios, inventario, personal o decisiones estratégicas del taller.")
                         .font(.caption)
                         .foregroundColor(.gray)
+                    // Mostrar un extracto del contexto cargado (opcional)
+                    if !service.systemPrompt.isEmpty {
+                        Text("Contexto cargado.")
+                            .font(.caption2)
+                            .foregroundColor(Color("MercedesPetrolGreen"))
+                    }
                 }
                 .padding(12)
                 .background(Color("MercedesCard"))
@@ -305,8 +326,10 @@ struct ConsultaView: View {
         insertUserMessage(prompt)
         
         Task {
+            // Asegurar que el contexto maestro esté fresco justo antes de preguntar
+            await service.refreshMasterContext(modelContext: modelContext)
             await MainActor.run { service.isGenerating = true }
-            await service.ask(prompt)
+            await service.ask(prompt) // usa el systemPrompt interno
             await MainActor.run {
                 service.isGenerating = false
                 if !service.outputText.isEmpty {
@@ -335,3 +358,4 @@ struct ConsultaView: View {
             .cornerRadius(6)
     }
 }
+
