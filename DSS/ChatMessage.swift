@@ -12,7 +12,9 @@ private let typingID = UUID()
 struct ConsultaView: View {
     @Environment(\.modelContext) private var modelContext
     
-    @State private var service = AIStrategistService()
+    // Servicio compartido (App-wide)
+    @EnvironmentObject private var service: AIStrategistService
+    
     @State private var userPrompt = ""
     
     // Conectividad Wi‑Fi
@@ -54,6 +56,19 @@ struct ConsultaView: View {
         )
         .onAppear {
             startWifiMonitor()
+            // Auto-arranque OFFLINE si ya fue inicializado alguna vez
+            if aiModelInitialized && !service.isModelLoaded {
+                Task {
+                    service.isGenerating = true
+                    let ok = await service.autoStartIfPossible()
+                    await MainActor.run {
+                        service.isGenerating = false
+                        if ok && messages.isEmpty {
+                            insertAssistantMessage("Modelo iniciado. ¿En qué puedo ayudarte hoy?")
+                        }
+                    }
+                }
+            }
         }
         .onDisappear {
             monitor.cancel()
@@ -106,7 +121,9 @@ struct ConsultaView: View {
                             .foregroundColor(.white)
                             .font(.headline)
                     }
-                    Text("Se requiere conexión Wi‑Fi para iniciar el motor de IA.")
+                    Text(aiModelInitialized
+                         ? "Puedes iniciar el motor de IA incluso sin Wi‑Fi si el modelo ya está cacheado."
+                         : "Se requiere conexión Wi‑Fi para iniciar el motor de IA la primera vez.")
                         .font(.caption)
                         .foregroundColor(.gray)
                     
@@ -139,10 +156,11 @@ struct ConsultaView: View {
                                     .cornerRadius(8)
                             }
                             .buttonStyle(.plain)
-                            .disabled(!isWifiAvailable)
-                            .opacity(isWifiAvailable ? 1.0 : 0.6)
+                            // Solo bloquear por falta de Wi‑Fi si es la PRIMERA VEZ
+                            .disabled(!aiModelInitialized && !isWifiAvailable)
+                            .opacity((!aiModelInitialized && !isWifiAvailable) ? 0.6 : 1.0)
                             
-                            if !isWifiAvailable {
+                            if !aiModelInitialized && !isWifiAvailable {
                                 Text("Conéctate a una red Wi‑Fi para continuar.")
                                     .font(.caption2)
                                     .foregroundColor(.red)

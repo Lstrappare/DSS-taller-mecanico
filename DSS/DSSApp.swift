@@ -8,6 +8,9 @@ struct TallerDSSApp: App {
     @AppStorage("isLoggedIn") private var isLoggedIn = false
     @AppStorage("hasCompletedRegistration") private var hasCompletedRegistration = false
     
+    // Servicio de IA compartido en toda la app
+    @StateObject private var strategistService = AIStrategistService()
+    
     // --- Contenedor de Base de Datos ---
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -36,6 +39,7 @@ struct TallerDSSApp: App {
                 // 1. Si ya inició sesión, va a la app
                 ContentView()
                     .modelContainer(sharedModelContainer)
+                    .environmentObject(strategistService)
             } else if hasCompletedRegistration {
                 // 2. Si NO ha iniciado sesión, PERO YA SE REGISTRÓ,
                 //    lo mandamos al Login.

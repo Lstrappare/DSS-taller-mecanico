@@ -9,15 +9,16 @@
 import Foundation
 import MLXLLM
 import MLXLMCommon
+internal import Combine
 
-@Observable // Usando la macro moderna de Swift (iOS 17/macOS 14+)
-class AIStrategistService {
+// Conform to ObservableObject so it can be used with @EnvironmentObject
+final class AIStrategistService: ObservableObject {
     
     // Estado de la carga del modelo
-    var isModelLoaded = false
-    var isGenerating = false
-    var outputText = ""
-    var errorMessage: String?
+    @Published var isModelLoaded = false
+    @Published var isGenerating = false
+    @Published var outputText = ""
+    @Published var errorMessage: String?
     
     // Componentes de MLX
     private var modelContainer: ModelContainer?
@@ -28,6 +29,7 @@ class AIStrategistService {
     private let modelId = "mlx-community/Llama-3.2-3B-Instruct-4bit"
     
     /// Carga el modelo en memoria. Esto descarga los pesos si no están en caché.
+    @MainActor
     func loadModel() async {
         do {
             // 1. Cargamos el modelo usando la API de alto nivel
@@ -38,17 +40,24 @@ class AIStrategistService {
             if let container = self.modelContainer {
                 self.chatSession = ChatSession(container)
                 
-                await MainActor.run {
-                    self.isModelLoaded = true
-                    self.errorMessage = nil
-                }
+                self.isModelLoaded = true
+                self.errorMessage = nil
             }
         } catch {
-            await MainActor.run {
-                self.errorMessage = "Error cargando el modelo: \(error.localizedDescription)"
-                print(error)
-            }
+            self.errorMessage = "Error cargando el modelo: \(error.localizedDescription)"
+            print(error)
         }
+    }
+    
+    /// Intenta arrancar el modelo si no está cargado. Si ya está cacheado, funciona offline.
+    /// Devuelve true si quedó cargado, false si falló (por ejemplo, primera vez sin red).
+    @discardableResult
+    func autoStartIfPossible() async -> Bool {
+        // No repetir si ya está cargado
+        if isModelLoaded { return true }
+        // Intento directo: si el modelo está cacheado, MLX lo cargará offline.
+        await loadModel()
+        return isModelLoaded
     }
     
     /// Envía una pregunta al asistente estratégico
