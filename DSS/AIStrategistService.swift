@@ -97,7 +97,7 @@ final class AIStrategistService: ObservableObject {
         
         let prompt =
         """
-        Eres un “Asistente Estratégico DSS”, un experto en soporte de decisiones asistente del dueño o administrador del taller. Siempre contesta en español, de manera concisa y con precisión, usa el contexto actual del negocio. Si los datos se pierden, dilo de una manera transparente.
+        Eres un “Asistente Estratégico DSS”, un experto en soporte de decisiones asistente del dueño del taller. Siempre contesta en español, de manera concisa y con precisión, usa el contexto actual del negocio. Si los datos se pierden, dilo de una manera transparente.
 
         CONTEXTO DEL NEGOCIO (Actualizado):
         1) Personal:
@@ -156,8 +156,56 @@ final class AIStrategistService: ObservableObject {
     
     private func buildServiciosEnProcesoSummary(_ arr: [ServicioEnProceso]) -> String {
         if arr.isEmpty { return "- Sin actividad." }
-        let activos = arr.filter { $0.estado == .enProceso }
-        return "Total tickets: \(arr.count) | En proceso activo: \(activos.count)"
+        
+        let enProceso = arr.filter { $0.estado == .enProceso }
+            .sorted { $0.horaFinEstimada < $1.horaFinEstimada }
+        let programados = arr.filter { $0.estado == .programado }
+            .sorted { (a, b) in
+                let ai = a.fechaProgramadaInicio ?? a.horaInicio
+                let bi = b.fechaProgramadaInicio ?? b.horaInicio
+                return ai < bi
+            }
+        
+        let header = "Total tickets: \(arr.count) | En proceso activo: \(enProceso.count) | Programados: \(programados.count)"
+        
+        // Detalle de EN PROCESO (máx. 10)
+        let detalleEnProceso: String = {
+            guard !enProceso.isEmpty else { return "- En proceso: Ninguno" }
+            let items = enProceso.prefix(10).map { s in
+                let inicio = s.horaInicio.formatted(date: .abbreviated, time: .shortened)
+                let fin = s.horaFinEstimada.formatted(date: .omitted, time: .shortened)
+                let mecanico = s.nombreMecanicoAsignado
+                let vehiculo = s.vehiculo?.placas ?? "N/A"
+                return "• \(s.nombreServicio) | Mecánico: \(mecanico) | Vehículo: [\(vehiculo)] | Inicio: \(inicio) | Fin est.: \(fin)"
+            }
+            return items.joined(separator: "\n")
+        }()
+        
+        // Detalle de PROGRAMADOS (máx. 10)
+        let detalleProgramados: String = {
+            guard !programados.isEmpty else { return "- Programados: Ninguno" }
+            let items = programados.prefix(10).map { s in
+                let inicioProg = (s.fechaProgramadaInicio ?? s.horaInicio).formatted(date: .abbreviated, time: .shortened)
+                let mecanico = s.nombreMecanicoSugerido ?? s.nombreMecanicoAsignado
+                let vehiculo = s.vehiculo?.placas ?? "N/A"
+                return "• \(s.nombreServicio) | Sugerido: \(mecanico) | Vehículo: [\(vehiculo)] | Inicio prog.: \(inicioProg) | Duración: \(String(format: "%.1f", s.duracionHoras)) h"
+            }
+            return items.joined(separator: "\n")
+        }()
+        
+        return """
+        \(header)
+        En proceso:
+        \(detalleEnProceso)
+        Programados:
+        \(detalleProgramados)
+        """
+    }
+    
+    private func buildServiciosEnProcesoSummary(_ arrAntiguo: [ServicioEnProceso], limit _: Int = 10) -> String {
+        // Duplicado accidentalmente para evitar romper referencias si existieran; mantenemos solo el nuevo arriba.
+        // Esta versión no se usa.
+        return buildServiciosEnProcesoSummary(arrAntiguo)
     }
     
     private func buildHistorialSummary(_ arr: [DecisionRecord]) -> String {
