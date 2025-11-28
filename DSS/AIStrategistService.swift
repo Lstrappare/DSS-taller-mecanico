@@ -76,6 +76,15 @@ final class AIStrategistService: ObservableObject {
     /// Reconstruye el prompt maestro con la información clave del negocio.
     // CORRECCIÓN 3: Especificamos que este ModelContext es de la base de datos (SwiftData)
     func refreshMasterContext(modelContext: SwiftData.ModelContext) async {
+        // Nombre del dueño/cuenta desde AppStorage (UserDefaults)
+        let ownerName = (UserDefaults.standard.string(forKey: "user_name") ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let ownerLine: String = {
+            if ownerName.isEmpty {
+                return "0) Cuenta/Dueño: (no configurado) (Rol: Dueño Administrador)"
+            } else {
+                return "0)Nombre de la Cuenta/Dueño con quien charlas: \(ownerName) (Rol: Dueño Administrador)"
+            }
+        }()
         
         // Fetch sincronizados (rápidos y resumidos).
         let personales: [Personal] = (try? modelContext.fetch(FetchDescriptor<Personal>())) ?? []
@@ -98,6 +107,8 @@ final class AIStrategistService: ObservableObject {
         let prompt =
         """
         Eres un “Asistente Estratégico DSS”, un experto en soporte de decisiones asistente del dueño del taller. Siempre contesta en español, de manera concisa y con precisión, usa el contexto actual del negocio. Si los datos se pierden, dilo de una manera transparente.
+
+        \(ownerLine)
 
         CONTEXTO DEL NEGOCIO (Actualizado):
         1) Personal:
@@ -143,9 +154,40 @@ final class AIStrategistService: ObservableObject {
     
     private func buildInventarioSummary(_ arr: [Producto]) -> String {
         if arr.isEmpty { return "- No hay productos." }
-        let lowStock = arr.filter { $0.cantidad <= 2.0 }.sorted { $0.cantidad < $1.cantidad }.prefix(5)
-            .map { "- \($0.nombre): \($0.cantidad) \($0.unidadDeMedida)" }.joined(separator: "\n")
-        return "Total: \(arr.count)\nCríticos:\n\(lowStock.isEmpty ? "Ninguno" : lowStock)"
+        
+        // Críticos por stock (<= 2)
+        let lowStock = arr
+            .filter { $0.cantidad <= 2.0 }
+            .sorted { $0.cantidad < $1.cantidad }
+            .prefix(5)
+            .map { "- \($0.nombre): \($0.cantidad) \($0.unidadDeMedida)" }
+            .joined(separator: "\n")
+        
+        // Listado detallado de productos (máx. 8) por mayor valor de stock (costo * cantidad)
+        let detallados = arr
+            .sorted { ($0.costo * $0.cantidad) > ($1.costo * $1.cantidad) }
+            .prefix(8)
+            .map { p -> String in
+                let ganancia = p.costo * (p.porcentajeMargenSugerido / 100.0)
+                let gastosAdmin = p.costo * (p.porcentajeGastosAdministrativos / 100.0)
+                let isr = ganancia * (p.isrPorcentajeEstimado / 100.0)
+                let gananciaNeta = max(0, ganancia - isr)
+                let stockStr = String(format: "%.2f", p.cantidad)
+                let gananciaStr = String(format: "%.2f", ganancia)
+                let adminStr = String(format: "%.2f", gastosAdmin)
+                let netaStr = String(format: "%.2f", gananciaNeta)
+                return "• \(p.nombre) | Stock: \(stockStr) \(p.unidadDeMedida) | Margen: $\(gananciaStr) | Gastos Adm.: $\(adminStr) | Ganancia neta (post ISR): $\(netaStr)"
+            }
+            .joined(separator: "\n")
+        
+        return """
+        Total: \(arr.count)
+        Críticos:
+        \(lowStock.isEmpty ? "Ninguno" : lowStock)
+        
+        Detalle (máx. 8 por valor de stock):
+        \(detallados)
+        """
     }
     
     private func buildServiciosSummary(_ arr: [Servicio]) -> String {
