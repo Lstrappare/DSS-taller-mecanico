@@ -656,6 +656,16 @@ fileprivate struct PersonalFormView: View {
         diasLaborales.isEmpty
     }
     
+    // Validación de teléfono
+    private var telefonoInvalido: Bool {
+        if !telefonoActivo { return false }
+        let trimmed = telefono.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Simple validación de 10 dígitos
+        let regex = #"^\d{10}$"#
+        let pred = NSPredicate(format: "SELF MATCHES %@", regex)
+        return !pred.evaluate(with: trimmed)
+    }
+    
     // Helpers de promedio de comisiones
     private var diasPromedio: Double {
         switch frecuenciaPago {
@@ -689,6 +699,10 @@ fileprivate struct PersonalFormView: View {
                     }
                     HStack(spacing: 16) {
                         FormField(title: "Teléfono", placeholder: "10 dígitos", text: $telefono)
+                            .disabled(!telefonoActivo)
+                            .opacity(telefonoActivo ? 1.0 : 0.6)
+                            .validationHint(isInvalid: telefonoInvalido, message: "Debe tener 10 dígitos.")
+                        
                         Toggle("Teléfono activo para contacto", isOn: $telefonoActivo)
                             .toggleStyle(.switch)
                             .font(.caption2)
@@ -1006,8 +1020,10 @@ fileprivate struct PersonalFormView: View {
                 .padding(.horizontal, 12)
                 .foregroundColor(Color("MercedesPetrolGreen"))
                 .cornerRadius(8)
-                .disabled(nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido)
-                .opacity((nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido) ? 0.6 : 1.0)
+                .foregroundColor(Color("MercedesPetrolGreen"))
+                .cornerRadius(8)
+                .disabled(nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido || telefonoInvalido)
+                .opacity((nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido || telefonoInvalido) ? 0.6 : 1.0)
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
@@ -1112,6 +1128,10 @@ fileprivate struct PersonalFormView: View {
         }
         guard let factorIntegracionValor = Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")), factorIntegracionValor > 0 else {
             errorMsg = "Factor de Integración inválido."
+            return
+        }
+        if telefonoActivo && telefonoInvalido {
+            errorMsg = "El teléfono debe tener 10 dígitos si está activo."
             return
         }
         
