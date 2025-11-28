@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import LocalAuthentication
 
 fileprivate enum TipoDecision: String, CaseIterable, Identifiable {
     case todas = "Todas"
@@ -18,6 +19,10 @@ fileprivate enum TipoDecision: String, CaseIterable, Identifiable {
 struct HistorialView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \DecisionRecord.fecha, order: .reverse) private var historial: [DecisionRecord]
+    
+    // Seguridad
+    @AppStorage("user_password") private var userPassword = ""
+    @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
     
     // Estado de UI
     @State private var searchQuery = ""
@@ -35,6 +40,20 @@ struct HistorialView: View {
     @State private var expandedIDs: Set<PersistentIdentifier> = []
     @State private var registroAEliminar: DecisionRecord?
     @State private var showingDeleteConfirm = false
+    
+    // Nuevo: flujo de decisión manual
+    @State private var showingAddManualFlow = false
+    @State private var showingAuthModal = false
+    @State private var authError = ""
+    @State private var passwordAttempt = ""
+    @State private var touchIDAvailable = true
+    @State private var isAuthorizedForManual = false
+    
+    // Formulario de decisión manual
+    @State private var manualTitulo = ""
+    @State private var manualRazon = ""
+    private let manualOrigen = "N/A (Manual)"
+    @State private var manualError: String?
     
     // Derivados
     private var filtered: [DecisionRecord] {
@@ -132,6 +151,9 @@ struct HistorialView: View {
             LinearGradient(colors: [Color("MercedesBackground"), Color("MercedesBackground").opacity(0.9)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         )
+        .sheet(isPresented: $showingAddManualFlow) {
+            addManualDecisionFlow()
+        }
         .confirmationDialog(
             "Eliminar registro",
             isPresented: $showingDeleteConfirm,
@@ -145,6 +167,12 @@ struct HistorialView: View {
             Button("Cancelar", role: .cancel) { registroAEliminar = nil }
         } message: {
             Text("Esta acción no se puede deshacer.")
+        }
+        .onAppear {
+            // Detectar biometría disponible para mostrar opción Touch ID si procede
+            let context = LAContext()
+            var error: NSError?
+            touchIDAvailable = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
         }
     }
     
@@ -179,19 +207,39 @@ struct HistorialView: View {
                     }
                 }
                 Spacer()
-                if tieneFiltrosActivos {
+                HStack(spacing: 8) {
                     Button {
-                        limpiarFiltros()
+                        showingAddManualFlow = true
+                        // Arranca en modo de autenticación
+                        isAuthorizedForManual = false
+                        manualTitulo = ""
+                        manualRazon = ""
+                        manualError = nil
                     } label: {
-                        Label("Limpiar", systemImage: "xmark.circle")
+                        Label("Agregar decisión manual", systemImage: "plus.circle.fill")
                             .font(.subheadline)
                             .padding(.vertical, 6).padding(.horizontal, 10)
-                            .background(Color("MercedesCard"))
+                            .background(Color("MercedesPetrolGreen"))
                             .foregroundColor(.white)
                             .cornerRadius(8)
                     }
                     .buttonStyle(.plain)
-                    .help("Quitar filtros activos")
+                    .help("Registrar una decisión manual (requiere contraseña)")
+                    
+                    if tieneFiltrosActivos {
+                        Button {
+                            limpiarFiltros()
+                        } label: {
+                            Label("Limpiar", systemImage: "xmark.circle")
+                                .font(.subheadline)
+                                .padding(.vertical, 6).padding(.horizontal, 10)
+                                .background(Color("MercedesCard"))
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Quitar filtros activos")
+                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -417,6 +465,142 @@ struct HistorialView: View {
                     .font(.caption2)
                     .foregroundColor(.gray)
             }
+        }
+    }
+    
+    // MARK: - Flujo de agregar decisión manual
+    @ViewBuilder
+    private func addManualDecisionFlow() -> some View {
+        if !isAuthorizedForManual {
+            // Paso 1: Autenticación
+            AuthModal(
+                title: "Autorización Requerida",
+                prompt: "Autoriza para escribir una decisión manual.",
+                error: authError,
+                passwordAttempt: $passwordAttempt,
+                isTouchIDEnabled: isTouchIDEnabled && touchIDAvailable,
+                onAuthTouchID: { Task { await authenticateWithTouchID() } },
+                onAuthPassword: { authenticateWithPassword() }
+            )
+            .onAppear { authError = "" }
+        } else {
+            // Paso 2: Formulario
+            ModalView(title: "Nueva Decisión Manual") {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Por favor, sé lo más específico posible; esto ayudará al asistente estratégico a tomar mejores decisiones.")
+                        .font(.callout)
+                        .foregroundColor(.yellow)
+                        .padding(.bottom, 4)
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Título").font(.caption).foregroundColor(.gray)
+                        TextField("Ej. Ajuste de presupuesto mensual de refacciones", text: $manualTitulo)
+                            .padding(8)
+                            .background(Color("MercedesBackground"))
+                            .cornerRadius(8)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Razón / Detalle de la decisión").font(.caption).foregroundColor(.gray)
+                        TextEditor(text: $manualRazon)
+                            .frame(minHeight: 160)
+                            .padding(8)
+                            .background(Color("MercedesBackground"))
+                            .cornerRadius(8)
+                    }
+                    
+                    if let manualError {
+                        Text(manualError).font(.caption).foregroundColor(.red)
+                    }
+                    
+                    HStack {
+                        Button("Cancelar") {
+                            showingAddManualFlow = false
+                            isAuthorizedForManual = false
+                            manualTitulo = ""
+                            manualRazon = ""
+                            manualError = nil
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 8)
+                        .foregroundColor(.gray)
+                        
+                        Spacer()
+                        Button {
+                            guardarDecisionManual()
+                        } label: {
+                            Label("Guardar", systemImage: "checkmark.circle.fill")
+                                .font(.headline)
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 12)
+                                .background(Color("MercedesPetrolGreen"))
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(manualTitulo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                                  manualRazon.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .opacity((manualTitulo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                                  manualRazon.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? 0.6 : 1.0)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func guardarDecisionManual() {
+        manualError = nil
+        let titulo = manualTitulo.trimmingCharacters(in: .whitespacesAndNewlines)
+        let razon = manualRazon.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !titulo.isEmpty else {
+            manualError = "El título es obligatorio."
+            return
+        }
+        guard !razon.isEmpty else {
+            manualError = "La razón/detalle es obligatoria."
+            return
+        }
+        let registro = DecisionRecord(
+            fecha: Date(),
+            titulo: titulo,
+            razon: razon,
+            queryUsuario: manualOrigen
+        )
+        modelContext.insert(registro)
+        showingAddManualFlow = false
+        isAuthorizedForManual = false
+        manualTitulo = ""
+        manualRazon = ""
+        manualError = nil
+    }
+    
+    // Autenticación
+    private func authenticateWithPassword() {
+        if passwordAttempt == userPassword {
+            onAuthSuccess()
+        } else {
+            authError = "Contraseña incorrecta."
+            passwordAttempt = ""
+        }
+    }
+    
+    private func onAuthSuccess() {
+        authError = ""
+        passwordAttempt = ""
+        isAuthorizedForManual = true
+    }
+    
+    private func authenticateWithTouchID() async {
+        let context = LAContext()
+        let reason = "Autoriza para registrar una decisión manual."
+        do {
+            if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
+                let success = try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
+                if success { await MainActor.run { onAuthSuccess() } }
+            }
+        } catch {
+            await MainActor.run { authError = "Huella no reconocida." }
         }
     }
 }
