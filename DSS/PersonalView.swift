@@ -144,7 +144,7 @@ struct PersonalView: View {
                     HStack(spacing: 10) {
                         Label("\(personal.count) empleado\(personal.count == 1 ? "" : "s")", systemImage: "person.2.fill")
                             .font(.footnote).foregroundColor(.gray)
-                        let disponibles = personal.filter { $0.estado == .disponible && $0.estaEnHorario }.count
+                        let disponibles = personal.filter { $0.activo && $0.estado == .disponible && $0.estaEnHorario }.count
                         Label("\(disponibles) disponibles ahora", systemImage: "checkmark.seal.fill")
                             .font(.footnote).foregroundColor(.gray)
                     }
@@ -357,6 +357,14 @@ fileprivate struct PersonalCard: View {
                     HStack {
                         Text(mecanico.nombre)
                             .font(.headline).fontWeight(.semibold)
+                        if !mecanico.activo {
+                            Text("De baja")
+                                .font(.caption2)
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Color.red.opacity(0.2))
+                                .foregroundColor(.red)
+                                .cornerRadius(6)
+                        }
                         Spacer()
                         Text(mecanico.estaEnHorario ? mecanico.estado.rawValue : "Fuera de Turno")
                             .font(.caption2)
@@ -386,19 +394,30 @@ fileprivate struct PersonalCard: View {
                         // NUEVO: comisiones acumuladas
                         chip(text: "Comisiones: $\(mecanico.comisiones, default: "%.2f")", icon: "dollarsign.circle.fill")
                     }
+                    if !mecanico.activo, let f = mecanico.fechaBaja {
+                        Text("Fecha de baja: \(f.formatted(date: .abbreviated, time: .omitted))")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
                 }
             }
             
             // Contacto
             HStack(spacing: 12) {
-                Link(destination: URL(string: "mailto:\(mecanico.email)")!) {
+                if mecanico.email.isEmpty || !mecanico.activo {
                     Label(mecanico.email.isEmpty ? "Email: N/A" : mecanico.email, systemImage: "envelope.fill")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                } else {
+                    Link(destination: URL(string: "mailto:\(mecanico.email)")!) {
+                        Label(mecanico.email, systemImage: "envelope.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption2)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
                 }
-                .buttonStyle(.plain)
-                .font(.caption2)
-                .foregroundColor(mecanico.email.isEmpty ? .gray : Color("MercedesPetrolGreen"))
                 
-                if mecanico.telefonoActivo && !mecanico.telefono.isEmpty {
+                if mecanico.telefonoActivo && !mecanico.telefono.isEmpty && mecanico.activo {
                     Link(destination: URL(string: "tel:\(mecanico.telefono)")!) {
                         Label(mecanico.telefono, systemImage: "phone.fill")
                     }
@@ -441,6 +460,7 @@ fileprivate struct PersonalCard: View {
         )
         .cornerRadius(10)
         .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
+        .opacity(mecanico.activo ? 1.0 : 0.85)
     }
     
     private func chip(text: String, icon: String) -> some View {
@@ -482,6 +502,10 @@ fileprivate struct PersonalFormView: View {
     @State private var horaEntradaString = "9"
     @State private var horaSalidaString = "18"
     @State private var diasLaborales: Set<Int> = [2,3,4,5,6] // L-V
+    
+    // Alta/Baja
+    @State private var activo: Bool = true
+    @State private var fechaBaja: Date? = nil
     
     // Nómina (configuración)
     @State private var prestacionesMinimas = true
@@ -546,6 +570,9 @@ fileprivate struct PersonalFormView: View {
             _horaEntradaString = State(initialValue: "\(personal.horaEntrada)")
             _horaSalidaString = State(initialValue: "\(personal.horaSalida)")
             _diasLaborales = State(initialValue: Set(personal.diasLaborales))
+            
+            _activo = State(initialValue: personal.activo)
+            _fechaBaja = State(initialValue: personal.fechaBaja)
             
             _prestacionesMinimas = State(initialValue: personal.prestacionesMinimas)
             let ts: TipoSalario = personal.tipoSalario
@@ -727,6 +754,57 @@ fileprivate struct PersonalFormView: View {
                     }
                 }
                 
+                // Sección: Estado laboral (Alta/Baja)
+                Section {
+                    SectionHeader(title: "Estado laboral", subtitle: "Dar de baja / Dar de alta")
+                    HStack(spacing: 10) {
+                        Text(activo ? "Activo" : "De baja")
+                            .font(.headline)
+                            .foregroundColor(activo ? .green : .red)
+                        if let f = fechaBaja, !activo {
+                            Text("Baja desde: \(f.formatted(date: .abbreviated, time: .omitted))")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        Spacer()
+                        if activo {
+                            Button {
+                                // Dar de baja: no elimina datos; no se considera para asignaciones
+                                activo = false
+                                fechaBaja = Date()
+                            } label: {
+                                Label("Dar de baja", systemImage: "person.fill.xmark")
+                                    .font(.subheadline)
+                                    .padding(.vertical, 6).padding(.horizontal, 10)
+                                    .background(Color.red.opacity(0.22))
+                                    .foregroundColor(.red)
+                                    .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                            .help("No se eliminarán los datos; no se considerará para asignación de servicios.")
+                        } else {
+                            Button {
+                                // Dar de alta: vuelve a considerarse para asignaciones y actualiza fechaIngreso
+                                activo = true
+                                fechaBaja = nil
+                                fechaIngreso = Date()
+                            } label: {
+                                Label("Dar de alta", systemImage: "person.fill.checkmark")
+                                    .font(.subheadline)
+                                    .padding(.vertical, 6).padding(.horizontal, 10)
+                                    .background(Color("MercedesPetrolGreen"))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Se actualizará la fecha de ingreso al día de hoy.")
+                        }
+                    }
+                    Text("Nota: No se eliminarán los datos. Mientras esté de baja, no se le tomará en cuenta para la asignación de servicios.")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
+                
                 // Sección: Nómina (config y cálculo)
                 Section {
                     SectionHeader(title: "Nómina", subtitle: "Cálculos aproximados con SBC dinámico")
@@ -861,10 +939,6 @@ fileprivate struct PersonalFormView: View {
             .onChange(of: salarioMinimoReferenciaString) { _, _ in recalcularNominaPreview() }
             .onChange(of: prestacionesMinimas) { _, _ in recalcularNominaPreview() }
             .onChange(of: tipoSalario) { _, _ in
-                if tipoSalario == .minimo {
-                    // Si cambia a mínimo, mantener visible el valor actual como solo lectura
-                    // y evitar edición manual.
-                }
                 recalcularNominaPreview()
             }
             .onChange(of: frecuenciaPago) { _, _ in recalcularNominaPreview() }
@@ -1048,18 +1122,22 @@ fileprivate struct PersonalFormView: View {
             mec.rol = rol
             mec.estado = estado
             mec.especialidades = especialidadesArray
-            mec.fechaIngreso = fechaIngreso
             mec.tipoContrato = tipoContrato
             mec.horaEntrada = horaEntrada
             mec.horaSalida = horaSalida
             mec.diasLaborales = Array(diasLaborales).sorted()
+            
+            // Alta/Baja
+            mec.activo = activo
+            mec.fechaBaja = fechaBaja
+            mec.fechaIngreso = fechaIngreso
             
             mec.prestacionesMinimas = prestacionesMinimas
             mec.tipoSalario = tipoSalario
             mec.frecuenciaPago = frecuenciaPago
             mec.salarioMinimoReferencia = salarioMinimoRef
             mec.factorIntegracion = factorIntegracionValor
-            mec.comisiones = (tipoSalario == .mixto) ? comisionesValor : comisionesValor // mantenemos el valor acumulado como está, solo se hace no editable en UI
+            mec.comisiones = (tipoSalario == .mixto) ? comisionesValor : comisionesValor // mantenemos el valor acumulado
             
             // Delega el cálculo al modelo (también guarda snapshots)
             mec.recalcularYActualizarSnapshots()
@@ -1092,6 +1170,11 @@ fileprivate struct PersonalFormView: View {
                 fechaIngreso: fechaIngreso,
                 tipoContrato: tipoContrato,
                 diasLaborales: Array(diasLaborales).sorted(),
+                
+                // Alta/Baja
+                activo: activo,
+                fechaBaja: fechaBaja,
+                
                 prestacionesMinimas: prestacionesMinimas,
                 tipoSalario: tipoSalario,
                 frecuenciaPago: frecuenciaPago,

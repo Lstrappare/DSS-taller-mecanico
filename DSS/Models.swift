@@ -79,6 +79,10 @@ class Personal {
     // Días laborables: Calendar weekday (1=Dom, 7=Sáb)
     var diasLaborales: [Int]
 
+    // Alta/Baja
+    var activo: Bool
+    var fechaBaja: Date?
+
     // Nómina - configuración y snapshots
     var prestacionesMinimas: Bool
     var tipoSalario: TipoSalario
@@ -129,7 +133,7 @@ class Personal {
     }
 
     var isAsignable: Bool {
-        return estaEnHorario && (estado == .disponible)
+        return activo && estaEnHorario && (estado == .disponible)
     }
 
     init(
@@ -147,6 +151,10 @@ class Personal {
         fechaIngreso: Date = Date(),
         tipoContrato: TipoContrato = .indefinido,
         diasLaborales: [Int] = [2,3,4,5,6], // L-V por defecto
+
+        // Alta/Baja
+        activo: Bool = true,
+        fechaBaja: Date? = nil,
 
         prestacionesMinimas: Bool = true,
         tipoSalario: TipoSalario = .minimo,
@@ -191,6 +199,9 @@ class Personal {
         self.fechaIngreso = fechaIngreso
         self.tipoContrato = tipoContrato
         self.diasLaborales = diasLaborales
+
+        self.activo = activo
+        self.fechaBaja = fechaBaja
 
         self.prestacionesMinimas = prestacionesMinimas
         self.tipoSalario = tipoSalario
