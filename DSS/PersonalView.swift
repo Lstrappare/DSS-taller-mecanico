@@ -24,6 +24,7 @@ struct PersonalView: View {
     @State private var searchQuery = ""
     @State private var filtroRol: Rol? = nil
     @State private var filtroEstado: EstadoEmpleado? = nil
+    @State private var incluirDadosDeBaja: Bool = false
     
     // Ordenamiento (en línea con InventarioView)
     enum SortOption: String, CaseIterable, Identifiable {
@@ -37,6 +38,11 @@ struct PersonalView: View {
     
     var filteredPersonal: [Personal] {
         var base = personal
+        
+        // Filtro alta/baja
+        if incluirDadosDeBaja == false {
+            base = base.filter { $0.activo }
+        }
         
         // Filtro de texto
         if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -246,8 +252,15 @@ struct PersonalView: View {
                 .frame(maxWidth: 240)
                 .help("Filtrar por estado")
                 
+                // Alta/Baja
+                Toggle(isOn: $incluirDadosDeBaja) {
+                    Text("Incluir dados de baja")
+                }
+                .toggleStyle(.switch)
+                .help("Muestra también a los empleados dados de baja")
+                
                 // Filtros activos + limpiar
-                if filtroRol != nil || filtroEstado != nil || !searchQuery.isEmpty {
+                if filtroRol != nil || filtroEstado != nil || !searchQuery.isEmpty || incluirDadosDeBaja {
                     HStack(spacing: 6) {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                         Text("Filtros activos")
@@ -261,6 +274,11 @@ struct PersonalView: View {
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(Color("MercedesBackground")).cornerRadius(6)
                         }
+                        if incluirDadosDeBaja {
+                            Text("Incluye de baja")
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color("MercedesBackground")).cornerRadius(6)
+                        }
                         if !searchQuery.isEmpty {
                             Text("“\(searchQuery)”")
                                 .padding(.horizontal, 6).padding(.vertical, 2)
@@ -271,6 +289,7 @@ struct PersonalView: View {
                                 filtroRol = nil
                                 filtroEstado = nil
                                 searchQuery = ""
+                                incluirDadosDeBaja = false
                             }
                         } label: {
                             Text("Limpiar")
@@ -542,7 +561,7 @@ fileprivate struct PersonalFormView: View {
     @State private var sueldoNetoMensual: Double = 0
     @State private var costoRealMensual: Double = 0
     @State private var costoHora: Double = 0
-    @State private var horasSemanalesRequeridas: Double = 48
+    @State private var horasSemanalesRequeridas: Double = 0
     @State private var manoDeObraSugerida: Double = 0
     
     // Asistencia UI state (simple)
