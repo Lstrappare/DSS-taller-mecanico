@@ -100,7 +100,7 @@ final class AIStrategistService: ObservableObject {
         // Reducir y sintetizar
         let personalResumen = buildPersonalSummary(personales)
         let inventarioResumen = buildInventarioSummary(productos)
-        let serviciosResumen = buildServiciosSummary(servicios)
+        let serviciosResumen = buildServiciosSummary(servicios, productos: productos)
         let procesoResumen = buildServiciosEnProcesoSummary(tickets)
         let historialResumen = buildHistorialSummary(decisiones)
         
@@ -220,10 +220,60 @@ final class AIStrategistService: ObservableObject {
         """
     }
     
-    private func buildServiciosSummary(_ arr: [Servicio]) -> String {
-        if arr.isEmpty { return "- No hay servicios." }
-        let top5 = arr.prefix(5).map { "- \($0.nombre) ($\($0.precioFinalAlCliente))" }.joined(separator: "\n")
-        return "Total: \(arr.count)\nEjemplos:\n\(top5)"
+    private func buildServiciosSummary(_ servicios: [Servicio], productos: [Producto]) -> String {
+        if servicios.isEmpty { return "- No hay servicios." }
+        
+        func fmt(_ v: Double) -> String { String(format: "%.2f", v) }
+        
+        let lines: [String] = servicios.prefix(8).map { s in
+            // Costo de inventario a partir de ingredientes
+            let costoInventario = PricingHelpers.costoIngredientes(servicio: s, productos: productos)
+            // Refacciones si aplican
+            let ref = s.requiereRefacciones ? s.costoRefacciones : 0.0
+            // Desglose total
+            let desg = PricingHelpers.calcularDesglose(
+                manoDeObra: s.costoManoDeObra,
+                refacciones: ref,
+                costoInventario: costoInventario,
+                gananciaDeseada: s.gananciaDeseada,
+                gastosAdmin: s.gastosAdministrativos,
+                aplicarIVA: s.aplicarIVA,
+                aplicarISR: s.aplicarISR,
+                porcentajeISR: s.isrPorcentajeEstimado
+            )
+            
+            // Ingredientes detallados con unidades y proporciones
+            let ingredientesDetalle: String = {
+                if s.ingredientes.isEmpty { return "- Sin productos." }
+                let totalCostoInv = max(costoInventario, 0.000001)
+                let totalPrecioFinal = max(desg.precioFinal, 0.000001)
+                return s.ingredientes.map { ing in
+                    let prod = productos.first(where: { $0.nombre == ing.nombreProducto })
+                    let unidad = prod?.unidadDeMedida ?? ""
+                    let costoIng = (prod?.precioVenta ?? 0) * ing.cantidadUsada
+                    let propInv = costoIng / totalCostoInv
+                    let propFinal = costoIng / totalPrecioFinal
+                    return "  • \(ing.nombreProducto): \(fmt(ing.cantidadUsada)) \(unidad) | Costo: $\(fmt(costoIng)) | % en inventario: \(fmt(propInv * 100))% | % en precio final: \(fmt(propFinal * 100))%"
+                }.joined(separator: "\n")
+            }()
+            
+            var ficha = "- \(s.nombre) [\(s.especialidadRequerida) • \(s.rolRequerido.rawValue)] • Duración: \(fmt(s.duracionHoras)) h\n"
+            ficha += "  Mano de obra: $\(fmt(s.costoManoDeObra)) | Ganancia deseada: $\(fmt(s.gananciaDeseada)) | Gastos Adm.: $\(fmt(s.gastosAdministrativos))\n"
+            if s.requiereRefacciones {
+                ficha += "  Refacciones: $\(fmt(ref))\n"
+            }
+            ficha += "  Insumos (inventario): $\(fmt(costoInventario))\n"
+            ficha += "  Totales => Costos directos: $\(fmt(desg.costosDirectos)) | Subtotal: $\(fmt(desg.subtotal)) | IVA: $\(fmt(desg.iva)) | Precio final: $\(fmt(s.precioFinalAlCliente)) (calc: $\(fmt(desg.precioFinal)))\n"
+            ficha += "  ISR sobre ganancia: $\(fmt(desg.isrSobreGanancia)) | Ganancia neta (post ISR): $\(fmt(desg.gananciaNeta))\n"
+            ficha += "  Ingredientes:\n\(ingredientesDetalle)"
+            return ficha
+        }
+        
+        return """
+        Total: \(servicios.count)
+        Detalle (máx. 8):
+        \(lines.joined(separator: "\n"))
+        """
     }
     
     private func buildServiciosEnProcesoSummary(_ arr: [ServicioEnProceso]) -> String {
