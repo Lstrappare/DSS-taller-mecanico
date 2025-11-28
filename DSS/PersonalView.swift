@@ -1128,6 +1128,30 @@ fileprivate struct PersonalFormView: View {
             errorMsg = "RFC inválido."
             return
         }
+        
+        // Validación de duplicidad de RFC
+        let rfcToValidate = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let descriptor = FetchDescriptor<Personal>(
+            predicate: #Predicate { $0.rfc == rfcToValidate }
+        )
+        do {
+            let duplicates = try modelContext.fetch(descriptor)
+            if let current = mecanicoAEditar {
+                // Edición: Verificar si existe otro registro con el mismo RFC (excluyendo el actual)
+                if duplicates.contains(where: { $0.persistentModelID != current.persistentModelID }) {
+                    errorMsg = "El RFC ya está registrado en otro personal."
+                    return
+                }
+            } else {
+                // Nuevo: Verificar si ya existe algún registro con ese RFC
+                if !duplicates.isEmpty {
+                    errorMsg = "El RFC ya está registrado en otro personal."
+                    return
+                }
+            }
+        } catch {
+            print("Error validando duplicidad de RFC: \(error)")
+        }
         if curpInvalido {
             errorMsg = "CURP inválida."
             return
