@@ -23,6 +23,10 @@ struct EnProcesoView: View {
     @State private var alertaError: String?
     @State private var mostrandoAlerta = false
     
+    // NUEVO: Confirmación de cancelación de programado
+    @State private var ticketACancelar: ServicioEnProceso?
+    @State private var mostrandoConfirmacionCancelacion = false
+    
     // Timer de auto-inicio (cada 30s revisa programados vencidos)
     private let autoStartTimer = Timer.publish(every: 0, on: .main, in: .common).autoconnect()
     
@@ -119,7 +123,11 @@ struct EnProcesoView: View {
                                     ticket: ticket,
                                     onIniciarAhora: { iniciarTicketAhora(ticket) },
                                     onReprogramar: { ticketAReprogramar = ticket },
-                                    onCancelar: { cancelarTicket(ticket) }
+                                    // NUEVO: solicitar confirmación
+                                    onSolicitarCancelar: {
+                                        ticketACancelar = ticket
+                                        mostrandoConfirmacionCancelacion = true
+                                    }
                                 )
                             }
                         }
@@ -173,6 +181,26 @@ struct EnProcesoView: View {
             Button("OK") { }
         } message: { mensaje in
             Text(mensaje)
+        }
+        // NUEVO: Confirmación de cancelación con mensaje dinámico
+        .confirmationDialog(
+            "Cancelar servicio programado",
+            isPresented: $mostrandoConfirmacionCancelacion,
+            titleVisibility: .visible
+        ) {
+            Button("Cancelar servicio", role: .destructive) {
+                if let t = ticketACancelar {
+                    cancelarTicket(t)
+                }
+                ticketACancelar = nil
+            }
+            Button("Volver", role: .cancel) {
+                ticketACancelar = nil
+            }
+        } message: {
+            let nombre = ticketACancelar?.nombreServicio ?? "Servicio"
+            let placas = ticketACancelar?.vehiculo?.placas ?? "N/A"
+            Text("¿Seguro que quieres cancelar ‘\(nombre)’ para [\(placas)]? Esta acción no se puede deshacer.")
         }
         // Auto-inicio
         .onReceive(autoStartTimer) { _ in
@@ -519,7 +547,8 @@ fileprivate struct ProgramadoCard: View {
     let ticket: ServicioEnProceso
     var onIniciarAhora: () -> Void
     var onReprogramar: () -> Void
-    var onCancelar: () -> Void
+    // NUEVO: callback para solicitar cancelación (con confirmación en el padre)
+    var onSolicitarCancelar: () -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -583,7 +612,7 @@ fileprivate struct ProgramadoCard: View {
                 .buttonStyle(.plain)
                 
                 Button {
-                    onCancelar()
+                    onSolicitarCancelar()
                 } label: {
                     Label("Cancelar", systemImage: "xmark.circle.fill")
                         .font(.subheadline)
@@ -1181,3 +1210,4 @@ fileprivate struct CierreServicioModalView: View {
         return String(format: "%02i:%02i:%02i", horas, minutos, segs)
     }
 }
+
