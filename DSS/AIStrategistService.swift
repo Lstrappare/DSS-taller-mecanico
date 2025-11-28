@@ -142,14 +142,44 @@ final class AIStrategistService: ObservableObject {
     
     private func buildPersonalSummary(_ arr: [Personal]) -> String {
         if arr.isEmpty { return "- No hay personal registrado." }
+        
         let total = arr.count
         let disponibles = arr.filter { $0.estado == .disponible && $0.estaEnHorario }.count
         let porRol = Dictionary(grouping: arr, by: { $0.rol.rawValue })
             .map { "\($0.key): \($0.value.count)" }
             .sorted()
             .joined(separator: " | ")
-        let top3 = arr.prefix(3).map { "- \($0.nombre) [\($0.rol.rawValue)] Estado: \($0.estado.rawValue)" }.joined(separator: "\n")
-        return "Total: \(total) | Disponibles: \(disponibles)\nRoles: \(porRol)\nEjemplos:\n\(top3)"
+        
+        // Formateadores
+        let currency: (Double) -> String = { String(format: "$%.2f", $0) }
+        let dateFmt: (Date) -> String = { $0.formatted(date: .abbreviated, time: .omitted) }
+        let antiguedad: (Date) -> String = { fecha in
+            let comps = Calendar.current.dateComponents([.year, .month], from: fecha, to: Date())
+            let y = comps.year ?? 0
+            let m = comps.month ?? 0
+            if y > 0 { return "\(y)a \(m)m" }
+            return "\(m)m"
+        }
+        
+        // Top 5 por mayor costo mensual (más relevantes para decisiones)
+        let top = arr.sorted { $0.costoRealMensual > $1.costoRealMensual }.prefix(5).map { p in
+            var ficha = "- \(p.nombre) [\(p.rol.rawValue)] • Estado: \(p.estado.rawValue)\n"
+            ficha += "  Ingreso: \(dateFmt(p.fechaIngreso)) • Antigüedad: \(antiguedad(p.fechaIngreso)) • Contrato: \(p.tipoContrato.rawValue)\n"
+            ficha += "  Sueldo neto mensual: \(currency(p.sueldoNetoMensual)) • Costo al taller: \(currency(p.costoRealMensual)) • Costo/hora: \(currency(p.costoHora))\n"
+            if p.tipoSalario == .mixto || p.comisiones > 0 {
+                ficha += "  Comisiones acumuladas: \(currency(p.comisiones)) • Tipo salario: \(p.tipoSalario.rawValue)\n"
+            } else {
+                ficha += "  Tipo salario: \(p.tipoSalario.rawValue)\n"
+            }
+            return ficha
+        }.joined(separator: "\n")
+        
+        return """
+        Total: \(total) | Disponibles ahora: \(disponibles)
+        Roles: \(porRol)
+        Detalle (Top 5 por costo mensual):
+        \(top.isEmpty ? "- Sin detalle disponible." : top)
+        """
     }
     
     private func buildInventarioSummary(_ arr: [Producto]) -> String {
