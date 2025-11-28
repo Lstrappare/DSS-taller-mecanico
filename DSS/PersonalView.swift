@@ -638,6 +638,11 @@ fileprivate struct PersonalFormView: View {
     private var rfcInvalido: Bool {
         !RFCValidator.isValidRFC(rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
     }
+    private var curpInvalido: Bool {
+        let trimmed = curp.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return false } // Opcional
+        return !CURPValidator.isValidCURP(trimmed)
+    }
     private var horasInvalidas: Bool {
         guard let he = Int(horaEntradaString), let hs = Int(horaSalidaString),
               (0...23).contains(he), (0...23).contains(hs) else { return true }
@@ -750,6 +755,7 @@ fileprivate struct PersonalFormView: View {
                         .validationHint(isInvalid: rfcInvalido, message: "RFC inválido. Verifica estructura y homoclave.")
                     }
                     FormField(title: "CURP (opcional)", placeholder: "18 caracteres", text: $curp)
+                        .validationHint(isInvalid: curpInvalido, message: "CURP inválida. Verifica formato y dígito verificador.")
                 }
                 
                 // Sección: Trabajo
@@ -1022,8 +1028,8 @@ fileprivate struct PersonalFormView: View {
                 .cornerRadius(8)
                 .foregroundColor(Color("MercedesPetrolGreen"))
                 .cornerRadius(8)
-                .disabled(nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido || telefonoInvalido)
-                .opacity((nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido || telefonoInvalido) ? 0.6 : 1.0)
+                .disabled(nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido || telefonoInvalido || curpInvalido)
+                .opacity((nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido || telefonoInvalido || curpInvalido) ? 0.6 : 1.0)
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
@@ -1120,6 +1126,10 @@ fileprivate struct PersonalFormView: View {
         }
         guard RFCValidator.isValidRFC(rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()) else {
             errorMsg = "RFC inválido."
+            return
+        }
+        if curpInvalido {
+            errorMsg = "CURP inválida."
             return
         }
         guard let comisionesValor = Double(comisionesString.replacingOccurrences(of: ",", with: ".")) else {
