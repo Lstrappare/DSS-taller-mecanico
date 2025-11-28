@@ -11,8 +11,6 @@ private let typingID = UUID()
 
 struct ConsultaView: View {
     @Environment(\.modelContext) private var modelContext
-    
-    // Servicio compartido (App-wide)
     @EnvironmentObject private var service: AIStrategistService
     
     @State private var userPrompt = ""
@@ -36,6 +34,14 @@ struct ConsultaView: View {
     @Query private var tickets: [ServicioEnProceso]
     @Query(sort: \DecisionRecord.fecha, order: .reverse) private var decisiones: [DecisionRecord]
     
+    // UI
+    @State private var showClearConfirm = false
+    @State private var showCopiedToast = false
+    @State private var scrollAnchor: UUID = UUID()
+    
+    // Límite de caracteres para el input del usuario
+    private let maxUserChars = 500
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
@@ -50,9 +56,15 @@ struct ConsultaView: View {
             inputBar
             
             if let error = service.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .font(.caption)
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.yellow)
+                    Text(error).foregroundColor(.white).font(.caption)
+                    Spacer()
+                }
+                .padding(8)
+                .background(Color.red.opacity(0.25))
+                .cornerRadius(8)
+                .transition(.opacity)
             }
         }
         .padding(.horizontal, 24)
@@ -63,9 +75,7 @@ struct ConsultaView: View {
         )
         .onAppear {
             startWifiMonitor()
-            // Construir el contexto maestro inicial lo antes posible
             Task { await service.refreshMasterContext(modelContext: modelContext) }
-            // Auto-arranque OFFLINE si ya fue inicializado alguna vez
             if aiModelInitialized && !service.isModelLoaded {
                 Task {
                     service.isGenerating = true
@@ -73,7 +83,7 @@ struct ConsultaView: View {
                     await MainActor.run {
                         service.isGenerating = false
                         if ok && messages.isEmpty {
-                            insertAssistantMessage("Modelo iniciado. ¿En qué puedo ayudarte hoy?")
+                            insertAssistantMessage("Asistente Estratégico iniciado. ¿En qué puedo ayudarte hoy?")
                         }
                     }
                 }
@@ -82,16 +92,24 @@ struct ConsultaView: View {
         .onDisappear {
             monitor.cancel()
         }
-        // Refrescar el contexto maestro en cuanto cambie algo relevante
         .onChange(of: personal) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
         .onChange(of: productos) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
         .onChange(of: servicios) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
         .onChange(of: tickets) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
         .onChange(of: decisiones) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
         .preferredColorScheme(.dark)
+        .toast(isPresented: $showCopiedToast, message: "Copiado al portapapeles")
+        .confirmationDialog("¿Limpiar conversación?", isPresented: $showClearConfirm, titleVisibility: .visible) {
+            Button("Eliminar todos los mensajes", role: .destructive) {
+                clearConversation()
+            }
+            Button("Cancelar", role: .cancel) { }
+        } message: {
+            Text("Esta acción eliminará el historial de esta conversación.")
+        }
     }
     
-    // MARK: - Header estilo InventarioView
+    // MARK: - Header
     private var header: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
@@ -113,11 +131,30 @@ struct ConsultaView: View {
                         .font(.footnote).foregroundColor(.gray)
                 }
                 Spacer()
-                // Estado breve
                 HStack(spacing: 8) {
                     estadoChip(text: service.isModelLoaded ? "Listo" : (service.isGenerating ? "Cargando..." : "Apagado"),
                                color: service.isModelLoaded ? .green : (service.isGenerating ? .yellow : .red))
                     estadoChip(text: isWifiAvailable ? "Wi‑Fi OK" : "Sin Wi‑Fi", color: isWifiAvailable ? .green : .red)
+                    Menu {
+                        Button {
+                            showClearConfirm = true
+                        } label: {
+                            Label("Limpiar conversación", systemImage: "trash")
+                        }
+                        Button {
+                            Task { await service.refreshMasterContext(modelContext: modelContext) }
+                        } label: {
+                            Label("Refrescar contexto", systemImage: "arrow.clockwise")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.title3)
+                            .foregroundColor(.white)
+                            .padding(6)
+                            .background(Color("MercedesBackground"))
+                            .cornerRadius(8)
+                    }
+                    .menuStyle(.borderlessButton)
                 }
             }
             .padding(.horizontal, 12)
@@ -171,7 +208,6 @@ struct ConsultaView: View {
                                     .cornerRadius(8)
                             }
                             .buttonStyle(.plain)
-                            // Solo bloquear por falta de Wi‑Fi si es la PRIMERA VEZ
                             .disabled(!aiModelInitialized && !isWifiAvailable)
                             .opacity((!aiModelInitialized && !isWifiAvailable) ? 0.6 : 1.0)
                             
@@ -194,103 +230,226 @@ struct ConsultaView: View {
     // MARK: - Chat Area
     private var chatArea: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Mensaje de bienvenida si no hay mensajes
-            if messages.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Bienvenido al Asistente Estratégico")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    Text("Haz preguntas sobre precios, servicios, inventario, personal o decisiones estratégicas del taller.")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                    // Mostrar un extracto del contexto cargado (opcional)
-                    if !service.systemPrompt.isEmpty {
-                        Text("Contexto cargado.")
-                            .font(.caption2)
-                            .foregroundColor(Color("MercedesPetrolGreen"))
-                    }
-                }
-                .padding(12)
-                .background(Color("MercedesCard"))
-                .cornerRadius(8)
-            }
-            
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(messages) { msg in
-                        messageBubble(for: msg)
-                    }
-                    
-                    if service.isGenerating {
-                        HStack(spacing: 8) {
-                            Circle().frame(width: 6, height: 6).foregroundColor(.gray).opacity(0.6)
-                            Circle().frame(width: 6, height: 6).foregroundColor(.gray).opacity(0.6)
-                            Circle().frame(width: 6, height: 6).foregroundColor(.gray).opacity(0.6)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 10) {
+                        ForEach(messages) { msg in
+                            messageBubble(for: msg)
+                                .id(msg.id)
+                                .padding(.horizontal, 4) // separa cada burbuja del borde del contenedor
                         }
-                        .padding(8)
-                        .background(Color("MercedesBackground"))
-                        .cornerRadius(8)
+                        if service.isGenerating {
+                            typingBubble
+                                .id(typingID)
+                                .padding(.horizontal, 4) // separa el indicador de tipeo
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8) // margen general dentro del ScrollView
+                }
+                .frame(minHeight: 260)
+                .background(
+                    ZStack {
+                        Color("MercedesCard")
+                        LinearGradient(colors: [Color.white.opacity(0.012), Color("MercedesBackground").opacity(0.06)],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                    }
+                )
+                .cornerRadius(10)
+                .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
+                .onChange(of: messages.count) { _, _ in
+                    // Scroll al último mensaje
+                    if let last = messages.last?.id {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo(last, anchor: .bottom)
+                        }
                     }
                 }
-                .padding(.vertical, 6)
-            }
-            .frame(minHeight: 260)
-            .background(
-                ZStack {
-                    Color("MercedesCard")
-                    LinearGradient(colors: [Color.white.opacity(0.012), Color("MercedesBackground").opacity(0.06)],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                .onChange(of: service.isGenerating) { _, generating in
+                    let target = generating ? typingID : messages.last?.id
+                    if let target {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo(target, anchor: .bottom)
+                        }
+                    }
                 }
-            )
-            .cornerRadius(10)
-            .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
+                .onAppear {
+                    if let last = messages.last?.id {
+                        proxy.scrollTo(last, anchor: .bottom)
+                    }
+                }
+            }
         }
     }
     
     private func messageBubble(for msg: ChatMessage) -> some View {
-        HStack {
-            if msg.isFromUser { Spacer(minLength: 40) }
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .bottom, spacing: 8) {
+            if msg.isFromUser == false {
+                avatar(system: "sparkles", color: Color("MercedesPetrolGreen"))
+            } else {
+                Spacer(minLength: 20)
+            }
+            
+            VStack(alignment: .leading, spacing: 6) {
                 Text(msg.content)
                     .font(.body)
                     .foregroundColor(.white)
-                Text(msg.date.formatted(date: .omitted, time: .shortened))
-                    .font(.caption2)
-                    .foregroundColor(.gray)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                
+                HStack(spacing: 8) {
+                    Text(msg.date.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                    if !msg.isFromUser {
+                        Button {
+                            // Copiar al portapapeles en macOS
+                            #if os(macOS)
+                            let pb = NSPasteboard.general
+                            pb.clearContents()
+                            pb.setString(msg.content, forType: .string)
+                            #endif
+                            withAnimation { showCopiedToast = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                                withAnimation { showCopiedToast = false }
+                            }
+                        } label: {
+                            Label("Copiar", systemImage: "doc.on.doc")
+                                .font(.caption2)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                        .accessibilityLabel("Copiar respuesta")
+                    }
+                    Spacer()
+                }
             }
-            .padding(10)
-            .background(msg.isFromUser ? Color("MercedesPetrolGreen").opacity(0.25) : Color("MercedesBackground"))
-            .cornerRadius(8)
-            if !msg.isFromUser { Spacer(minLength: 40) }
+            .padding(12)
+            .background(
+                ZStack {
+                    (msg.isFromUser ? Color("MercedesPetrolGreen").opacity(0.22) : Color("MercedesBackground"))
+                    LinearGradient(colors: [Color.white.opacity(0.02), Color.black.opacity(0.04)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                }
+            )
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color("MercedesBackground").opacity(0.25), lineWidth: 1)
+            )
+            
+            if msg.isFromUser {
+                avatar(system: "person.fill", color: .gray)
+            } else {
+                Spacer(minLength: 20)
+            }
         }
         .frame(maxWidth: .infinity, alignment: msg.isFromUser ? .trailing : .leading)
         .transition(.opacity.combined(with: .move(edge: msg.isFromUser ? .trailing : .leading)))
         .animation(.easeInOut(duration: 0.15), value: messages.count)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(msg.isFromUser ? "Mensaje del usuario" : "Mensaje del asistente")
+    }
+    
+    private var typingBubble: some View {
+        HStack(spacing: 8) {
+            avatar(system: "sparkles", color: Color("MercedesPetrolGreen"))
+            HStack(spacing: 6) {
+                TypingDot(delay: 0.0)
+                TypingDot(delay: 0.2)
+                TypingDot(delay: 0.4)
+            }
+            .padding(10)
+            .background(Color("MercedesBackground"))
+            .cornerRadius(10)
+            Spacer()
+        }
+        .transition(.opacity.combined(with: .move(edge: .leading)))
+        .padding(.leading, 6) // separa del borde izquierdo
+        .padding(.horizontal, 4) // margen adicional dentro de la zona de chat
+        .accessibilityLabel("El asistente está escribiendo")
+    }
+    
+    private func avatar(system: String, color: Color) -> some View {
+        ZStack {
+            Circle().fill(color.opacity(0.18))
+            Image(systemName: system)
+                .foregroundColor(color)
+        }
+        .frame(width: 28, height: 28)
     }
     
     // MARK: - Input Bar
     private var inputBar: some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Image(systemName: "bubble.left.and.bubble.right.fill")
-                    .foregroundColor(Color("MercedesPetrolGreen"))
-                TextField("Escribe tu consulta estratégica aquí...", text: $userPrompt)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .onSubmit { sendMessage() }
+                HStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                    TextField("Escribe tu consulta estratégica aquí...", text: $userPrompt, axis: .vertical)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .lineLimit(1...5)
+                        .onSubmit { sendMessage() }
+                        .onChange(of: userPrompt) { _, newValue in
+                            // Truncar en caliente a maxUserChars
+                            if newValue.count > maxUserChars {
+                                userPrompt = String(newValue.prefix(maxUserChars))
+                                // Feedback háptico opcional en macOS
+                                #if os(macOS)
+                                NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
+                                #endif
+                            }
+                        }
+                }
+                .padding(10)
+                .background(Color("MercedesCard"))
+                .cornerRadius(10)
+                
+                if service.isGenerating {
+                    Button {
+                        // Acción de “detener”: no hay cancel en el servicio; limpiamos bandera para UI
+                        service.isGenerating = false
+                    } label: {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.system(size: 26, weight: .semibold))
+                            .foregroundColor(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Detener generación")
+                } else {
+                    Button(action: sendMessage) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 26, weight: .semibold))
+                            .foregroundColor(Color("MercedesPetrolGreen"))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSendDisabled)
+                    .opacity(isSendDisabled ? 0.6 : 1.0)
+                }
             }
-            .padding(10)
-            .background(Color("MercedesCard"))
-            .cornerRadius(8)
             
-            Button(action: sendMessage) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 26, weight: .semibold))
-                    .foregroundColor(Color("MercedesPetrolGreen"))
+            // Contador x/500
+            HStack(spacing: 6) {
+                let count = userPrompt.count
+                Text("\(count)/\(maxUserChars)")
+                    .font(.caption2)
+                    .foregroundColor(count >= maxUserChars ? .red : .gray)
+                if count >= maxUserChars {
+                    Text("Límite alcanzado")
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                }
+                Spacer()
             }
-            .buttonStyle(.plain)
-            .disabled(userPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !service.isModelLoaded || service.isGenerating)
-            .opacity((userPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !service.isModelLoaded || service.isGenerating) ? 0.6 : 1.0)
+            .padding(.leading, 4)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Barra de entrada de texto")
+    }
+    
+    private var isSendDisabled: Bool {
+        let trimmed = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || !service.isModelLoaded || service.isGenerating || trimmed.count > maxUserChars
     }
     
     // MARK: - Actions
@@ -305,13 +464,12 @@ struct ConsultaView: View {
     }
     
     private func startModel() async {
-        await MainActor.run { service.isGenerating = true } // para mostrar el estado en la tarjeta
+        await MainActor.run { service.isGenerating = true }
         await service.loadModel()
         await MainActor.run {
             service.isGenerating = false
             if service.isModelLoaded {
                 aiModelInitialized = true
-                // Mensaje de sistema de que el modelo está listo
                 insertAssistantMessage("Modelo iniciado. ¿En qué puedo ayudarte hoy?")
             }
         }
@@ -319,17 +477,18 @@ struct ConsultaView: View {
     
     private func sendMessage() {
         let prompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty, service.isModelLoaded, !service.isGenerating else { return }
+        guard !prompt.isEmpty,
+              service.isModelLoaded,
+              !service.isGenerating,
+              prompt.count <= maxUserChars else { return }
         userPrompt = ""
         
-        // Insertar mensaje de usuario
         insertUserMessage(prompt)
         
         Task {
-            // Asegurar que el contexto maestro esté fresco justo antes de preguntar
             await service.refreshMasterContext(modelContext: modelContext)
             await MainActor.run { service.isGenerating = true }
-            await service.ask(prompt) // usa el systemPrompt interno
+            await service.ask(prompt)
             await MainActor.run {
                 service.isGenerating = false
                 if !service.outputText.isEmpty {
@@ -348,6 +507,12 @@ struct ConsultaView: View {
         modelContext.insert(msg)
     }
     
+    private func clearConversation() {
+        for m in messages {
+            modelContext.delete(m)
+        }
+    }
+    
     // MARK: - UI helpers
     private func estadoChip(text: String, color: Color) -> some View {
         Text(text)
@@ -359,3 +524,57 @@ struct ConsultaView: View {
     }
 }
 
+// MARK: - Typing indicator
+fileprivate struct TypingDot: View {
+    @State private var scale: CGFloat = 0.6
+    let delay: Double
+    
+    var body: some View {
+        Circle()
+            .fill(Color.gray.opacity(0.7))
+            .frame(width: 8, height: 8)
+            .scaleEffect(scale)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.6).delay(delay).repeatForever(autoreverses: true)) {
+                    scale = 1.0
+                }
+            }
+    }
+}
+
+// MARK: - Toast helper
+fileprivate struct ToastModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let message: String
+    
+    func body(content: Content) -> some View {
+        ZStack {
+            content
+            if isPresented {
+                VStack {
+                    Spacer()
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc.on.doc.fill")
+                            .foregroundColor(.white)
+                        Text(message)
+                            .foregroundColor(.white)
+                            .font(.caption)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.black.opacity(0.7))
+                    .cornerRadius(10)
+                    .padding(.bottom, 18)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+        }
+        .animation(.spring(response: 0.25), value: isPresented)
+    }
+}
+
+fileprivate extension View {
+    func toast(isPresented: Binding<Bool>, message: String) -> some View {
+        modifier(ToastModifier(isPresented: isPresented, message: message))
+    }
+}

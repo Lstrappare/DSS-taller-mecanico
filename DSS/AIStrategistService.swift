@@ -82,7 +82,7 @@ final class AIStrategistService: ObservableObject {
             if ownerName.isEmpty {
                 return "0) Cuenta/Dueño: (no configurado) (Rol: Dueño Administrador)"
             } else {
-                return "0)Nombre de la Cuenta/Dueño con quien charlas: \(ownerName) (Rol: Dueño Administrador)"
+                return "0)Nombre de la Cuenta/Dueño con quien charlarás siempre: \(ownerName) (Rol: Dueño Administrador)"
             }
         }()
         
@@ -106,7 +106,7 @@ final class AIStrategistService: ObservableObject {
         
         let prompt =
         """
-        Eres un “Asistente Estratégico DSS”, un experto en soporte de decisiones asistente del dueño del taller. Siempre contesta en español, de manera concisa y con precisión, usa el contexto actual del negocio. Si los datos se pierden, dilo de una manera transparente.
+        Eres un “Asistente Estratégico DSS”, un experto en soporte de decisiones asistente del dueño del taller con quien siempre hablarás. Siempre contesta en español, de manera concisa y con precisión, usa el contexto actual del negocio. Si los datos se pierden, dilo de una manera transparente.
 
         \(ownerLine)
 
