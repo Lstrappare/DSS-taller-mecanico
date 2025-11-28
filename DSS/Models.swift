@@ -128,7 +128,21 @@ class Personal {
         let diaDeSemana = calendario.component(.weekday, from: ahora)
         let horaActual = calendario.component(.hour, from: ahora)
         let esDiaLaboral = diasLaborales.contains(diaDeSemana)
-        let esHoraLaboral = (horaEntrada..<horaSalida).contains(horaActual)
+        
+        // Soporte para turnos nocturnos (ej. 22:00 a 06:00)
+        let esHoraLaboral: Bool
+        if horaEntrada < horaSalida {
+            // Turno normal (ej. 09:00 a 18:00)
+            esHoraLaboral = (horaEntrada..<horaSalida).contains(horaActual)
+        } else if horaEntrada > horaSalida {
+            // Turno nocturno (cruza medianoche)
+            // Es laboral si es >= entrada (noche) O < salida (madrugada)
+            esHoraLaboral = (horaActual >= horaEntrada) || (horaActual < horaSalida)
+        } else {
+            // Entrada == Salida (caso borde, no debería ocurrir por validación, pero seguro)
+            esHoraLaboral = false
+        }
+        
         return esDiaLaboral && esHoraLaboral
     }
 
