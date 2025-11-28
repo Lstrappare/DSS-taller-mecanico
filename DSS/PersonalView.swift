@@ -1,3 +1,5 @@
+// the entire code of the file with your changes goes here.
+// Do not skip over anything.
 import SwiftUI
 import SwiftData
 import LocalAuthentication
@@ -621,8 +623,11 @@ fileprivate struct PersonalFormView: View {
     }
     
     // Validaciones
+    private var nombreValidationMessage: String? {
+        validateNombreCompleto(nombre)
+    }
     private var nombreInvalido: Bool {
-        nombre.trimmingCharacters(in: .whitespaces).split(separator: " ").count < 2
+        nombreValidationMessage != nil
     }
     private var emailInvalido: Bool {
         let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -634,10 +639,8 @@ fileprivate struct PersonalFormView: View {
         !RFCValidator.isValidRFC(rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
     }
     private var horasInvalidas: Bool {
-        // Ambas válidas en 0...23 y no permitir duración cero
         guard let he = Int(horaEntradaString), let hs = Int(horaSalidaString),
               (0...23).contains(he), (0...23).contains(hs) else { return true }
-        // Entrada == Salida => inválido (turno de 0 horas)
         return he == hs
     }
     private var salarioMinimoInvalido: Bool {
@@ -667,7 +670,7 @@ fileprivate struct PersonalFormView: View {
             VStack(spacing: 4) {
                 Text(formTitle)
                     .font(.title).fontWeight(.bold)
-                Text("Completa los datos. Los campos marcados con • son obligatorios.")
+                Text("Completa los datos. Los campos marcados con '•' son obligatorios.")
                     .font(.footnote)
                     .foregroundColor(.gray)
             }
@@ -680,7 +683,7 @@ fileprivate struct PersonalFormView: View {
                     SectionHeader(title: "Datos personales", subtitle: nil)
                     HStack(spacing: 16) {
                         FormField(title: "• Nombre Completo", placeholder: "ej. José Cisneros Torres", text: $nombre)
-                            .validationHint(isInvalid: nombreInvalido, message: "Escribe nombre y apellido.")
+                            .validationHint(isInvalid: nombreInvalido, message: nombreValidationMessage ?? "")
                         FormField(title: "• Email", placeholder: "ej. jose@taller.com", text: $email)
                             .validationHint(isInvalid: emailInvalido, message: "Ingresa un email válido.")
                     }
@@ -963,6 +966,11 @@ fileprivate struct PersonalFormView: View {
             .onChange(of: frecuenciaPago) { _, _ in recalcularNominaPreview() }
             .onChange(of: comisionesString) { _, _ in recalcularNominaPreview() }
             .onChange(of: factorIntegracionString) { _, _ in recalcularNominaPreview() }
+            // Limitar a 21 letras (ignora espacios, guiones y apóstrofos) en vivo
+            .onChange(of: nombre) { _, newValue in
+                let limited = limitNameToMaxLetters(newValue, maxLetters: 21)
+                if limited != newValue { nombre = limited }
+            }
             
             if let errorMsg {
                 Text(errorMsg)
@@ -1069,6 +1077,14 @@ fileprivate struct PersonalFormView: View {
     func guardarCambios() {
         errorMsg = nil
         
+        // Validación de nombre con reglas nuevas
+        if let msg = validateNombreCompleto(nombre) {
+            errorMsg = msg
+            return
+        }
+        // Normalizar nombre a Título Propio
+        let nombreNormalizado = titleCasedName(nombre)
+        
         // Parse
         guard let horaEntrada = Int(horaEntradaString),
               let horaSalida = Int(horaSalidaString),
@@ -1132,7 +1148,7 @@ fileprivate struct PersonalFormView: View {
         horasSemanalesRequeridas = 48
         
         if let mec = mecanicoAEditar {
-            mec.nombre = nombre
+            mec.nombre = nombreNormalizado
             mec.email = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             mec.telefono = telefono.trimmingCharacters(in: .whitespacesAndNewlines)
             mec.telefonoActivo = telefonoActivo
@@ -1177,7 +1193,7 @@ fileprivate struct PersonalFormView: View {
             let nuevo = Personal(
                 rfc: rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
                 curp: curp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : curp.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
-                nombre: nombre,
+                nombre: nombreNormalizado,
                 email: email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
                 telefono: telefono.trimmingCharacters(in: .whitespacesAndNewlines),
                 telefonoActivo: telefonoActivo,
@@ -1317,6 +1333,137 @@ fileprivate struct PersonalFormView: View {
         manoDeObraSugerida = moSug
         horasSemanalesRequeridas = 48
     }
+    
+    // MARK: - Nombre: validación y normalización (con guiones/apóstrofos y minúsculas para artículos)
+    
+    // Reglas:
+    // - Solo letras (incluye acentos y Ñ), espacios, guion (-) y apóstrofo (’ o ').
+    // - Entre 1 y 4 palabras separadas por espacios.
+    // - Cada subparte (separada por guion o apóstrofo) debe tener al menos 3 letras,
+    //   EXCEPTO artículos/preposiciones comunes: de, del, la, los, las, y, o (se aceptan aunque tengan <3).
+    // - Máximo 21 letras (contando solo letras, no separadores).
+    private func validateNombreCompleto(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "El nombre no puede estar vacío." }
+        
+        // Aceptar letras (con acentos y Ñ), espacios, guion y apóstrofo (recto y tipográfico)
+        let regex = #"^[A-Za-zÁÉÍÓÚÜáéíóúüÑñ '\-’]+$"#
+        if NSPredicate(format: "SELF MATCHES %@", regex).evaluate(with: trimmed) == false {
+            return "El nombre solo debe contener letras, espacios, guion (-) y apóstrofo (')."
+        }
+        
+        // Límite de 21 letras (ignora separadores)
+        let lettersCount = trimmed.unicodeScalars.filter { CharacterSet.letters.contains($0) }.count
+        if lettersCount > 21 {
+            return "Máximo 21 letras (se ignoran espacios y separadores)."
+        }
+        
+        // Palabras por espacios (1...4)
+        let words = trimmed.split(whereSeparator: { $0.isWhitespace }).map { String($0) }
+        if words.isEmpty { return "El nombre no puede estar vacío." }
+        if words.count > 4 { return "Máximo 4 palabras en el nombre." }
+        
+        // Lista blanca de artículos/preposiciones cortas permitidas
+        let whitelist = Set(["de", "del", "la", "los", "las", "y", "o"])
+        
+        // Validar subpartes por guion o apóstrofo
+        for word in words {
+            // Separar por '-' o apóstrofos (recto y tipográfico)
+            let subparts = word.split(whereSeparator: { $0 == "-" || $0 == "'" || $0 == "’" }).map { String($0) }
+            for sub in subparts {
+                // Contar solo letras
+                let subLetters = sub.unicodeScalars.filter { CharacterSet.letters.contains($0) }.count
+                // Si es una palabra corta en whitelist, permitir aunque tenga < 3 letras
+                if whitelist.contains(sub.lowercased()) { continue }
+                if subLetters < 3 {
+                    return "Cada parte del nombre debe tener al menos 3 letras (p. ej., María-José, O’Connor)."
+                }
+            }
+        }
+        return nil
+    }
+    
+    // Title Case:
+    // - Capitaliza la primera letra de cada subparte (separada por guion/apóstrofo) con locale es_MX.
+    // - Mantiene en minúsculas las palabras cortas de la whitelist si NO son la primera palabra.
+    private func titleCasedName(_ value: String) -> String {
+        let locale = Locale(identifier: "es_MX")
+        let whitelist = Set(["de", "del", "la", "los", "las", "y", "o"])
+        
+        let words = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { String($0) }
+        
+        var resultWords: [String] = []
+        for (index, word) in words.enumerated() {
+            let lowerWord = word.lowercased(with: locale)
+            // Si la palabra completa es de la whitelist y no es la primera, dejar en minúsculas
+            if index > 0 && whitelist.contains(lowerWord) {
+                resultWords.append(lowerWord)
+                continue
+            }
+            // Capitalizar subpartes separadas por guion/apóstrofo, preservando los separadores originales
+            var rebuilt = ""
+            var buffer = ""
+            var separators: [Character] = []
+            for ch in word {
+                if ch == "-" || ch == "'" || ch == "’" {
+                    separators.append(ch)
+                    // cierra buffer actual como subparte
+                    let titled = titleCase(subpart: buffer, locale: locale)
+                    rebuilt += titled
+                    rebuilt.append(ch)
+                    buffer = ""
+                } else {
+                    buffer.append(ch)
+                }
+            }
+            // último buffer
+            let titledLast = titleCase(subpart: buffer, locale: locale)
+            rebuilt += titledLast
+            
+            // Si la palabra no tenía guiones/apóstrofos, rebuilt es el título normal
+            // Si la palabra era de whitelist y no es la primera, ya la tratamos arriba
+            // Asegurar que la primera palabra siempre va capitalizada
+            if index == 0 && whitelist.contains(lowerWord) {
+                // Primera palabra en whitelist: capitalizar normal
+                resultWords.append(titleCase(subpart: lowerWord, locale: locale))
+            } else {
+                resultWords.append(rebuilt)
+            }
+        }
+        return resultWords.joined(separator: " ")
+    }
+    
+    private func titleCase(subpart: String, locale: Locale) -> String {
+        guard !subpart.isEmpty else { return subpart }
+        let lower = subpart.lowercased(with: locale)
+        guard let first = lower.first else { return lower }
+        return String(first).uppercased(with: locale) + lower.dropFirst()
+    }
+    
+    // Recorta una cadena para que tenga como máximo 'maxLetters' letras (ignora separadores)
+    private func limitNameToMaxLetters(_ value: String, maxLetters: Int) -> String {
+        guard maxLetters > 0 else { return "" }
+        var count = 0
+        var result = ""
+        for ch in value {
+            if String(ch).unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) }) {
+                if count < maxLetters {
+                    result.append(ch)
+                    count += 1
+                } else {
+                    // si excede, saltamos letras extra
+                    continue
+                }
+            } else {
+                // permitir separadores (espacios, guiones, apóstrofos y otros no letras)
+                result.append(ch)
+            }
+        }
+        return result
+    }
 }
 
 // --- Helpers de UI ---
@@ -1363,6 +1510,7 @@ fileprivate struct FormField: View {
 }
 
 fileprivate extension View {
+    // Validación nombre
     func validationHint(isInvalid: Bool, message: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             self
@@ -1485,3 +1633,4 @@ fileprivate struct AssistToolbar: View {
         .font(.caption)
     }
 }
+
