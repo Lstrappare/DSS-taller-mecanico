@@ -70,7 +70,6 @@ struct EnProcesoView: View {
         case .menosDe30:
             return base.filter { $0.estado == .enProceso && $0.tiempoRestanteSegundos > 0 && $0.tiempoRestanteSegundos <= 1800 }
         case .vencidos:
-            // Solo aplica a en proceso (programados no tienen “restante” hasta iniciar)
             return base.filter { $0.estado == .enProceso && $0.tiempoRestanteSegundos == 0 }
         case .hoy:
             let cal = Calendar.current
@@ -88,65 +87,33 @@ struct EnProcesoView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // --- Cabecera ---
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Servicios")
-                        .font(.largeTitle).fontWeight(.bold).foregroundColor(.white)
-                    HStack(spacing: 10) {
-                        Label("\(ticketsEnProceso.count) en proceso", systemImage: "hammer.circle.fill")
-                            .font(.subheadline).foregroundColor(.gray)
-                        Label("\(ticketsProgramados.count) programado\(ticketsProgramados.count == 1 ? "" : "s")", systemImage: "calendar.badge.clock")
-                            .font(.subheadline).foregroundColor(.gray)
-                        if let masCercano = ticketsEnProceso.map(\.horaFinEstimada).min() {
-                            let restante = max(0, masCercano.timeIntervalSinceNow)
-                            Label("Próximo fin: \(formatearTiempoCorto(segundos: restante))", systemImage: "clock.badge.checkmark")
-                                .font(.subheadline).foregroundColor(.gray)
-                        }
-                    }
-                }
-                Spacer()
-                // Filtros rápidos
-                Picker("Urgencia", selection: $filtroUrgencia) {
-                    ForEach(UrgenciaFiltro.allCases) { f in
-                        Text(f.rawValue).tag(f)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 340)
-            }
-            .padding(.bottom, 4)
+        VStack(alignment: .leading, spacing: 12) {
+            // Header compacto alineado a ServiciosView
+            header
             
-            // --- Buscador ---
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(Color("MercedesPetrolGreen"))
-                TextField("Buscar por Placa, Cliente, Servicio o Mecánico...", text: $searchQuery)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .animation(.easeInOut(duration: 0.15), value: searchQuery)
-                if !searchQuery.isEmpty {
-                    Button {
-                        searchQuery = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.gray)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(12)
-            .background(Color("MercedesCard"))
-            .cornerRadius(10)
+            // Barra de búsqueda + filtros compacta
+            filtrosView
             
+            // Contenido
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
+                    
+                    // Contadores globales
+                    HStack(spacing: 6) {
+                        Image(systemName: "number")
+                            .foregroundColor(Color("MercedesPetrolGreen"))
+                        Text("\(ticketsEnProceso.count + ticketsProgramados.count) resultado\(ticketsEnProceso.count + ticketsProgramados.count == 1 ? "" : "s")")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        Spacer()
+                    }
+                    
                     // Sección Programados
                     sectionHeader("Programados", count: ticketsProgramados.count, systemImage: "calendar.badge.clock")
                     if ticketsProgramados.isEmpty {
-                        emptySection(texto: "No hay servicios programados en este filtro.")
+                        emptySection(texto: searchQuery.isEmpty && filtroUrgencia == .todos ? "No hay servicios programados." : "No hay servicios programados en este filtro.")
                     } else {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 360), spacing: 18)], spacing: 18) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 360), spacing: 12)], spacing: 12) {
                             ForEach(ticketsProgramados) { ticket in
                                 ProgramadoCard(
                                     ticket: ticket,
@@ -156,27 +123,34 @@ struct EnProcesoView: View {
                                 )
                             }
                         }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                     
                     // Sección En Proceso
                     sectionHeader("En Proceso", count: ticketsEnProceso.count, systemImage: "timer")
                     if ticketsEnProceso.isEmpty {
-                        emptySection(texto: "No hay servicios en proceso en este filtro.")
+                        emptySection(texto: searchQuery.isEmpty && filtroUrgencia == .todos ? "No hay servicios en proceso." : "No hay servicios en proceso en este filtro.")
                     } else {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 360), spacing: 18)], spacing: 18) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 360), spacing: 12)], spacing: 12) {
                             ForEach(ticketsEnProceso) { servicio in
                                 ServicioEnProcesoCard(servicio: servicio) {
                                     servicioACerrar = servicio
                                 }
                             }
                         }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
-                .padding(.top, 6)
+                .padding(.top, 2)
             }
             Spacer(minLength: 0)
         }
-        .padding(24)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .background(
+            LinearGradient(colors: [Color("MercedesBackground"), Color("MercedesBackground").opacity(0.9)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+        )
         // Modales
         .sheet(item: $servicioACerrar) { servicio in
             CierreServicioModalView(
@@ -200,13 +174,125 @@ struct EnProcesoView: View {
         } message: { mensaje in
             Text(mensaje)
         }
-        // Auto-inicio: cada 30s intenta arrancar los programados cuya hora llegó
+        // Auto-inicio
         .onReceive(autoStartTimer) { _ in
             autoIniciarTicketsProgramadosSiCorresponde()
         }
         .onAppear {
-            // Primer chequeo inmediato al entrar
             autoIniciarTicketsProgramadosSiCorresponde()
+        }
+        .preferredColorScheme(.dark)
+    }
+    
+    // MARK: - Header y Filtros (alineados a ServiciosView)
+    private var header: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(
+                    LinearGradient(
+                        colors: [Color("MercedesCard"), Color("MercedesBackground").opacity(0.3)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+                .frame(height: 110)
+            
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Servicios en Proceso")
+                        .font(.title2).fontWeight(.bold).foregroundColor(.white)
+                    HStack(spacing: 10) {
+                        Label("\(ticketsEnProceso.count) en proceso", systemImage: "hammer.circle.fill")
+                            .font(.footnote).foregroundColor(.gray)
+                        Label("\(ticketsProgramados.count) programado\(ticketsProgramados.count == 1 ? "" : "s")", systemImage: "calendar.badge.clock")
+                            .font(.footnote).foregroundColor(.gray)
+                        if let masCercano = ticketsEnProceso.map(\.horaFinEstimada).min() {
+                            let restante = max(0, masCercano.timeIntervalSinceNow)
+                            Label("Próximo fin: \(formatearTiempoCorto(segundos: restante))", systemImage: "clock.badge.checkmark")
+                                .font(.footnote).foregroundColor(.gray)
+                        }
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+    
+    private var filtrosView: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                // Buscar
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                    TextField("Buscar por Placa, Cliente, Servicio o Mecánico...", text: $searchQuery)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .font(.subheadline)
+                        .animation(.easeInOut(duration: 0.15), value: searchQuery)
+                    if !searchQuery.isEmpty {
+                        Button {
+                            withAnimation { searchQuery = "" }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Limpiar búsqueda")
+                    }
+                }
+                .padding(8)
+                .background(Color("MercedesCard"))
+                .cornerRadius(8)
+                
+                // Urgencia
+                Picker("Urgencia", selection: $filtroUrgencia) {
+                    ForEach(UrgenciaFiltro.allCases) { f in
+                        Text(f.rawValue).tag(f)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: 180)
+                .help("Filtrar por urgencia")
+                
+                // Filtros activos + limpiar (solo si aplica)
+                if !searchQuery.isEmpty || filtroUrgencia != .todos {
+                    HStack(spacing: 6) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                        Text("Filtros activos")
+                        if !searchQuery.isEmpty {
+                            Text("“\(searchQuery)”")
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color("MercedesBackground")).cornerRadius(6)
+                        }
+                        if filtroUrgencia != .todos {
+                            Text("Urgencia: \(filtroUrgencia.rawValue)")
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color("MercedesBackground")).cornerRadius(6)
+                        }
+                        Button {
+                            withAnimation {
+                                searchQuery = ""
+                                filtroUrgencia = .todos
+                            }
+                        } label: {
+                            Text("Limpiar")
+                                .font(.caption2)
+                                .padding(.horizontal, 6).padding(.vertical, 4)
+                                .background(Color("MercedesCard"))
+                                .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.gray)
+                        .help("Quitar filtros activos")
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                }
+                
+                Spacer()
+            }
         }
     }
     
@@ -225,12 +311,10 @@ struct EnProcesoView: View {
     
     // Intenta iniciar un ticket programado. Si silencioso == true, no muestra alertas; solo registra.
     private func iniciarTicketProgramadoSiEsHora(_ ticket: ServicioEnProceso, silencioso: Bool) {
-        // Validar que siga programado y que la hora ya llegó
         guard ticket.estado == .programado,
               let inicioProgramado = ticket.fechaProgramadaInicio,
               inicioProgramado <= Date() else { return }
         
-        // Reutilizamos la lógica de asignación similar a iniciarTicketAhora, pero preferimos el sugerido si cuadra.
         let ahora = Date()
         let fin = ahora.addingTimeInterval(ticket.duracionHoras * 3600)
         let cal = Calendar.current
@@ -238,11 +322,9 @@ struct EnProcesoView: View {
         let startHour = cal.component(.hour, from: ahora)
         let endHour = cal.component(.hour, from: fin)
         
-        // Candidatos por turno; aquí no conocemos rol requerido exacto del servicio catálogo, usamos sugerido/asignado si posible
         let candidatosBase = personal
         
         let candidatosElegibles = candidatosBase.filter { mec in
-            // Si hay sugerido, prioriza ese RFC; si no, cualquiera que cumpla turno y sin solape
             let coincideSugerido = (ticket.rfcMecanicoSugerido == nil) || (ticket.rfcMecanicoSugerido == mec.rfc)
             let horarioOK = mec.diasLaborales.contains(weekday) && (mec.horaEntrada <= startHour) && (mec.horaSalida >= endHour)
             let sinSolape = !ServicioEnProceso.existeSolape(paraRFC: mec.rfc, inicio: ahora, fin: fin, tickets: todosLosTickets)
@@ -264,7 +346,6 @@ struct EnProcesoView: View {
             return
         }
         
-        // Validar stock (informativo en auto-inicio). Por ahora, mismo criterio que manual: nombres sin cantidades.
         for nombre in ticket.productosConsumidos {
             guard let p = productos.first(where: { $0.nombre == nombre }) else {
                 if !silencioso {
@@ -296,14 +377,12 @@ struct EnProcesoView: View {
             }
         }
         
-        // Descontar inventario (1 unidad por producto listado, por la limitación actual)
         for nombre in ticket.productosConsumidos {
             if let p = productos.first(where: { $0.nombre == nombre }) {
                 p.cantidad = max(0, p.cantidad - 1)
             }
         }
         
-        // Cambiar estados
         mecanico.estado = .ocupado
         ticket.estado = .enProceso
         ticket.rfcMecanicoAsignado = mecanico.rfc
@@ -323,7 +402,6 @@ struct EnProcesoView: View {
     // MARK: - Acciones Programados (manual)
     
     private func iniciarTicketAhora(_ ticket: ServicioEnProceso) {
-        // 1) Recalcular candidato actual sin solapes y en turno
         let ahora = Date()
         let fin = ahora.addingTimeInterval(ticket.duracionHoras * 3600)
         let cal = Calendar.current
@@ -331,12 +409,10 @@ struct EnProcesoView: View {
         let startHour = cal.component(.hour, from: ahora)
         let endHour = cal.component(.hour, from: fin)
         
-        let candidatosBase = personal.filter { mec in
-            mec.rol == .mecanicoFrenos || true // no conocemos el rol del servicio aquí; usamos sugerido/asignado
+        let candidatosBase = personal.filter { _ in
+            true // mantenemos lógica actual (sugerido si posible)
         }
-        // Intentar usar el sugerido primero si existe y está disponible
         let candidatosElegibles = candidatosBase.filter { mec in
-            // Si el ticket tiene sugerido, prioricemos ese RFC
             let coincideSugerido = (ticket.rfcMecanicoSugerido == nil) || (ticket.rfcMecanicoSugerido == mec.rfc)
             let horarioOK = mec.diasLaborales.contains(weekday) && (mec.horaEntrada <= startHour) && (mec.horaSalida >= endHour)
             let sinSolape = !ServicioEnProceso.existeSolape(paraRFC: mec.rfc, inicio: ahora, fin: fin, tickets: todosLosTickets)
@@ -348,7 +424,6 @@ struct EnProcesoView: View {
             return
         }
         
-        // 2) Validar stock contra productosConsumidos
         for nombre in ticket.productosConsumidos {
             guard let p = productos.first(where: { $0.nombre == nombre }) else {
                 alertaError = "Producto '\(nombre)' no encontrado en inventario."
@@ -362,14 +437,12 @@ struct EnProcesoView: View {
             }
         }
         
-        // 3) Descontar inventario (asumimos 1 unidad por producto por limitación actual)
         for nombre in ticket.productosConsumidos {
             if let p = productos.first(where: { $0.nombre == nombre }) {
                 p.cantidad = max(0, p.cantidad - 1)
             }
         }
         
-        // 4) Cambiar estado del mecánico y del ticket
         mecanico.estado = .ocupado
         
         ticket.estado = .enProceso
@@ -411,16 +484,25 @@ struct EnProcesoView: View {
     }
     
     private func emptySection(texto: String) -> some View {
-        HStack {
+        VStack(spacing: 8) {
             Image(systemName: "tray")
-                .foregroundColor(.gray)
+                .font(.system(size: 36, weight: .bold))
+                .foregroundColor(Color("MercedesPetrolGreen"))
             Text(texto)
+                .font(.subheadline)
                 .foregroundColor(.gray)
-            Spacer()
         }
-        .padding()
-        .background(Color("MercedesCard"))
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .background(
+            ZStack {
+                Color("MercedesCard")
+                LinearGradient(colors: [Color.white.opacity(0.012), Color("MercedesBackground").opacity(0.06)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        )
         .cornerRadius(10)
+        .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
     }
     
     private func formatearTiempoCorto(segundos: Double) -> String {
@@ -444,7 +526,7 @@ fileprivate struct ProgramadoCard: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(ticket.nombreServicio)
-                        .font(.title3).fontWeight(.semibold)
+                        .font(.headline).fontWeight(.semibold)
                     if let v = ticket.vehiculo {
                         HStack(spacing: 6) {
                             badge(text: "[\(v.placas)]", icon: "number.square.fill")
@@ -453,7 +535,7 @@ fileprivate struct ProgramadoCard: View {
                         .padding(.top, 2)
                         if let cliente = v.cliente?.nombre, !cliente.isEmpty {
                             Label("Cliente: \(cliente)", systemImage: "person.text.rectangle")
-                                .font(.caption).foregroundColor(.gray)
+                                .font(.caption2).foregroundColor(.gray)
                         }
                     }
                 }
@@ -469,9 +551,9 @@ fileprivate struct ProgramadoCard: View {
                     }
                     let inicio = ticket.fechaProgramadaInicio ?? ticket.horaInicio
                     Label("Inicio: \(inicio.formatted(date: .abbreviated, time: .shortened))", systemImage: "calendar")
-                        .font(.caption).foregroundColor(.gray)
+                        .font(.caption2).foregroundColor(.gray)
                     Text("Duración: \(ticket.duracionHoras, specifier: "%.1f") h")
-                        .font(.caption).foregroundColor(.gray)
+                        .font(.caption2).foregroundColor(.gray)
                 }
             }
             Divider().opacity(0.5)
@@ -514,16 +596,17 @@ fileprivate struct ProgramadoCard: View {
                 Spacer()
             }
         }
-        .padding(14)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color("MercedesCard"))
+            ZStack {
+                Color("MercedesCard")
+                LinearGradient(colors: [Color.white.opacity(0.012), Color("MercedesBackground").opacity(0.06)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color("MercedesBackground").opacity(0.25), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+        .cornerRadius(10)
+        .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
     }
     
     private func badge(text: String, icon: String) -> some View {
@@ -531,7 +614,7 @@ fileprivate struct ProgramadoCard: View {
             Image(systemName: icon)
             Text(text)
         }
-        .font(.caption)
+        .font(.caption2)
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(Color("MercedesBackground"))
         .cornerRadius(6)
@@ -754,7 +837,6 @@ struct ServicioEnProcesoCard: View {
     }
     
     private var progreso: Double {
-        // 1.0 cuando recién inicia, 0.0 al terminar
         let total = max(1, servicio.horaFinEstimada.timeIntervalSince(servicio.horaInicio))
         let restante = max(0, servicio.horaFinEstimada.timeIntervalSinceNow)
         return max(0, min(1, restante / total))
@@ -772,7 +854,7 @@ struct ServicioEnProcesoCard: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(servicio.nombreServicio)
-                        .font(.title3).fontWeight(.semibold)
+                        .font(.headline).fontWeight(.semibold)
                     if let vehiculo = servicio.vehiculo {
                         HStack(spacing: 6) {
                             badge(text: "[\(vehiculo.placas)]", icon: "number.square.fill")
@@ -781,7 +863,7 @@ struct ServicioEnProcesoCard: View {
                         .padding(.top, 2)
                         if let cliente = vehiculo.cliente?.nombre, !cliente.isEmpty {
                             Label("Cliente: \(cliente)", systemImage: "person.text.rectangle")
-                                .font(.caption).foregroundColor(.gray)
+                                .font(.caption2).foregroundColor(.gray)
                         }
                     }
                 }
@@ -791,7 +873,7 @@ struct ServicioEnProcesoCard: View {
                         .font(.subheadline)
                         .foregroundColor(Color("MercedesPetrolGreen"))
                     Label("Fin: \(servicio.horaFinEstimada.formatted(date: .omitted, time: .shortened))", systemImage: "clock")
-                        .font(.caption).foregroundColor(.gray)
+                        .font(.caption2).foregroundColor(.gray)
                 }
             }
             
@@ -864,16 +946,17 @@ struct ServicioEnProcesoCard: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(14)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color("MercedesCard"))
+            ZStack {
+                Color("MercedesCard")
+                LinearGradient(colors: [Color.white.opacity(0.012), Color("MercedesBackground").opacity(0.06)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(colorUrgencia.opacity(0.25), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+        .cornerRadius(10)
+        .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
         .onReceive(timer) { _ in
             if segundosRestantes > 0 {
                 segundosRestantes -= 1
@@ -895,7 +978,7 @@ struct ServicioEnProcesoCard: View {
             Image(systemName: icon)
             Text(text)
         }
-        .font(.caption)
+        .font(.caption2)
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(Color("MercedesBackground"))
         .cornerRadius(6)
@@ -1042,12 +1125,9 @@ fileprivate struct CierreServicioModalView: View {
     
     // --- LÓGICA DE CIERRE FINAL ---
     func completarServicio() {
-        // 1) Liberar mecánico y sumar comisión por mano de obra
         if let mecanico = personal.first(where: { $0.rfc == servicio.rfcMecanicoAsignado }) {
             mecanico.estado = .disponible
             
-            // Buscar el servicio catálogo por nombre y sumar su costo de mano de obra
-            // Fallback case-insensitive si no hay match exacto
             let servicioCatalogo: Servicio? = {
                 if let exact = servicios.first(where: { $0.nombre == servicio.nombreServicio }) {
                     return exact
@@ -1059,10 +1139,8 @@ fileprivate struct CierreServicioModalView: View {
             if let servicioCatalogo {
                 let montoMO = max(0, servicioCatalogo.costoManoDeObra)
                 mecanico.comisiones += montoMO
-                // Opcional: actualizar snapshots para reflejar la nueva comisión en nómina
                 mecanico.recalcularYActualizarSnapshots()
                 
-                // Registrar detalle de la comisión sumada
                 let registroComision = DecisionRecord(
                     fecha: Date(),
                     titulo: "Comisión sumada: \(servicioCatalogo.nombre)",
@@ -1071,7 +1149,6 @@ fileprivate struct CierreServicioModalView: View {
                 )
                 modelContext.insert(registroComision)
             } else {
-                // Si no se encontró el catálogo, registramos aviso (no bloqueante)
                 let registroAviso = DecisionRecord(
                     fecha: Date(),
                     titulo: "Aviso: Servicio no encontrado para comisión",
@@ -1082,7 +1159,6 @@ fileprivate struct CierreServicioModalView: View {
             }
         }
         
-        // 2) Registrar cierre general y eliminar ticket
         let registro = DecisionRecord(
             fecha: Date(),
             titulo: "Completado: \(servicio.nombreServicio)",
