@@ -547,6 +547,7 @@ fileprivate struct PersonalFormView: View {
     // Bloqueos/Seguridad
     @State private var isRFCUnlocked = false
     @State private var showingAuthModal = false
+    @State private var showingStatusAlert = false
     @State private var authError = ""
     @State private var passwordAttempt = ""
     @State private var errorMsg: String?
@@ -688,295 +689,350 @@ fileprivate struct PersonalFormView: View {
                 Text("Completa los datos. Los campos marcados con '•' son obligatorios.")
                     .font(.footnote)
                     .foregroundColor(.gray)
+                Text("Asegúrate de verificar la información antes de guardar.")
+                    .font(.caption2)
+                    .foregroundColor(.gray.opacity(0.8))
             }
             .padding(.top, 14)
             .padding(.bottom, 8)
 
-            Form {
-                // Sección: Datos personales
-                Section {
-                    SectionHeader(title: "Datos personales", subtitle: nil)
-                    HStack(spacing: 16) {
+            ScrollView {
+                VStack(spacing: 24) {
+                    
+                    // 1. Datos de Identificación
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "Datos de Identificación", subtitle: "Información personal")
+                        
+                        // Nombre (Full width)
                         FormField(title: "• Nombre Completo", placeholder: "ej. José Cisneros Torres", text: $nombre)
                             .validationHint(isInvalid: nombreInvalido, message: nombreValidationMessage ?? "")
-                        FormField(title: "• Email", placeholder: "ej. jose@taller.com", text: $email)
-                            .validationHint(isInvalid: emailInvalido, message: "Ingresa un email válido.")
-                    }
-                    HStack(spacing: 16) {
-                        FormField(title: "Teléfono", placeholder: "10 dígitos", text: $telefono)
-                            .disabled(!telefonoActivo)
-                            .opacity(telefonoActivo ? 1.0 : 0.6)
-                            .validationHint(isInvalid: telefonoInvalido, message: "Debe tener 10 dígitos.")
                         
-                        Toggle("Teléfono activo para contacto", isOn: $telefonoActivo)
-                            .toggleStyle(.switch)
-                            .font(.caption2)
-                            .foregroundColor(.gray)
-                    }
-                    // RFC con candado en edición
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text("• RFC").font(.caption).foregroundColor(.gray)
-                            if mecanicoAEditar != nil {
-                                Image(systemName: isRFCUnlocked ? "lock.open.fill" : "lock.fill")
-                                    .foregroundColor(isRFCUnlocked ? .green : .red)
-                                    .font(.caption)
-                            }
-                        }
-                        HStack(spacing: 8) {
-                            ZStack(alignment: .leading) {
-                                TextField("", text: $rfc)
-                                    .disabled(mecanicoAEditar != nil && !isRFCUnlocked)
-                                    .padding(10)
-                                    .background(Color("MercedesBackground").opacity(0.9))
-                                    .cornerRadius(8)
-                                if rfc.isEmpty {
-                                    Text("13 caracteres (persona física) o 12 (moral)")
-                                        .foregroundColor(Color.white.opacity(0.35))
-                                        .padding(.horizontal, 14)
-                                        .allowsHitTesting(false)
-                                }
-                            }
-                            if mecanicoAEditar != nil {
-                                Button {
-                                    if isRFCUnlocked { isRFCUnlocked = false }
-                                    else {
-                                        authReason = .unlockRFC
-                                        showingAuthModal = true
-                                    }
-                                } label: {
-                                    Text(isRFCUnlocked ? "Bloquear" : "Desbloquear")
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundColor(isRFCUnlocked ? .green : .red)
-                            }
-                        }
-                        .validationHint(isInvalid: rfcInvalido, message: "RFC inválido. Verifica estructura y homoclave.")
-                    }
-                    FormField(title: "CURP (opcional)", placeholder: "18 caracteres", text: $curp)
-                        .validationHint(isInvalid: curpInvalido, message: "CURP inválida. Verifica formato y dígito verificador.")
-                }
-                
-                // Sección: Trabajo
-                Section {
-                    SectionHeader(title: "Trabajo", subtitle: nil)
-                    HStack(spacing: 16) {
-                        Picker("• Rol", selection: $rol) {
-                            ForEach(Rol.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: .infinity)
-                        FormField(title: "Especialidades (coma)", placeholder: "Motor, Frenos, Suspensión", text: $especialidadesString)
-                    }
-                    HStack(spacing: 16) {
-                        DatePicker("• Fecha de ingreso", selection: $fechaIngreso, displayedComponents: .date)
-                            .datePickerStyle(.compact)
-                            .frame(maxWidth: .infinity)
-                        Picker("• Tipo de contrato", selection: $tipoContrato) {
-                            ForEach(TipoContrato.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: .infinity)
-                    }
-                    HStack(spacing: 16) {
-                        FormField(title: "• Entrada (0-23)", placeholder: "ej. 9", text: $horaEntradaString)
-                            .validationHint(isInvalid: horasInvalidas, message: "0 a 23 y distinto de salida.")
-                        FormField(title: "• Salida (0-23)", placeholder: "ej. 18", text: $horaSalidaString)
-                            .validationHint(isInvalid: horasInvalidas, message: "0 a 23 y distinto de entrada.")
-                    }
-                    // Días laborables
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("• Días laborables").font(.caption).foregroundColor(.gray)
-                        DaysSelector(selected: $diasLaborales)
-                            .padding(8)
-                            .background(Color("MercedesBackground"))
-                            .cornerRadius(8)
-                            .validationHint(isInvalid: sinDiasLaborales, message: "Selecciona al menos un día.")
-                    }
-                }
-                
-                // Sección: Estado laboral (Alta/Baja)
-                Section {
-                    SectionHeader(title: "Estado laboral", subtitle: "Dar de baja / Dar de alta")
-                    HStack(spacing: 10) {
-                        Text(activo ? "Activo" : "De baja")
-                            .font(.headline)
-                            .foregroundColor(activo ? .green : .red)
-                        if let f = fechaBaja, !activo {
-                            Text("Baja desde: \(f.formatted(date: .abbreviated, time: .omitted))")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                        Spacer()
-                        if activo {
-                            Button {
-                                // Dar de baja: no elimina datos; no se considera para asignaciones
-                                activo = false
-                                fechaBaja = Date()
-                            } label: {
-                                Label("Dar de baja", systemImage: "person.fill.xmark")
-                                    .font(.subheadline)
-                                    .padding(.vertical, 6).padding(.horizontal, 10)
-                                    .background(Color.red.opacity(0.22))
-                                    .foregroundColor(.red)
-                                    .cornerRadius(8)
-                            }
-                            .buttonStyle(.plain)
-                            .help("No se eliminarán los datos; no se considerará para asignación de servicios.")
-                        } else {
-                            Button {
-                                // Dar de alta: vuelve a considerarse para asignaciones y actualiza fechaIngreso
-                                activo = true
-                                fechaBaja = nil
-                                fechaIngreso = Date()
-                            } label: {
-                                Label("Dar de alta", systemImage: "person.fill.checkmark")
-                                    .font(.subheadline)
-                                    .padding(.vertical, 6).padding(.horizontal, 10)
-                                    .background(Color("MercedesPetrolGreen"))
-                                    .foregroundColor(.white)
-                                    .cornerRadius(8)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Se actualizará la fecha de ingreso al día de hoy.")
-                        }
-                    }
-                    Text("Nota: No se eliminarán los datos. Mientras esté de baja, no se le tomará en cuenta para la asignación de servicios.")
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                }
-                
-                // Sección: Nómina (config y cálculo)
-                Section {
-                    SectionHeader(title: "Nómina", subtitle: "Cálculos aproximados con SBC dinámico")
-                    Toggle("Prestaciones mínimas", isOn: $prestacionesMinimas)
-                    
-                    HStack(spacing: 16) {
-                        // Tipo de salario reducido a 2 opciones (UI)
-                        Picker("• Tipo de salario", selection: $tipoSalario) {
-                            Text(TipoSalario.minimo.rawValue).tag(TipoSalario.minimo)
-                            Text(TipoSalario.mixto.rawValue).tag(TipoSalario.mixto)
-                        }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: .infinity)
-                        
-                        Picker("• Frecuencia de pago", selection: $frecuenciaPago) {
-                            ForEach(FrecuenciaPago.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: .infinity)
-                    }
-                    
-                    HStack(spacing: 16) {
-                        FormField(title: "• Salario mínimo de referencia (editable)", placeholder: "ej. 248.93", text: $salarioMinimoReferenciaString)
-                            .validationHint(isInvalid: salarioMinimoInvalido, message: "Número válido.")
-                        FormField(title: "• Factor de Integración", placeholder: "ej. 1.0452", text: $factorIntegracionString)
-                            .validationHint(isInvalid: factorIntegracionInvalido, message: "Debe ser > 0.")
-                    }
-                    
-                    // Comisiones: editable si tipoSalario == .mixto; de solo lectura si .minimo (visibilidad)
-                    if tipoSalario == .mixto {
+                        // Contacto
                         HStack(spacing: 16) {
-                            FormField(title: "• Comisiones (acumuladas)", placeholder: "0.00", text: $comisionesString)
-                                .validationHint(isInvalid: comisionesInvalidas, message: "Número válido.")
-                            Text("El monto se incrementa automáticamente al completar servicios (mano de obra).")
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                        }
-                    } else {
-                        // Solo lectura para visibilidad cuando es salario mínimo
-                        HStack(spacing: 16) {
+                            FormField(title: "• Email", placeholder: "ej. jose@taller.com", text: $email)
+                                .validationHint(isInvalid: emailInvalido, message: "Ingresa un email válido.")
+                            
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Comisiones acumuladas (solo lectura)")
+                                FormField(title: "Teléfono", placeholder: "10 dígitos", text: $telefono)
+                                    .disabled(!telefonoActivo)
+                                    .opacity(telefonoActivo ? 1.0 : 0.6)
+                                    .validationHint(isInvalid: telefonoInvalido, message: "Debe tener 10 dígitos.")
+                                Toggle("Teléfono activo", isOn: $telefonoActivo)
+                                    .toggleStyle(.switch)
                                     .font(.caption2)
                                     .foregroundColor(.gray)
-                                Text(String(format: "$%.2f", Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0))
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .padding(8)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color("MercedesBackground").opacity(0.9))
-                                    .cornerRadius(8)
                             }
-                            Text("Visible aunque el tipo de salario sea mínimo.")
-                                .font(.caption)
-                                .foregroundColor(.gray)
                         }
-                    }
-                    
-                    // Campos automáticos: solo lectura
-                    AutoPayrollGrid(
-                        salarioDiario: salarioDiario,
-                        sbc: sbc,
-                        isrMensual: isrMensualEstimado,
-                        imssMensual: imssMensualEstimado,
-                        cuotaObrera: cuotaObrera,
-                        cuotaPatronal: cuotaPatronal,
-                        sueldoNetoMensual: sueldoNetoMensual,
-                        costoRealMensual: costoRealMensual,
-                        costoHora: costoHora,
-                        horasSemanalesRequeridas: horasSemanalesRequeridas,
-                        manoDeObraSugerida: manoDeObraSugerida
-                    )
-                    
-                    HStack {
-                        Button {
-                            recalcularNominaPreview()
-                        } label: {
-                            Label("Recalcular", systemImage: "arrow.triangle.2.circlepath")
-                        }
-                        .buttonStyle(.plain)
-                        .padding(8)
-                        .background(Color("MercedesBackground"))
-                        .cornerRadius(8)
-                        .foregroundColor(.white)
                         
+                        // Identificadores Legales (RFC / CURP)
                         VStack(alignment: .leading, spacing: 2) {
-                            if tipoSalario == .mixto {
-                                HStack(spacing: 8) {
-                                    Text("El ISR es aproximado. Debe verificarse con la tabla oficial del SAT.")
-                                        .font(.caption2)
-                                        .foregroundColor(.yellow)
-                                    Link("SAT", destination: URL(string: "https://www.sat.gob.mx/portal/public/home")!)
-                                        .font(.caption2)
-                                        .foregroundColor(Color("MercedesPetrolGreen"))
+                            HStack(spacing: 6) {
+                                Text("• RFC").font(.caption).foregroundColor(.gray)
+                                if mecanicoAEditar != nil {
+                                    Image(systemName: isRFCUnlocked ? "lock.open.fill" : "lock.fill")
+                                        .foregroundColor(isRFCUnlocked ? .green : .red)
+                                        .font(.caption)
                                 }
                             }
-                            Text("Cálculos aproximados. Verifique datos reales con instituciones oficiales.")
-                                .font(.caption2)
-                                .foregroundColor(.yellow)
+                            HStack(spacing: 8) {
+                                ZStack(alignment: .leading) {
+                                    TextField("", text: $rfc)
+                                        .disabled(mecanicoAEditar != nil && !isRFCUnlocked)
+                                        .textFieldStyle(.plain)
+                                        .padding(10)
+                                        .frame(maxWidth: .infinity)
+                                        .background(Color("MercedesBackground"))
+                                        .cornerRadius(8)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                        )
+                                    if rfc.isEmpty {
+                                        Text("13 caracteres (persona física) o 12 (moral)")
+                                            .foregroundColor(Color.white.opacity(0.35))
+                                            .padding(.horizontal, 14)
+                                            .allowsHitTesting(false)
+                                    }
+                                }
+                                if mecanicoAEditar != nil {
+                                    Button {
+                                        if isRFCUnlocked { isRFCUnlocked = false }
+                                        else {
+                                            authReason = .unlockRFC
+                                            showingAuthModal = true
+                                        }
+                                    } label: {
+                                        Text(isRFCUnlocked ? "Bloquear" : "Desbloquear")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundColor(isRFCUnlocked ? .green : .red)
+                                }
+                            }
+                            .validationHint(isInvalid: rfcInvalido, message: "RFC inválido. Verifica estructura y homoclave.")
                         }
-                        Spacer()
+                        
+                        FormField(title: "CURP (opcional)", placeholder: "18 caracteres", text: $curp)
+                            .validationHint(isInvalid: curpInvalido, message: "CURP inválida. Verifica formato y dígito verificador.")
                     }
-                }
-                
-                // Sección: Documentación
-                Section {
-                    SectionHeader(title: "Documentación (opcional)", subtitle: "Rutas o identificadores de archivo")
-                    HStack(spacing: 16) {
-                        FormField(title: "INE", placeholder: "/ruta/al/archivo.pdf", text: $ineAdjuntoPath)
-                        FormField(title: "Comprobante de domicilio", placeholder: "/ruta/al/archivo.pdf", text: $comprobanteDomicilioPath)
-                        FormField(title: "Comprobante de estudios", placeholder: "/ruta/al/archivo.pdf", text: $comprobanteEstudiosPath)
-                    }
-                }
-                
-                // Sección: Asistencia (solo botón de ausencia)
-                Section {
-                    SectionHeader(title: "Asistencia (automática)", subtitle: "Acciones del día")
-                    AssistToolbar(
-                        estado: $estado,
-                        asistenciaBloqueada: $asistenciaBloqueada,
-                        onMarcarAusencia: {
-                            authReason = .markAbsence
-                            showingAuthModal = true
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // 2. Información Laboral
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "Información Laboral", subtitle: "Puesto y estado")
+                        
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("• Rol").font(.caption2).foregroundColor(.gray)
+                                Picker("", selection: $rol) {
+                                    ForEach(Rol.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity)
+                                .padding(4)
+                                .background(Color("MercedesBackground").opacity(0.9))
+                                .cornerRadius(8)
+                            }
+                            FormField(title: "Especialidades", placeholder: "Motor, Frenos...", text: $especialidadesString)
+                                .help("Ejemplo: Motor, Frenos. Se guardarán con mayúscula inicial.")
                         }
+                        
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("• Fecha de ingreso").font(.caption2).foregroundColor(.gray)
+                                DatePicker("", selection: $fechaIngreso, displayedComponents: .date)
+                                    .datePickerStyle(.compact)
+                                    .labelsHidden()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("• Tipo de contrato").font(.caption2).foregroundColor(.gray)
+                                Picker("", selection: $tipoContrato) {
+                                    ForEach(TipoContrato.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity)
+                                .padding(4)
+                                .background(Color("MercedesBackground").opacity(0.9))
+                                .cornerRadius(8)
+                            }
+                        }
+                        
+                        // Estado Laboral (Visualización solamente)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Estado Actual").font(.caption2).foregroundColor(.gray)
+                            HStack(spacing: 10) {
+                                Text(activo ? "Activo" : "De baja")
+                                    .font(.headline)
+                                    .foregroundColor(activo ? .green : .red)
+                                    .frame(width: 80, alignment: .leading)
+                                
+                                if !activo, let f = fechaBaja {
+                                    Text("Desde: \(f.formatted(date: .abbreviated, time: .omitted))")
+                                        .font(.caption2).foregroundColor(.gray)
+                                }
+                            }
+                        }
+                        .padding(10)
+                        .background(Color("MercedesBackground").opacity(0.5))
+                        .cornerRadius(8)
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // 3. Horario Laboral
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "Horario Laboral", subtitle: "Disponibilidad semanal")
+                        
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("• Días laborables").font(.caption).foregroundColor(.gray)
+                            DaysSelector(selected: $diasLaborales)
+                                .padding(8)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(8)
+                                .validationHint(isInvalid: sinDiasLaborales, message: "Selecciona al menos un día.")
+                        }
+                        
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                FormField(title: "• Entrada (0-23 hrs)", placeholder: "ej. 9", text: $horaEntradaString)
+                                    .validationHint(isInvalid: horasInvalidas, message: "0 a 23 y distinto de salida.")
+                                Text("Formato 24 horas.")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                FormField(title: "• Salida (0-23 hrs)", placeholder: "ej. 18", text: $horaSalidaString)
+                                    .validationHint(isInvalid: horasInvalidas, message: "0 a 23 y distinto de entrada.")
+                                Text("Formato 24 horas.")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // 4. Configuración de Nómina
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "Configuración de Nómina", subtitle: "Parámetros de pago")
+                        
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("• Tipo de salario").font(.caption2).foregroundColor(.gray)
+                                Picker("", selection: $tipoSalario) {
+                                    Text(TipoSalario.minimo.rawValue).tag(TipoSalario.minimo)
+                                    Text(TipoSalario.mixto.rawValue).tag(TipoSalario.mixto)
+                                }
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity)
+                                .padding(4)
+                                .background(Color("MercedesBackground").opacity(0.9))
+                                .cornerRadius(8)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("• Frecuencia de pago").font(.caption2).foregroundColor(.gray)
+                                Picker("", selection: $frecuenciaPago) {
+                                    ForEach(FrecuenciaPago.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity)
+                                .padding(4)
+                                .background(Color("MercedesBackground").opacity(0.9))
+                                .cornerRadius(8)
+                            }
+                        }
+                        
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                FormField(title: "• Salario Min. Ref.", placeholder: "ej. 248.93", text: $salarioMinimoReferenciaString)
+                                    .validationHint(isInvalid: salarioMinimoInvalido, message: "Número válido.")
+                                Text("Base de cálculo.")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                FormField(title: "• Factor Integración", placeholder: "ej. 1.0452", text: $factorIntegracionString)
+                                    .validationHint(isInvalid: factorIntegracionInvalido, message: "Debe ser > 0.")
+                                Text("Para SBC.")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                        
+                        HStack(spacing: 16) {
+                            Toggle("Prestaciones mínimas", isOn: $prestacionesMinimas)
+                                .toggleStyle(.switch)
+                                .font(.caption)
+                            
+                            Spacer()
+                            
+                            if tipoSalario == .mixto {
+                                FormField(title: "• Comisiones (acum.)", placeholder: "0.00", text: $comisionesString)
+                                    .frame(width: 150)
+                                    .validationHint(isInvalid: comisionesInvalidas, message: "Número válido.")
+                            } else {
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text("Comisiones (Solo lectura)").font(.caption2).foregroundColor(.gray)
+                                    Text(String(format: "$%.2f", Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0))
+                                        .font(.subheadline)
+                                        .foregroundColor(.white)
+                                }
+                            }
+                        }
+                    }
+                    
+                    // 5. Proyección de Nómina
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Text("Proyección de Nómina")
+                                .font(.headline)
+                                .foregroundColor(Color("MercedesPetrolGreen"))
+                            Spacer()
+                            Button {
+                                recalcularNominaPreview()
+                            } label: {
+                                Label("Recalcular", systemImage: "arrow.triangle.2.circlepath")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        
+                        AutoPayrollGrid(
+                            salarioDiario: salarioDiario,
+                            sbc: sbc,
+                            isrMensual: isrMensualEstimado,
+                            imssMensual: imssMensualEstimado,
+                            cuotaObrera: cuotaObrera,
+                            cuotaPatronal: cuotaPatronal,
+                            sueldoNetoMensual: sueldoNetoMensual,
+                            costoRealMensual: costoRealMensual,
+                            costoHora: costoHora,
+                            horasSemanalesRequeridas: horasSemanalesRequeridas,
+                            manoDeObraSugerida: manoDeObraSugerida
+                        )
+                        
+                        Text("Cálculos aproximados. El ISR debe verificarse con tablas oficiales del SAT.")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                    .padding(16)
+                    .background(Color("MercedesBackground").opacity(0.3))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
                     )
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // 6. Asistencia
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "Asistencia", subtitle: "Acciones rápidas")
+                        AssistToolbar(
+                            estado: $estado,
+                            asistenciaBloqueada: $asistenciaBloqueada,
+                            onMarcarAusencia: {
+                                authReason = .markAbsence
+                                showingAuthModal = true
+                            }
+                        )
+                    }
+                    
+                    // 7. Zona de Peligro (Eliminar)
+                    if case .edit = mode {
+                        Divider().background(Color.red.opacity(0.3))
+                        VStack(spacing: 12) {
+                            Text("Esta opción borrará todo sobre este empleado y no se podrá recuperar.")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .multilineTextAlignment(.center)
+                            
+                            Button(role: .destructive) {
+                                authReason = .deleteEmployee
+                                showingAuthModal = true
+                            } label: {
+                                Label("Eliminar Empleado Permanentemente", systemImage: "trash.fill")
+                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 24)
+                                    .background(Color.red.opacity(0.15))
+                                    .foregroundColor(.red)
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.red.opacity(0.5), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.top, 16)
+                    }
                 }
+                .padding(24)
             }
-            .textFieldStyle(PlainTextFieldStyle())
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
             .onAppear { recalcularNominaPreview() }
             .onChange(of: salarioMinimoReferenciaString) { _, _ in recalcularNominaPreview() }
             .onChange(of: prestacionesMinimas) { _, _ in recalcularNominaPreview() }
@@ -1000,39 +1056,76 @@ fileprivate struct PersonalFormView: View {
             }
             
             // Barra de Botones
-            HStack {
-                Button("Cancelar") { dismiss() }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 8)
-                    .foregroundColor(.gray)
-                
-                if case .edit = mode {
-                    Button("Eliminar", role: .destructive) {
-                        authReason = .deleteEmployee
-                        showingAuthModal = true
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 8)
-                    .foregroundColor(.red)
-                }
-                Spacer()
-                Button(mecanicoAEditar == nil ? "Guardar y Añadir" : "Guardar Cambios") {
-                    guardarCambios()
+            HStack(spacing: 12) {
+                Button { dismiss() } label: {
+                    Text("Cancelar")
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .background(Color("MercedesBackground"))
+                        .foregroundColor(.gray)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
                 }
                 .buttonStyle(.plain)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 12)
-                .foregroundColor(Color("MercedesPetrolGreen"))
-                .cornerRadius(8)
-                .foregroundColor(Color("MercedesPetrolGreen"))
-                .cornerRadius(8)
+                
+                // Botón de Alta/Baja
+                if mecanicoAEditar != nil {
+                    Button {
+                        showingStatusAlert = true
+                    } label: {
+                        Text(activo ? "Dar de baja" : "Reactivar")
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 16)
+                            .background(activo ? Color.orange.opacity(0.15) : Color.green.opacity(0.15))
+                            .foregroundColor(activo ? .orange : .green)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(activo ? Color.orange.opacity(0.3) : Color.green.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .alert(activo ? "¿Dar de baja?" : "¿Reactivar?", isPresented: $showingStatusAlert) {
+                        Button(activo ? "Dar de baja" : "Reactivar", role: .destructive) {
+                            if activo {
+                                activo = false
+                                fechaBaja = Date()
+                            } else {
+                                activo = true
+                                fechaBaja = nil
+                                fechaIngreso = Date()
+                            }
+                        }
+                        Button("Cancelar", role: .cancel) { }
+                    } message: {
+                        Text(activo 
+                             ? "Sus datos no se borrarán, solo no se tomarán en cuenta. Se puede volver a dar de alta en el futuro."
+                             : "El empleado volverá a estar activo y se actualizará su fecha de ingreso.")
+                    }
+                }
+                
+                Spacer()
+                
+                Button {
+                    guardarCambios()
+                } label: {
+                    Text(mecanicoAEditar == nil ? "Guardar y Añadir" : "Guardar Cambios")
+                        .fontWeight(.semibold)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 24)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                        .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
                 .disabled(nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido || telefonoInvalido || curpInvalido)
                 .opacity((nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido || telefonoInvalido || curpInvalido) ? 0.6 : 1.0)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(20)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
@@ -1542,22 +1635,26 @@ fileprivate struct FormField: View {
     @Binding var text: String
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption2)
                 .foregroundColor(.gray)
             
-            ZStack(alignment: .leading) {
-                TextField("", text: $text)
-                    .padding(8)
-                    .background(Color("MercedesBackground").opacity(0.9))
-                    .cornerRadius(8)
-                if text.isEmpty {
-                    Text(placeholder)
-                        .foregroundColor(Color.white.opacity(0.35))
-                        .padding(.horizontal, 12)
-                        .allowsHitTesting(false)
-                }
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .frame(maxWidth: .infinity)
+                .background(Color("MercedesBackground"))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
+            if !placeholder.isEmpty {
+                Text(placeholder)
+                    .font(.caption2)
+                    .foregroundColor(.gray.opacity(0.7))
+                    .padding(.leading, 4)
             }
         }
     }
