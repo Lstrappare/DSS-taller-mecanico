@@ -624,10 +624,13 @@ fileprivate struct PersonalFormView: View {
         if trimmed.isEmpty { return false }
         return !CURPValidator.isValidCURP(trimmed)
     }
+    // NUEVO: Validación diurna y 8 horas exactas
     private var horasInvalidas: Bool {
-        guard let he = Int(horaEntradaString), let hs = Int(horaSalidaString),
-              (0...23).contains(he), (0...23).contains(hs) else { return true }
-        return he == hs
+        guard let he = Int(horaEntradaString), let hs = Int(horaSalidaString) else { return true }
+        // rango diurno 6..20 inclusive
+        guard (6...20).contains(he), (6...20).contains(hs) else { return true }
+        // duración exacta 8 horas y sin nocturno
+        return hs - he != 8
     }
     private var salarioMinimoInvalido: Bool {
         Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) == nil
@@ -661,9 +664,9 @@ fileprivate struct PersonalFormView: View {
                 Text("Completa los datos. Los campos marcados con '•' son obligatorios.")
                     .font(.footnote)
                     .foregroundColor(.gray)
-                Text("Verifica la información antes de guardar.")
+                Text("Turno diurno obligatorio (06:00–20:00) y jornada de 8 horas exactas.")
                     .font(.caption2)
-                    .foregroundColor(.gray.opacity(0.8))
+                    .foregroundColor(.gray.opacity(0.9))
             }
             .padding(16)
 
@@ -815,7 +818,7 @@ fileprivate struct PersonalFormView: View {
                     
                     // 4. Horario
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "4. Horario Laboral", subtitle: "Días y horas")
+                        SectionHeader(title: "4. Horario Laboral", subtitle: "Días y horas (diurno 06–20, jornada de 8 h)")
                         VStack(alignment: .leading, spacing: 6) {
                             Text("• Días laborables").font(.caption).foregroundColor(.gray)
                             DaysSelector(selected: $diasLaborales)
@@ -826,16 +829,16 @@ fileprivate struct PersonalFormView: View {
                         }
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 2) {
-                                FormField(title: "• Entrada (0–23 h)", placeholder: "ej. 9", text: $horaEntradaString)
-                                    .validationHint(isInvalid: horasInvalidas, message: "0 a 23 y distinto de salida.")
-                                Text("Formato 24 horas.")
+                                FormField(title: "• Entrada (06–20 h)", placeholder: "ej. 9", text: $horaEntradaString)
+                                    .validationHint(isInvalid: horasInvalidas, message: "Turno diurno: 06–20 y duración exacta de 8 horas.")
+                                Text("Formato 24 horas. Ejemplos válidos: 06–14, 07–15, 12–20.")
                                     .font(.caption2)
                                     .foregroundColor(.gray)
                             }
                             VStack(alignment: .leading, spacing: 2) {
-                                FormField(title: "• Salida (0–23 h)", placeholder: "ej. 18", text: $horaSalidaString)
-                                    .validationHint(isInvalid: horasInvalidas, message: "0 a 23 y distinto de entrada.")
-                                Text("Formato 24 horas.")
+                                FormField(title: "• Salida (06–20 h)", placeholder: "ej. 17", text: $horaSalidaString)
+                                    .validationHint(isInvalid: horasInvalidas, message: "Turno diurno: 06–20 y duración exacta de 8 horas.")
+                                Text("Salida = Entrada + 8. No se permiten turnos nocturnos.")
                                     .font(.caption2)
                                     .foregroundColor(.gray)
                             }
@@ -1240,16 +1243,20 @@ fileprivate struct PersonalFormView: View {
         let nombreNormalizado = titleCasedName(nombre)
         
         guard let horaEntrada = Int(horaEntradaString),
-              let horaSalida = Int(horaSalidaString),
-              (0...23).contains(horaEntrada),
-              (0...23).contains(horaSalida) else {
-            errorMsg = "Las horas deben ser números válidos entre 0 y 23."
+              let horaSalida = Int(horaSalidaString) else {
+            errorMsg = "Las horas deben ser números válidos."
             return
         }
-        guard horaEntrada != horaSalida else {
-            errorMsg = "La hora de entrada y salida no pueden ser iguales."
+        // Reglas diurnas: 06–20 y 8 horas exactas
+        guard (6...20).contains(horaEntrada), (6...20).contains(horaSalida) else {
+            errorMsg = "Turno diurno obligatorio: horas entre 06 y 20."
             return
         }
+        guard horaSalida - horaEntrada == 8 else {
+            errorMsg = "La jornada debe ser de 8 horas exactas (Salida = Entrada + 8)."
+            return
+        }
+        
         guard let salarioMinimoRef = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) else {
             errorMsg = "Salario mínimo de referencia inválido."
             return
@@ -1981,3 +1988,4 @@ fileprivate struct AssistToolbar: View {
         .font(.caption)
     }
 }
+
