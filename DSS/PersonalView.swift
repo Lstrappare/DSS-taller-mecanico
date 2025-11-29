@@ -339,6 +339,26 @@ fileprivate struct PersonalCard: View {
         return (first + last).uppercased()
     }
     
+    // Estado efectivo del día: si hay bloqueo hoy o asistencia ausente, mostrar como Ausente/Fuera de Turno
+    private var estaBloqueadoHoy: Bool {
+        if let f = mecanico.bloqueoAsistenciaFecha {
+            return Calendar.current.isDateInToday(f)
+        }
+        return false
+    }
+    private var estadoOperativoTexto: String {
+        if mecanico.esFuturoIngreso { return "Futuro Ingreso" }
+        if !mecanico.estaEnHorario { return "Fuera de Turno" }
+        if estaBloqueadoHoy { return "Ausente (bloqueado hoy)" }
+        return mecanico.estado.rawValue
+    }
+    private var estadoOperativoColor: Color {
+        if mecanico.esFuturoIngreso { return .indigo }
+        if !mecanico.estaEnHorario { return .gray }
+        if estaBloqueadoHoy { return .gray }
+        return estadoColor
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
@@ -371,11 +391,11 @@ fileprivate struct PersonalCard: View {
                                 .foregroundColor(.indigo)
                                 .cornerRadius(6)
                         } else {
-                            Text(mecanico.estaEnHorario ? mecanico.estado.rawValue : "Fuera de Turno")
+                            Text(estadoOperativoTexto)
                                 .font(.caption2)
                                 .padding(.horizontal, 8).padding(.vertical, 4)
-                                .background((mecanico.estaEnHorario ? estadoColor : .gray).opacity(0.18))
-                                .foregroundColor(mecanico.estaEnHorario ? estadoColor : .gray)
+                                .background(estadoOperativoColor.opacity(0.18))
+                                .foregroundColor(estadoOperativoColor)
                                 .cornerRadius(6)
                         }
                         Button {
@@ -656,6 +676,29 @@ fileprivate struct PersonalFormView: View {
         }
     }
     
+    // Helpers de asistencia/estado del día
+    private var hoy: Date { Calendar.current.startOfDay(for: Date()) }
+    private var estaBloqueadoHoy: Bool {
+        if let f = mecanicoAEditar?.bloqueoAsistenciaFecha {
+            return Calendar.current.isDate(f, inSameDayAs: hoy)
+        }
+        return false
+    }
+    private var yaAusenteHoy: Bool {
+        guard let empleado = mecanicoAEditar else { return false }
+        let registro = empleado.asistencias.first { Calendar.current.isDate($0.fecha, inSameDayAs: hoy) }
+        return registro?.estadoFinal == .ausente
+    }
+    private var puedeMostrarAsistencia: Bool {
+        if case .add = mode { return false } // Ocultar en alta
+        return true
+    }
+    private var puedeMarcarAusencia: Bool {
+        // Solo en edición, si no está ya ausente ni bloqueado hoy
+        guard mecanicoAEditar != nil else { return false }
+        return !yaAusenteHoy && !estaBloqueadoHoy
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 4) {
@@ -789,6 +832,7 @@ fileprivate struct PersonalFormView: View {
                                 .cornerRadius(8)
                             }
                         }
+                        // Estado operativo actual: deshabilitado si está bloqueado por asistencia hoy
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Estado actual").font(.caption2).foregroundColor(.gray)
                             HStack(spacing: 10) {
@@ -802,11 +846,24 @@ fileprivate struct PersonalFormView: View {
                                         .font(.caption2).foregroundColor(.gray)
                                 }
                                 Spacer()
-                                Text("Operación: \(estado.rawValue)")
+                                Text(estaBloqueadoHoy ? "Ausente (bloqueado hoy)" : "Operación: \(estado.rawValue)")
                                     .font(.caption2)
                                     .padding(.horizontal, 8).padding(.vertical, 4)
                                     .background(Color("MercedesBackground"))
                                     .cornerRadius(6)
+                                    .overlay(
+                                        Group {
+                                            if estaBloqueadoHoy {
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .stroke(Color.red.opacity(0.4), lineWidth: 1)
+                                            }
+                                        }
+                                    )
+                            }
+                            if estaBloqueadoHoy {
+                                Text("Bloqueado por inasistencia hoy. No se puede cambiar el estado hasta mañana.")
+                                    .font(.caption2)
+                                    .foregroundColor(.red)
                             }
                         }
                         .padding(10)
@@ -994,16 +1051,25 @@ fileprivate struct PersonalFormView: View {
                     Divider().background(Color.gray.opacity(0.3))
                     
                     // 8. Asistencia
-                    VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "8. Asistencia", subtitle: "Acciones rápidas")
-                        AssistToolbar(
-                            estado: $estado,
-                            asistenciaBloqueada: $asistenciaBloqueada,
-                            onMarcarAusencia: {
-                                authReason = .markAbsence
-                                showingAuthModal = true
+                    if puedeMostrarAsistencia {
+                        VStack(alignment: .leading, spacing: 16) {
+                            SectionHeader(title: "8. Asistencia", subtitle: "Acciones rápidas")
+                            AssistToolbar(
+                                estado: $estado,
+                                asistenciaBloqueada: $asistenciaBloqueada,
+                                onMarcarAusencia: {
+                                    authReason = .markAbsence
+                                    showingAuthModal = true
+                                }
+                            )
+                            .opacity(puedeMarcarAusencia ? 1.0 : 0.5)
+                            .disabled(!puedeMarcarAusencia)
+                            if !puedeMarcarAusencia {
+                                Text(estaBloqueadoHoy || yaAusenteHoy ? "Ya se registró inasistencia hoy. No se puede repetir ni cambiar estado." : "")
+                                    .font(.caption2)
+                                    .foregroundColor(.red)
                             }
-                        )
+                        }
                     }
                     
                     // 9. Zona de Peligro
@@ -1343,7 +1409,12 @@ fileprivate struct PersonalFormView: View {
             if isRFCUnlocked { mec.rfc = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
             mec.curp = curp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : curp.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             mec.rol = rol
-            mec.estado = estado
+            // Si hoy está bloqueado por ausencia, no permitir cambios de estado; mantener .ausente
+            if !estaBloqueadoHoy {
+                mec.estado = estado
+            } else {
+                mec.estado = .ausente
+            }
             mec.especialidades = especialidadesArray
             mec.tipoContrato = tipoContrato
             mec.horaEntrada = horaEntrada
@@ -1513,17 +1584,21 @@ fileprivate struct PersonalFormView: View {
     }
     
     func marcarAusenciaDiaCompleto() {
-        guard let empleado = mecanicoAEditar ?? nil else { return }
+        guard let empleado = mecanicoAEditar else { return }
         let hoy = Calendar.current.startOfDay(for: Date())
-        let registro = empleado.asistencias.first(where: { $0.fecha == hoy }) ?? {
+        // Si ya hay registro hoy, úsalo; si no, crear
+        let registro = empleado.asistencias.first(where: { Calendar.current.isDate($0.fecha, inSameDayAs: hoy) }) ?? {
             let nuevo = AsistenciaDiaria(empleado: empleado, fecha: hoy)
             modelContext.insert(nuevo)
             empleado.asistencias.append(nuevo)
             return nuevo
         }()
+        // Aplicar ausencia y bloquear
         registro.estadoFinal = .ausente
         registro.bloqueada = true
+        // Bloquear cambios de estado del empleado durante el día y reflejar estado operativo
         empleado.bloqueoAsistenciaFecha = hoy
+        empleado.estado = .ausente
         asistenciaBloqueada = true
     }
     
