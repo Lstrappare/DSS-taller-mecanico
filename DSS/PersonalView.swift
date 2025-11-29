@@ -3,6 +3,7 @@
 import SwiftUI
 import SwiftData
 import LocalAuthentication
+import UniformTypeIdentifiers
 
 // --- MODO DEL MODAL ---
 fileprivate enum ModalMode: Identifiable, Equatable {
@@ -41,12 +42,9 @@ struct PersonalView: View {
     var filteredPersonal: [Personal] {
         var base = personal
         
-        // Filtro alta/baja
         if incluirDadosDeBaja == false {
             base = base.filter { $0.activo }
         }
-        
-        // Filtro de texto
         if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let q = searchQuery.lowercased()
             base = base.filter { mec in
@@ -57,12 +55,9 @@ struct PersonalView: View {
                 mec.especialidades.contains(where: { $0.lowercased().contains(q) })
             }
         }
-        // Filtro por rol
         if let filtroRol { base = base.filter { $0.rol == filtroRol } }
-        // Filtro por estado
         if let filtroEstado { base = base.filter { $0.estado == filtroEstado } }
         
-        // Ordenamiento similar a InventarioView
         base.sort { a, b in
             switch sortOption {
             case .nombre:
@@ -76,22 +71,15 @@ struct PersonalView: View {
                 return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
             }
         }
-        
         return base
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header compacto como en InventarioView
             header
-            
-            // Barra única: búsqueda + orden + filtros + limpiar
             filtrosView
-            
-            // Lista
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    // Contador de resultados
                     HStack(spacing: 6) {
                         Image(systemName: "number")
                             .foregroundColor(Color("MercedesPetrolGreen"))
@@ -100,7 +88,6 @@ struct PersonalView: View {
                             .foregroundColor(.gray)
                         Spacer()
                     }
-                    
                     if filteredPersonal.isEmpty {
                         emptyStateView
                             .frame(maxWidth: .infinity)
@@ -131,7 +118,6 @@ struct PersonalView: View {
         }
     }
     
-    // Header compacto (alineado al de InventarioView)
     private var header: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
@@ -175,11 +161,9 @@ struct PersonalView: View {
         }
     }
     
-    // Filtros compactos (patrón InventarioView)
     private var filtrosView: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                // Buscar
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(Color("MercedesPetrolGreen"))
@@ -202,7 +186,6 @@ struct PersonalView: View {
                 .background(Color("MercedesCard"))
                 .cornerRadius(8)
                 
-                // Orden
                 HStack(spacing: 6) {
                     Picker("Ordenar", selection: $sortOption) {
                         ForEach(SortOption.allCases) { opt in
@@ -226,7 +209,6 @@ struct PersonalView: View {
                     .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
                 }
                 
-                // Rol
                 Picker("Rol", selection: Binding(
                     get: { filtroRol ?? Rol?.none ?? nil },
                     set: { newValue in filtroRol = newValue }
@@ -240,7 +222,6 @@ struct PersonalView: View {
                 .frame(maxWidth: 220)
                 .help("Filtrar por rol")
                 
-                // Estado
                 Picker("Estado", selection: Binding(
                     get: { filtroEstado ?? EstadoEmpleado?.none ?? nil },
                     set: { newValue in filtroEstado = newValue }
@@ -254,14 +235,12 @@ struct PersonalView: View {
                 .frame(maxWidth: 240)
                 .help("Filtrar por estado")
                 
-                // Alta/Baja
                 Toggle(isOn: $incluirDadosDeBaja) {
                     Text("Incluir dados de baja")
                 }
                 .toggleStyle(.switch)
                 .help("Muestra también a los empleados dados de baja")
                 
-                // Filtros activos + limpiar
                 if filtroRol != nil || filtroEstado != nil || !searchQuery.isEmpty || incluirDadosDeBaja {
                     HStack(spacing: 6) {
                         Image(systemName: "line.3.horizontal.decrease.circle")
@@ -313,7 +292,6 @@ struct PersonalView: View {
         }
     }
     
-    // Empty state agradable
     private var emptyStateView: some View {
         VStack(spacing: 8) {
             Image(systemName: "person.crop.circle.badge.questionmark")
@@ -341,7 +319,6 @@ struct PersonalView: View {
     }
 }
 
-// Tarjeta individual de personal (estilo alineado a InventarioView)
 fileprivate struct PersonalCard: View {
     let mecanico: Personal
     var onEdit: () -> Void
@@ -364,7 +341,6 @@ fileprivate struct PersonalCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Header
             HStack(alignment: .top, spacing: 12) {
                 ZStack {
                     Circle().fill(Color("MercedesBackground"))
@@ -387,8 +363,6 @@ fileprivate struct PersonalCard: View {
                                 .cornerRadius(6)
                         }
                         Spacer()
-                        
-                        // Badge de Estado
                         if mecanico.esFuturoIngreso {
                             Text("Futuro Ingreso")
                                 .font(.caption2)
@@ -404,8 +378,6 @@ fileprivate struct PersonalCard: View {
                                 .foregroundColor(mecanico.estaEnHorario ? estadoColor : .gray)
                                 .cornerRadius(6)
                         }
-                        
-                        // Botón Editar
                         Button {
                             onEdit()
                         } label: {
@@ -423,7 +395,6 @@ fileprivate struct PersonalCard: View {
                         chip(text: mecanico.rol.rawValue, icon: "person.badge.shield.checkmark.fill")
                         Text("Turno: \(mecanico.horaEntrada) - \(mecanico.horaSalida)")
                             .font(.caption2).foregroundColor(.gray)
-                        // NUEVO: comisiones acumuladas
                         chip(text: "Comisiones: $\(mecanico.comisiones, default: "%.2f")", icon: "dollarsign.circle.fill")
                     }
                     if !mecanico.activo, let f = mecanico.fechaBaja {
@@ -434,7 +405,6 @@ fileprivate struct PersonalCard: View {
                 }
             }
             
-            // Contacto
             HStack(spacing: 12) {
                 if mecanico.email.isEmpty || !mecanico.activo {
                     Label(mecanico.email.isEmpty ? "Email: N/A" : mecanico.email, systemImage: "envelope.fill")
@@ -466,7 +436,6 @@ fileprivate struct PersonalCard: View {
                     .font(.caption2).foregroundColor(.gray)
             }
             
-            // Especialidades como chips
             if !mecanico.especialidades.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -547,7 +516,7 @@ fileprivate struct PersonalFormView: View {
     @State private var comisionesString = "0.00"
     @State private var factorIntegracionString = "1.0452"
     
-    // Documentación
+    // Documentación (archivos)
     @State private var ineAdjuntoPath = ""
     @State private var comprobanteDomicilioPath = ""
     @State private var comprobanteEstudiosPath = ""
@@ -581,6 +550,9 @@ fileprivate struct PersonalFormView: View {
     // Asistencia UI state (simple)
     @State private var estadoAsistenciaHoy: EstadoAsistencia = .incompleto
     @State private var asistenciaBloqueada = false
+    
+    // Gestión de carpeta temporal para alta sin RFC válido aún
+    @State private var tempFolderID: String? = nil
     
     private var mecanicoAEditar: Personal?
     var formTitle: String { (mode == .add) ? "Añadir Personal" : "Editar Personal" }
@@ -619,7 +591,6 @@ fileprivate struct PersonalFormView: View {
             _comprobanteDomicilioPath = State(initialValue: personal.comprobanteDomicilioPath ?? "")
             _comprobanteEstudiosPath = State(initialValue: personal.comprobanteEstudiosPath ?? "")
             
-            // snapshots
             _salarioDiario = State(initialValue: personal.salarioDiario)
             _sbc = State(initialValue: personal.sbc)
             _isrMensualEstimado = State(initialValue: personal.isrMensualEstimado)
@@ -638,9 +609,7 @@ fileprivate struct PersonalFormView: View {
     private var nombreValidationMessage: String? {
         validateNombreCompleto(nombre)
     }
-    private var nombreInvalido: Bool {
-        nombreValidationMessage != nil
-    }
+    private var nombreInvalido: Bool { nombreValidationMessage != nil }
     private var emailInvalido: Bool {
         let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
         let regex = #"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$"#
@@ -652,7 +621,7 @@ fileprivate struct PersonalFormView: View {
     }
     private var curpInvalido: Bool {
         let trimmed = curp.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return false } // Opcional
+        if trimmed.isEmpty { return false }
         return !CURPValidator.isValidCURP(trimmed)
     }
     private var horasInvalidas: Bool {
@@ -669,21 +638,14 @@ fileprivate struct PersonalFormView: View {
     private var factorIntegracionInvalido: Bool {
         Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) == nil || (Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) ?? 0) <= 0
     }
-    private var sinDiasLaborales: Bool {
-        diasLaborales.isEmpty
-    }
-    
-    // Validación de teléfono
+    private var sinDiasLaborales: Bool { diasLaborales.isEmpty }
     private var telefonoInvalido: Bool {
         if !telefonoActivo { return false }
         let trimmed = telefono.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Simple validación de 10 dígitos
         let regex = #"^\d{10}$"#
         let pred = NSPredicate(format: "SELF MATCHES %@", regex)
         return !pred.evaluate(with: trimmed)
     }
-    
-    // Helpers de promedio de comisiones
     private var diasPromedio: Double {
         switch frecuenciaPago {
         case .quincena: return 15.0
@@ -693,38 +655,31 @@ fileprivate struct PersonalFormView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Título y leyendas
             VStack(spacing: 4) {
                 Text(formTitle)
                     .font(.title).fontWeight(.bold)
                 Text("Completa los datos. Los campos marcados con '•' son obligatorios.")
                     .font(.footnote)
                     .foregroundColor(.gray)
-                Text("Asegúrate de verificar la información antes de guardar.")
+                Text("Verifica la información antes de guardar.")
                     .font(.caption2)
                     .foregroundColor(.gray.opacity(0.8))
             }
-            .padding(.top, 14)
-            .padding(.bottom, 8)
+            .padding(16)
 
             ScrollView {
                 VStack(spacing: 24) {
                     
-                    // 1. Datos de Identificación
+                    // 1. Identificación y Contacto
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "Datos de Identificación", subtitle: "Información personal")
-                        
-                        // Nombre (Full width)
-                        FormField(title: "• Nombre Completo", placeholder: "ej. José Cisneros Torres", text: $nombre)
+                        SectionHeader(title: "1. Identificación y Contacto", subtitle: "Datos básicos")
+                        FormField(title: "• Nombre completo", placeholder: "ej. José Cisneros Torres", text: $nombre)
                             .validationHint(isInvalid: nombreInvalido, message: nombreValidationMessage ?? "")
-                        
-                        // Contacto
                         HStack(spacing: 16) {
-                            FormField(title: "• Email", placeholder: "ej. jose@taller.com", text: $email)
-                                .validationHint(isInvalid: emailInvalido, message: "Ingresa un email válido.")
-                            
+                            FormField(title: "• Correo electrónico", placeholder: "ej. jose@taller.com", text: $email)
+                                .validationHint(isInvalid: emailInvalido, message: "Ingresa un correo válido.")
                             VStack(alignment: .leading, spacing: 2) {
-                                FormField(title: "Teléfono", placeholder: "10 dígitos", text: $telefono)
+                                FormField(title: "Teléfono (10 dígitos)", placeholder: "ej. 5512345678", text: $telefono)
                                     .disabled(!telefonoActivo)
                                     .opacity(telefonoActivo ? 1.0 : 0.6)
                                     .validationHint(isInvalid: telefonoInvalido, message: "Debe tener 10 dígitos.")
@@ -734,8 +689,13 @@ fileprivate struct PersonalFormView: View {
                                     .foregroundColor(.gray)
                             }
                         }
-                        
-                        // Identificadores Legales (RFC / CURP)
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // 2. Identificadores
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "2. Identificadores Oficiales", subtitle: "RFC y CURP")
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
                                 Text("• RFC").font(.caption).foregroundColor(.gray)
@@ -759,7 +719,7 @@ fileprivate struct PersonalFormView: View {
                                                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                                         )
                                     if rfc.isEmpty {
-                                        Text("13 caracteres (persona física) o 12 (moral)")
+                                        Text("13 caracteres (física) o 12 (moral)")
                                             .foregroundColor(Color.white.opacity(0.35))
                                             .padding(.horizontal, 14)
                                             .allowsHitTesting(false)
@@ -782,17 +742,15 @@ fileprivate struct PersonalFormView: View {
                             }
                             .validationHint(isInvalid: rfcInvalido, message: "RFC inválido. Verifica estructura y homoclave.")
                         }
-                        
                         FormField(title: "CURP (opcional)", placeholder: "18 caracteres", text: $curp)
                             .validationHint(isInvalid: curpInvalido, message: "CURP inválida. Verifica formato y dígito verificador.")
                     }
                     
                     Divider().background(Color.gray.opacity(0.3))
                     
-                    // 2. Información Laboral
+                    // 3. Puesto y Estado
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "Información Laboral", subtitle: "Puesto y estado")
-                        
+                        SectionHeader(title: "3. Puesto y Estado", subtitle: "Rol, estado y fecha de ingreso")
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("• Rol").font(.caption2).foregroundColor(.gray)
@@ -805,10 +763,9 @@ fileprivate struct PersonalFormView: View {
                                 .background(Color("MercedesBackground").opacity(0.9))
                                 .cornerRadius(8)
                             }
-                            FormField(title: "Especialidades", placeholder: "Motor, Frenos...", text: $especialidadesString)
+                            FormField(title: "Especialidades (coma separadas)", placeholder: "Motor, Frenos...", text: $especialidadesString)
                                 .help("Ejemplo: Motor, Frenos. Se guardarán con mayúscula inicial.")
                         }
-                        
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("• Fecha de ingreso").font(.caption2).foregroundColor(.gray)
@@ -829,10 +786,8 @@ fileprivate struct PersonalFormView: View {
                                 .cornerRadius(8)
                             }
                         }
-                        
-                        // Estado Laboral (Visualización solamente)
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Estado Actual").font(.caption2).foregroundColor(.gray)
+                            Text("Estado actual").font(.caption2).foregroundColor(.gray)
                             HStack(spacing: 10) {
                                 Text(activo ? "Activo" : "De baja")
                                     .font(.headline)
@@ -843,6 +798,12 @@ fileprivate struct PersonalFormView: View {
                                     Text("Desde: \(f.formatted(date: .abbreviated, time: .omitted))")
                                         .font(.caption2).foregroundColor(.gray)
                                 }
+                                Spacer()
+                                Text("Operación: \(estado.rawValue)")
+                                    .font(.caption2)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Color("MercedesBackground"))
+                                    .cornerRadius(6)
                             }
                         }
                         .padding(10)
@@ -852,10 +813,9 @@ fileprivate struct PersonalFormView: View {
                     
                     Divider().background(Color.gray.opacity(0.3))
                     
-                    // 3. Horario Laboral
+                    // 4. Horario
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "Horario Laboral", subtitle: "Disponibilidad semanal")
-                        
+                        SectionHeader(title: "4. Horario Laboral", subtitle: "Días y horas")
                         VStack(alignment: .leading, spacing: 6) {
                             Text("• Días laborables").font(.caption).foregroundColor(.gray)
                             DaysSelector(selected: $diasLaborales)
@@ -864,17 +824,16 @@ fileprivate struct PersonalFormView: View {
                                 .cornerRadius(8)
                                 .validationHint(isInvalid: sinDiasLaborales, message: "Selecciona al menos un día.")
                         }
-                        
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 2) {
-                                FormField(title: "• Entrada (0-23 hrs)", placeholder: "ej. 9", text: $horaEntradaString)
+                                FormField(title: "• Entrada (0–23 h)", placeholder: "ej. 9", text: $horaEntradaString)
                                     .validationHint(isInvalid: horasInvalidas, message: "0 a 23 y distinto de salida.")
                                 Text("Formato 24 horas.")
                                     .font(.caption2)
                                     .foregroundColor(.gray)
                             }
                             VStack(alignment: .leading, spacing: 2) {
-                                FormField(title: "• Salida (0-23 hrs)", placeholder: "ej. 18", text: $horaSalidaString)
+                                FormField(title: "• Salida (0–23 h)", placeholder: "ej. 18", text: $horaSalidaString)
                                     .validationHint(isInvalid: horasInvalidas, message: "0 a 23 y distinto de entrada.")
                                 Text("Formato 24 horas.")
                                     .font(.caption2)
@@ -885,10 +844,9 @@ fileprivate struct PersonalFormView: View {
                     
                     Divider().background(Color.gray.opacity(0.3))
                     
-                    // 4. Configuración de Nómina
+                    // 5. Nómina
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "Configuración de Nómina", subtitle: "Parámetros de pago")
-                        
+                        SectionHeader(title: "5. Nómina", subtitle: "Parámetros y vista previa")
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("• Tipo de salario").font(.caption2).foregroundColor(.gray)
@@ -902,7 +860,6 @@ fileprivate struct PersonalFormView: View {
                                 .background(Color("MercedesBackground").opacity(0.9))
                                 .cornerRadius(8)
                             }
-                            
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("• Frecuencia de pago").font(.caption2).foregroundColor(.gray)
                                 Picker("", selection: $frecuenciaPago) {
@@ -915,38 +872,34 @@ fileprivate struct PersonalFormView: View {
                                 .cornerRadius(8)
                             }
                         }
-                        
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 2) {
-                                FormField(title: "• Salario Min. Ref.", placeholder: "ej. 248.93", text: $salarioMinimoReferenciaString)
+                                FormField(title: "• Salario mínimo de referencia", placeholder: "ej. 248.93", text: $salarioMinimoReferenciaString)
                                     .validationHint(isInvalid: salarioMinimoInvalido, message: "Número válido.")
-                                Text("Base de cálculo.")
+                                Text("Base de cálculo (diario).")
                                     .font(.caption2)
                                     .foregroundColor(.gray)
                             }
                             VStack(alignment: .leading, spacing: 2) {
-                                FormField(title: "• Factor Integración", placeholder: "ej. 1.0452", text: $factorIntegracionString)
+                                FormField(title: "• Factor de integración", placeholder: "ej. 1.0452", text: $factorIntegracionString)
                                     .validationHint(isInvalid: factorIntegracionInvalido, message: "Debe ser > 0.")
                                 Text("Para SBC.")
                                     .font(.caption2)
                                     .foregroundColor(.gray)
                             }
                         }
-                        
                         HStack(spacing: 16) {
                             Toggle("Prestaciones mínimas", isOn: $prestacionesMinimas)
                                 .toggleStyle(.switch)
-                                .font(.caption)
-                            
+                                .font(.caption2)
                             Spacer()
-                            
                             if tipoSalario == .mixto {
-                                FormField(title: "• Comisiones (acum.)", placeholder: "0.00", text: $comisionesString)
-                                    .frame(width: 150)
+                                FormField(title: "• Comisiones acumuladas", placeholder: "0.00", text: $comisionesString)
+                                    .frame(width: 180)
                                     .validationHint(isInvalid: comisionesInvalidas, message: "Número válido.")
                             } else {
                                 VStack(alignment: .trailing, spacing: 2) {
-                                    Text("Comisiones (Solo lectura)").font(.caption2).foregroundColor(.gray)
+                                    Text("Comisiones (solo lectura)").font(.caption2).foregroundColor(.gray)
                                     Text(String(format: "$%.2f", Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0))
                                         .font(.subheadline)
                                         .foregroundColor(.white)
@@ -955,10 +908,10 @@ fileprivate struct PersonalFormView: View {
                         }
                     }
                     
-                    // 5. Proyección de Nómina
+                    // 6. Vista previa
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
-                            Text("Proyección de Nómina")
+                            Text("Vista previa de nómina")
                                 .font(.headline)
                                 .foregroundColor(Color("MercedesPetrolGreen"))
                             Spacer()
@@ -970,7 +923,6 @@ fileprivate struct PersonalFormView: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        
                         AutoPayrollGrid(
                             salarioDiario: salarioDiario,
                             sbc: sbc,
@@ -984,8 +936,7 @@ fileprivate struct PersonalFormView: View {
                             horasSemanalesRequeridas: horasSemanalesRequeridas,
                             manoDeObraSugerida: manoDeObraSugerida
                         )
-                        
-                        Text("Cálculos aproximados. El ISR debe verificarse con tablas oficiales del SAT.")
+                        Text("Cálculos aproximados. Verificar ISR con tablas oficiales del SAT.")
                             .font(.caption2)
                             .foregroundColor(.gray)
                             .frame(maxWidth: .infinity, alignment: .center)
@@ -1000,9 +951,48 @@ fileprivate struct PersonalFormView: View {
                     
                     Divider().background(Color.gray.opacity(0.3))
                     
-                    // 6. Asistencia
+                    // 7. Documentación con Drag & Drop
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader(title: "7. Documentación (arrastra y suelta)", subtitle: "Se guardará en la carpeta de la app")
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], spacing: 10) {
+                            DocumentDropField(
+                                title: "INE (PDF/imagen/ZIP)",
+                                currentPath: $ineAdjuntoPath,
+                                rfcProvider: currentRFCForFiles,
+                                suggestedFileName: "INE",
+                                onDelete: { deleteCurrentFile(&ineAdjuntoPath) },
+                                onReveal: { revealInFinder(ineAdjuntoPath) },
+                                onDroppedAndSaved: { newPath in ineAdjuntoPath = newPath }
+                            )
+                            DocumentDropField(
+                                title: "Comprobante de domicilio",
+                                currentPath: $comprobanteDomicilioPath,
+                                rfcProvider: currentRFCForFiles,
+                                suggestedFileName: "Domicilio",
+                                onDelete: { deleteCurrentFile(&comprobanteDomicilioPath) },
+                                onReveal: { revealInFinder(comprobanteDomicilioPath) },
+                                onDroppedAndSaved: { newPath in comprobanteDomicilioPath = newPath }
+                            )
+                            DocumentDropField(
+                                title: "Comprobante de estudios",
+                                currentPath: $comprobanteEstudiosPath,
+                                rfcProvider: currentRFCForFiles,
+                                suggestedFileName: "Estudios",
+                                onDelete: { deleteCurrentFile(&comprobanteEstudiosPath) },
+                                onReveal: { revealInFinder(comprobanteEstudiosPath) },
+                                onDroppedAndSaved: { newPath in comprobanteEstudiosPath = newPath }
+                            )
+                        }
+                        Text("Arrastra archivos aquí. Se copiarán a Application Support/MercedesTaller/Personal/<RFC>/")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // 8. Asistencia
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "Asistencia", subtitle: "Acciones rápidas")
+                        SectionHeader(title: "8. Asistencia", subtitle: "Acciones rápidas")
                         AssistToolbar(
                             estado: $estado,
                             asistenciaBloqueada: $asistenciaBloqueada,
@@ -1013,11 +1003,11 @@ fileprivate struct PersonalFormView: View {
                         )
                     }
                     
-                    // 7. Zona de Peligro (Eliminar)
+                    // 9. Zona de Peligro
                     if case .edit = mode {
                         Divider().background(Color.red.opacity(0.3))
                         VStack(spacing: 12) {
-                            Text("Esta opción borrará todo sobre este empleado y no se podrá recuperar.")
+                            Text("Esta acción no se puede deshacer y eliminará permanentemente al empleado.")
                                 .font(.caption)
                                 .foregroundColor(.red)
                                 .multilineTextAlignment(.center)
@@ -1026,7 +1016,7 @@ fileprivate struct PersonalFormView: View {
                                 authReason = .deleteEmployee
                                 showingAuthModal = true
                             } label: {
-                                Label("Eliminar Empleado Permanentemente", systemImage: "trash.fill")
+                                Label("Eliminar empleado permanentemente", systemImage: "trash.fill")
                                     .padding(.vertical, 10)
                                     .padding(.horizontal, 24)
                                     .background(Color.red.opacity(0.15))
@@ -1039,21 +1029,21 @@ fileprivate struct PersonalFormView: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        .padding(.top, 16)
+                        .padding(.top, 8)
                     }
                 }
                 .padding(24)
             }
-            .onAppear { recalcularNominaPreview() }
+            .onAppear { 
+                recalcularNominaPreview()
+                ensureTempFolderIfNeeded()
+            }
             .onChange(of: salarioMinimoReferenciaString) { _, _ in recalcularNominaPreview() }
             .onChange(of: prestacionesMinimas) { _, _ in recalcularNominaPreview() }
-            .onChange(of: tipoSalario) { _, _ in
-                recalcularNominaPreview()
-            }
+            .onChange(of: tipoSalario) { _, _ in recalcularNominaPreview() }
             .onChange(of: frecuenciaPago) { _, _ in recalcularNominaPreview() }
             .onChange(of: comisionesString) { _, _ in recalcularNominaPreview() }
             .onChange(of: factorIntegracionString) { _, _ in recalcularNominaPreview() }
-            // Limitar a 21 letras (ignora espacios, guiones y apóstrofos) en vivo
             .onChange(of: nombre) { _, newValue in
                 let limited = limitNameToMaxLetters(newValue, maxLetters: 21)
                 if limited != newValue { nombre = limited }
@@ -1066,7 +1056,6 @@ fileprivate struct PersonalFormView: View {
                     .padding(.vertical, 6)
             }
             
-            // Barra de Botones
             HStack(spacing: 12) {
                 Button { dismiss() } label: {
                     Text("Cancelar")
@@ -1082,7 +1071,6 @@ fileprivate struct PersonalFormView: View {
                 }
                 .buttonStyle(.plain)
                 
-                // Botón de Alta/Baja
                 if mecanicoAEditar != nil {
                     Button {
                         showingStatusAlert = true
@@ -1112,8 +1100,8 @@ fileprivate struct PersonalFormView: View {
                         }
                         Button("Cancelar", role: .cancel) { }
                     } message: {
-                        Text(activo 
-                             ? "Sus datos no se borrarán, solo no se tomarán en cuenta. Se puede volver a dar de alta en el futuro."
+                        Text(activo
+                             ? "No se borrarán sus datos; solo quedará inactivo. Podrás reactivarlo más adelante."
                              : "El empleado volverá a estar activo y se actualizará su fecha de ingreso.")
                     }
                 }
@@ -1123,7 +1111,7 @@ fileprivate struct PersonalFormView: View {
                 Button {
                     guardarCambios()
                 } label: {
-                    Text(mecanicoAEditar == nil ? "Guardar y Añadir" : "Guardar Cambios")
+                    Text(mecanicoAEditar == nil ? "Guardar y añadir" : "Guardar cambios")
                         .fontWeight(.semibold)
                         .padding(.vertical, 10)
                         .padding(.horizontal, 24)
@@ -1145,6 +1133,48 @@ fileprivate struct PersonalFormView: View {
         .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
+        }
+    }
+    
+    // MARK: - Gestión de Archivos
+    
+    private func currentRFCForFiles() -> String {
+        // En edición, usar el RFC del registro; en alta, usar RFC válido del campo, si no, usar carpeta temporal.
+        if let mec = mecanicoAEditar {
+            return mec.rfc
+        }
+        let trimmedRFC = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if RFCValidator.isValidRFC(trimmedRFC) {
+            return trimmedRFC
+        }
+        if let temp = tempFolderID { return temp }
+        let newTemp = "TEMP-\(UUID().uuidString)"
+        tempFolderID = newTemp
+        return newTemp
+    }
+    
+    private func ensureTempFolderIfNeeded() {
+        if mecanicoAEditar == nil, tempFolderID == nil, !RFCValidator.isValidRFC(rfc) {
+            tempFolderID = "TEMP-\(UUID().uuidString)"
+        }
+    }
+    
+    private func revealInFinder(_ path: String) {
+        guard !path.isEmpty else { return }
+        let url = URL(fileURLWithPath: path)
+        #if os(macOS)
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+        #endif
+    }
+    
+    private func deleteCurrentFile(_ pathBinding: inout String) {
+        let path = pathBinding
+        guard !path.isEmpty else { return }
+        do {
+            try FileManager.default.removeItem(atPath: path)
+            pathBinding = ""
+        } catch {
+            print("No se pudo borrar el archivo: \(error)")
         }
     }
     
@@ -1203,15 +1233,12 @@ fileprivate struct PersonalFormView: View {
     func guardarCambios() {
         errorMsg = nil
         
-        // Validación de nombre con reglas nuevas
         if let msg = validateNombreCompleto(nombre) {
             errorMsg = msg
             return
         }
-        // Normalizar nombre a Título Propio
         let nombreNormalizado = titleCasedName(nombre)
         
-        // Parse
         guard let horaEntrada = Int(horaEntradaString),
               let horaSalida = Int(horaSalidaString),
               (0...23).contains(horaEntrada),
@@ -1219,7 +1246,6 @@ fileprivate struct PersonalFormView: View {
             errorMsg = "Las horas deben ser números válidos entre 0 y 23."
             return
         }
-        // Rechazar duración cero
         guard horaEntrada != horaSalida else {
             errorMsg = "La hora de entrada y salida no pueden ser iguales."
             return
@@ -1233,7 +1259,7 @@ fileprivate struct PersonalFormView: View {
             return
         }
         
-        // Validación de duplicidad de RFC
+        // Validación duplicidad RFC
         let rfcToValidate = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let descriptor = FetchDescriptor<Personal>(
             predicate: #Predicate { $0.rfc == rfcToValidate }
@@ -1241,13 +1267,11 @@ fileprivate struct PersonalFormView: View {
         do {
             let duplicates = try modelContext.fetch(descriptor)
             if let current = mecanicoAEditar {
-                // Edición: Verificar si existe otro registro con el mismo RFC (excluyendo el actual)
                 if duplicates.contains(where: { $0.persistentModelID != current.persistentModelID }) {
                     errorMsg = "El RFC ya está registrado en otro personal."
                     return
                 }
             } else {
-                // Nuevo: Verificar si ya existe algún registro con ese RFC
                 if !duplicates.isEmpty {
                     errorMsg = "El RFC ya está registrado en otro personal."
                     return
@@ -1273,13 +1297,12 @@ fileprivate struct PersonalFormView: View {
             return
         }
         
-        // Especialidades
         let especialidadesArray = especialidadesString
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces).capitalized }
             .filter { !$0.isEmpty }
         
-        // Actualización de snapshots vía modelo
+        // Cálculos previos
         let salarioDiarioBase = salarioMinimoRef
         let diasProm = (frecuenciaPago == .quincena) ? 15.0 : 30.4
         let comisionesPromDiarias = (tipoSalario == .mixto) ? (comisionesValor / diasProm) : 0.0
@@ -1319,23 +1342,29 @@ fileprivate struct PersonalFormView: View {
             mec.horaEntrada = horaEntrada
             mec.horaSalida = horaSalida
             mec.diasLaborales = Array(diasLaborales).sorted()
-            
-            // Alta/Baja
             mec.activo = activo
             mec.fechaBaja = fechaBaja
             mec.fechaIngreso = fechaIngreso
-            
             mec.prestacionesMinimas = prestacionesMinimas
             mec.tipoSalario = tipoSalario
             mec.frecuenciaPago = frecuenciaPago
             mec.salarioMinimoReferencia = salarioMinimoRef
             mec.factorIntegracion = factorIntegracionValor
-            mec.comisiones = (tipoSalario == .mixto) ? comisionesValor : comisionesValor // mantenemos el valor acumulado
+            mec.comisiones = comisionesValor
             
-            // Delega el cálculo al modelo (también guarda snapshots)
+            // Asignar rutas de documentos
+            mec.ineAdjuntoPath = ineAdjuntoPath.isEmpty ? nil : ineAdjuntoPath
+            mec.comprobanteDomicilioPath = comprobanteDomicilioPath.isEmpty ? nil : comprobanteDomicilioPath
+            mec.comprobanteEstudiosPath = comprobanteEstudiosPath.isEmpty ? nil : comprobanteEstudiosPath
+            
+            // Si veníamos de carpeta temporal y ahora hay RFC definitivo distinto, mover archivos
+            if let temp = tempFolderID, temp.hasPrefix("TEMP-"), mec.rfc != temp {
+                moveAllDocsIfNeeded(fromTemp: temp, toRFC: mec.rfc)
+                tempFolderID = nil
+            }
+            
             mec.recalcularYActualizarSnapshots()
             
-            // Sincroniza estados de preview con el modelo (por consistencia)
             salarioDiario = mec.salarioDiario
             sbc = mec.sbc
             isrMensualEstimado = mec.isrMensualEstimado
@@ -1348,8 +1377,19 @@ fileprivate struct PersonalFormView: View {
             horasSemanalesRequeridas = mec.horasSemanalesRequeridas
             manoDeObraSugerida = mec.manoDeObraSugerida
         } else {
+            // Crear nuevo y asegurar mover desde TEMP a RFC definitivo si aplicó
+            let finalRFC = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            if let temp = tempFolderID, temp.hasPrefix("TEMP-"), finalRFC != temp {
+                moveAllDocsIfNeeded(fromTemp: temp, toRFC: finalRFC)
+                tempFolderID = nil
+                // actualizar paths si movimos
+                ineAdjuntoPath = updatePathAfterMove(ineAdjuntoPath, from: temp, to: finalRFC)
+                comprobanteDomicilioPath = updatePathAfterMove(comprobanteDomicilioPath, from: temp, to: finalRFC)
+                comprobanteEstudiosPath = updatePathAfterMove(comprobanteEstudiosPath, from: temp, to: finalRFC)
+            }
+            
             let nuevo = Personal(
-                rfc: rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
+                rfc: finalRFC,
                 curp: curp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : curp.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(),
                 nombre: nombreNormalizado,
                 email: email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
@@ -1363,11 +1403,8 @@ fileprivate struct PersonalFormView: View {
                 fechaIngreso: fechaIngreso,
                 tipoContrato: tipoContrato,
                 diasLaborales: Array(diasLaborales).sorted(),
-                
-                // Alta/Baja
                 activo: activo,
                 fechaBaja: fechaBaja,
-                
                 prestacionesMinimas: prestacionesMinimas,
                 tipoSalario: tipoSalario,
                 frecuenciaPago: frecuenciaPago,
@@ -1392,14 +1429,39 @@ fileprivate struct PersonalFormView: View {
                 antiguedadDias: 0,
                 bloqueoAsistenciaFecha: nil
             )
-            // Recalcular con el modelo para asegurar consistencia
             nuevo.recalcularYActualizarSnapshots()
             modelContext.insert(nuevo)
         }
         dismiss()
     }
     
-    // Autenticación
+    // Mueve todos los documentos de una carpeta TEMP a la carpeta del RFC definitivo
+    private func moveAllDocsIfNeeded(fromTemp tempFolder: String, toRFC finalRFC: String) {
+        guard let src = FileLocations.folderFor(rfcOrTemp: tempFolder),
+              let dst = FileLocations.folderFor(rfcOrTemp: finalRFC) else { return }
+        do {
+            try FileManager.default.createDirectory(at: dst, withIntermediateDirectories: true)
+            let items = try FileManager.default.contentsOfDirectory(at: src, includingPropertiesForKeys: nil)
+            for file in items {
+                let target = dst.appendingPathComponent(file.lastPathComponent)
+                if FileManager.default.fileExists(atPath: target.path) {
+                    try? FileManager.default.removeItem(at: target)
+                }
+                try FileManager.default.moveItem(at: file, to: target)
+            }
+            // Opcional: borrar carpeta temp
+            try? FileManager.default.removeItem(at: src)
+        } catch {
+            print("Error moviendo documentos de \(tempFolder) a \(finalRFC): \(error)")
+        }
+    }
+    
+    private func updatePathAfterMove(_ oldPath: String, from oldFolder: String, to newFolder: String) -> String {
+        guard !oldPath.isEmpty else { return oldPath }
+        return oldPath.replacingOccurrences(of: "/\(oldFolder)/", with: "/\(newFolder)/")
+    }
+    
+    // Autenticación biométrica/contraseña
     func authenticateWithTouchID() async {
         let context = LAContext()
         let reason: String = {
@@ -1443,11 +1505,9 @@ fileprivate struct PersonalFormView: View {
         passwordAttempt = ""
     }
     
-    // Asistencia (simple): marcar ausencia bloqueada todo el día
     func marcarAusenciaDiaCompleto() {
         guard let empleado = mecanicoAEditar ?? nil else { return }
         let hoy = Calendar.current.startOfDay(for: Date())
-        // buscar o crear registro del día
         let registro = empleado.asistencias.first(where: { $0.fecha == hoy }) ?? {
             let nuevo = AsistenciaDiaria(empleado: empleado, fecha: hoy)
             modelContext.insert(nuevo)
@@ -1460,7 +1520,7 @@ fileprivate struct PersonalFormView: View {
         asistenciaBloqueada = true
     }
     
-    // Recalcular preview de nómina (live) usando funciones del modelo
+    // Recalcular preview de nómina
     func recalcularNominaPreview() {
         let sm = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) ?? 0
         let factor = max(Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) ?? 1.0452, 0.0001)
@@ -1492,46 +1552,26 @@ fileprivate struct PersonalFormView: View {
         horasSemanalesRequeridas = 48
     }
     
-    // MARK: - Nombre: validación y normalización (con guiones/apóstrofos y minúsculas para artículos)
-    
-    // Reglas:
-    // - Solo letras (incluye acentos y Ñ), espacios, guion (-) y apóstrofo (’ o ').
-    // - Entre 1 y 4 palabras separadas por espacios.
-    // - Cada subparte (separada por guion o apóstrofo) debe tener al menos 3 letras,
-    //   EXCEPTO artículos/preposiciones comunes: de, del, la, los, las, y, o (se aceptan aunque tengan <3).
-    // - Máximo 21 letras (contando solo letras, no separadores).
+    // Validación y normalización de nombre
     private func validateNombreCompleto(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "El nombre no puede estar vacío." }
-        
-        // Aceptar letras (con acentos y Ñ), espacios, guion y apóstrofo (recto y tipográfico)
         let regex = #"^[A-Za-zÁÉÍÓÚÜáéíóúüÑñ '\-’]+$"#
         if NSPredicate(format: "SELF MATCHES %@", regex).evaluate(with: trimmed) == false {
             return "El nombre solo debe contener letras, espacios, guion (-) y apóstrofo (')."
         }
-        
-        // Límite de 21 letras (ignora separadores)
         let lettersCount = trimmed.unicodeScalars.filter { CharacterSet.letters.contains($0) }.count
         if lettersCount > 21 {
             return "Máximo 21 letras (se ignoran espacios y separadores)."
         }
-        
-        // Palabras por espacios (1...4)
         let words = trimmed.split(whereSeparator: { $0.isWhitespace }).map { String($0) }
         if words.isEmpty { return "El nombre no puede estar vacío." }
         if words.count > 4 { return "Máximo 4 palabras en el nombre." }
-        
-        // Lista blanca de artículos/preposiciones cortas permitidas
         let whitelist = Set(["de", "del", "la", "los", "las", "y", "o"])
-        
-        // Validar subpartes por guion o apóstrofo
         for word in words {
-            // Separar por '-' o apóstrofos (recto y tipográfico)
             let subparts = word.split(whereSeparator: { $0 == "-" || $0 == "'" || $0 == "’" }).map { String($0) }
             for sub in subparts {
-                // Contar solo letras
                 let subLetters = sub.unicodeScalars.filter { CharacterSet.letters.contains($0) }.count
-                // Si es una palabra corta en whitelist, permitir aunque tenga < 3 letras
                 if whitelist.contains(sub.lowercased()) { continue }
                 if subLetters < 3 {
                     return "Cada parte del nombre debe tener al menos 3 letras (p. ej., María-José, O’Connor)."
@@ -1540,35 +1580,24 @@ fileprivate struct PersonalFormView: View {
         }
         return nil
     }
-    
-    // Title Case:
-    // - Capitaliza la primera letra de cada subparte (separada por guion/apóstrofo) con locale es_MX.
-    // - Mantiene en minúsculas las palabras cortas de la whitelist si NO son la primera palabra.
     private func titleCasedName(_ value: String) -> String {
         let locale = Locale(identifier: "es_MX")
         let whitelist = Set(["de", "del", "la", "los", "las", "y", "o"])
-        
         let words = value
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .split(whereSeparator: { $0.isWhitespace })
             .map { String($0) }
-        
         var resultWords: [String] = []
         for (index, word) in words.enumerated() {
             let lowerWord = word.lowercased(with: locale)
-            // Si la palabra completa es de la whitelist y no es la primera, dejar en minúsculas
             if index > 0 && whitelist.contains(lowerWord) {
                 resultWords.append(lowerWord)
                 continue
             }
-            // Capitalizar subpartes separadas por guion/apóstrofo, preservando los separadores originales
             var rebuilt = ""
             var buffer = ""
-            var separators: [Character] = []
             for ch in word {
                 if ch == "-" || ch == "'" || ch == "’" {
-                    separators.append(ch)
-                    // cierra buffer actual como subparte
                     let titled = titleCase(subpart: buffer, locale: locale)
                     rebuilt += titled
                     rebuilt.append(ch)
@@ -1577,15 +1606,9 @@ fileprivate struct PersonalFormView: View {
                     buffer.append(ch)
                 }
             }
-            // último buffer
             let titledLast = titleCase(subpart: buffer, locale: locale)
             rebuilt += titledLast
-            
-            // Si la palabra no tenía guiones/apóstrofos, rebuilt es el título normal
-            // Si la palabra era de whitelist y no es la primera, ya la tratamos arriba
-            // Asegurar que la primera palabra siempre va capitalizada
             if index == 0 && whitelist.contains(lowerWord) {
-                // Primera palabra en whitelist: capitalizar normal
                 resultWords.append(titleCase(subpart: lowerWord, locale: locale))
             } else {
                 resultWords.append(rebuilt)
@@ -1593,15 +1616,12 @@ fileprivate struct PersonalFormView: View {
         }
         return resultWords.joined(separator: " ")
     }
-    
     private func titleCase(subpart: String, locale: Locale) -> String {
         guard !subpart.isEmpty else { return subpart }
         let lower = subpart.lowercased(with: locale)
         guard let first = lower.first else { return lower }
         return String(first).uppercased(with: locale) + lower.dropFirst()
     }
-    
-    // Recorta una cadena para que tenga como máximo 'maxLetters' letras (ignora separadores)
     private func limitNameToMaxLetters(_ value: String, maxLetters: Int) -> String {
         guard maxLetters > 0 else { return "" }
         var count = 0
@@ -1611,12 +1631,8 @@ fileprivate struct PersonalFormView: View {
                 if count < maxLetters {
                     result.append(ch)
                     count += 1
-                } else {
-                    // si excede, saltamos letras extra
-                    continue
-                }
+                } else { continue }
             } else {
-                // permitir separadores (espacios, guiones, apóstrofos y otros no letras)
                 result.append(ch)
             }
         }
@@ -1650,7 +1666,6 @@ fileprivate struct FormField: View {
             Text(title)
                 .font(.caption2)
                 .foregroundColor(.gray)
-            
             TextField("", text: $text)
                 .textFieldStyle(.plain)
                 .padding(10)
@@ -1672,7 +1687,6 @@ fileprivate struct FormField: View {
 }
 
 fileprivate extension View {
-    // Validación nombre
     func validationHint(isInvalid: Bool, message: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             self
@@ -1685,7 +1699,7 @@ fileprivate extension View {
     }
 }
 
-// Selector de días (1=Dom ... 7=Sáb)
+// Selector de días
 fileprivate struct DaysSelector: View {
     @Binding var selected: Set<Int>
     private let days: [(Int, String)] = [
@@ -1727,7 +1741,7 @@ fileprivate struct DaysSelector: View {
     }
 }
 
-// Grid de campos automáticos
+// Grid de nómina
 fileprivate struct AutoPayrollGrid: View {
     var salarioDiario: Double
     var sbc: Double
@@ -1776,7 +1790,175 @@ fileprivate struct AutoPayrollGrid: View {
     }
 }
 
-// Barra de asistencia simplificada
+// --- DocumentDropField y utilidades de archivos ---
+
+fileprivate struct DocumentDropField: View {
+    var title: String
+    @Binding var currentPath: String
+    var rfcProvider: () -> String
+    var suggestedFileName: String
+    var onDelete: () -> Void
+    var onReveal: () -> Void
+    var onDroppedAndSaved: (String) -> Void
+    
+    @State private var isTargeted: Bool = false
+    @State private var lastError: String?
+    
+    // Extensiones permitidas
+    private let allowedExtensions: Set<String> = ["pdf", "jpg", "jpeg", "png", "zip"]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption2)
+                .foregroundColor(.gray)
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isTargeted ? Color("MercedesPetrolGreen").opacity(0.18) : Color("MercedesBackground").opacity(0.7))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(isTargeted ? Color("MercedesPetrolGreen") : Color.gray.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [6,4]))
+                    )
+                VStack(spacing: 8) {
+                    Image(systemName: "tray.and.arrow.down.fill")
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                    if currentPath.isEmpty {
+                        Text("Arrastra el archivo aquí")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    } else {
+                        Text(URL(fileURLWithPath: currentPath).lastPathComponent)
+                            .font(.caption)
+                            .foregroundColor(.white)
+                    }
+                    HStack(spacing: 8) {
+                        if !currentPath.isEmpty {
+                            Button {
+                                onReveal()
+                            } label: {
+                                Label("Mostrar en Finder", systemImage: "folder.fill")
+                            }
+                            .buttonStyle(.plain)
+                            .font(.caption2)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(Color.blue.opacity(0.25)).cornerRadius(6)
+                            
+                            Button {
+                                onDelete()
+                            } label: {
+                                Label("Eliminar", systemImage: "trash")
+                            }
+                            .buttonStyle(.plain)
+                            .font(.caption2)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(Color.red.opacity(0.25)).cornerRadius(6)
+                        }
+                    }
+                }
+                .padding(12)
+            }
+            .frame(height: 96)
+            .onDrop(of: [UTType.fileURL.identifier, UTType.data.identifier], isTargeted: $isTargeted) { providers in
+                handleDrop(providers: providers)
+            }
+            if let lastError {
+                Text(lastError)
+                    .font(.caption2)
+                    .foregroundColor(.red)
+            }
+        }
+    }
+    
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        // Preferir fileURL
+        if let item = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }) {
+            _ = item.loadObject(ofClass: URL.self) { url, _ in
+                guard let srcURL = url else { return }
+                saveIncomingFile(srcURL: srcURL)
+            }
+            return true
+        }
+        // Aceptar datos genéricos (intentamos con extensión segura si es permitida)
+        if let item = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.data.identifier) }) {
+            _ = item.loadDataRepresentation(forTypeIdentifier: UTType.data.identifier) { data, _ in
+                guard let data else { return }
+                // Por defecto, usaremos "pdf" como extensión segura si está permitida
+                let fallbackExt = "pdf"
+                guard allowedExtensions.contains(fallbackExt) else {
+                    DispatchQueue.main.async { lastError = "Tipo no permitido." }
+                    return
+                }
+                let tmpURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(suggestedFileName)-\(UUID().uuidString).\(fallbackExt)")
+                do {
+                    try data.write(to: tmpURL)
+                    saveIncomingFile(srcURL: tmpURL)
+                } catch {
+                    DispatchQueue.main.async { lastError = "No se pudo guardar el archivo: \(error.localizedDescription)" }
+                }
+            }
+            return true
+        }
+        return false
+    }
+    
+    private func saveIncomingFile(srcURL: URL) {
+        // Validación por extensión
+        let ext = srcURL.pathExtension.lowercased()
+        guard !ext.isEmpty, allowedExtensions.contains(ext) else {
+            DispatchQueue.main.async {
+                lastError = "Tipo de archivo no permitido. Solo: PDF, JPG, JPEG, PNG, ZIP."
+            }
+            return
+        }
+        
+        let rfcOrTemp = rfcProvider()
+        guard let destFolder = FileLocations.folderFor(rfcOrTemp: rfcOrTemp) else {
+            DispatchQueue.main.async { lastError = "No se pudo crear carpeta destino." }
+            return
+        }
+        do {
+            try FileManager.default.createDirectory(at: destFolder, withIntermediateDirectories: true)
+            let destURL = destFolder.appendingPathComponent("\(suggestedFileName)-\(UUID().uuidString).\(ext)")
+            if FileManager.default.fileExists(atPath: destURL.path) {
+                try? FileManager.default.removeItem(at: destURL)
+            }
+            try FileManager.default.copyItem(at: srcURL, to: destURL)
+            DispatchQueue.main.async {
+                currentPath = destURL.path
+                onDroppedAndSaved(destURL.path)
+                lastError = nil
+            }
+        } catch {
+            DispatchQueue.main.async { lastError = "Error copiando archivo: \(error.localizedDescription)" }
+        }
+    }
+}
+
+fileprivate enum FileLocations {
+    // Base: Application Support/MercedesTaller/Personal/<RFC>/
+    static func baseAppSupport() -> URL? {
+        do {
+            let appSupport = try FileManager.default.url(for: .applicationSupportDirectory,
+                                                         in: .userDomainMask,
+                                                         appropriateFor: nil,
+                                                         create: true)
+            let base = appSupport.appendingPathComponent("MercedesTaller/Personal", isDirectory: true)
+            try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+            return base
+        } catch {
+            print("No se pudo crear Application Support base: \(error)")
+            return nil
+        }
+    }
+    
+    static func folderFor(rfcOrTemp: String) -> URL? {
+        guard let base = baseAppSupport() else { return nil }
+        let safeRFC = rfcOrTemp.replacingOccurrences(of: "/", with: "_")
+        return base.appendingPathComponent(safeRFC, isDirectory: true)
+    }
+}
+
+// --- Barra de asistencia ---
 fileprivate struct AssistToolbar: View {
     @Binding var estado: EstadoEmpleado
     @Binding var asistenciaBloqueada: Bool
@@ -1788,7 +1970,7 @@ fileprivate struct AssistToolbar: View {
             Button {
                 onMarcarAusencia()
             } label: {
-                Label("Marcar AUSENCIA (supervisor)", systemImage: "lock.shield")
+                Label("Marcar ausencia (requiere supervisor)", systemImage: "lock.shield")
             }
             .buttonStyle(.plain)
             .padding(8)
@@ -1799,4 +1981,3 @@ fileprivate struct AssistToolbar: View {
         .font(.caption)
     }
 }
-
