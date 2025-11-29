@@ -1172,7 +1172,7 @@ fileprivate struct PersonalFormView: View {
         // Especialidades
         let especialidadesArray = especialidadesString
             .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .map { $0.trimmingCharacters(in: .whitespaces).capitalized }
             .filter { !$0.isEmpty }
         
         // Actualización de snapshots vía modelo
