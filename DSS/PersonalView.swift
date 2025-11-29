@@ -387,12 +387,23 @@ fileprivate struct PersonalCard: View {
                                 .cornerRadius(6)
                         }
                         Spacer()
-                        Text(mecanico.estaEnHorario ? mecanico.estado.rawValue : "Fuera de Turno")
-                            .font(.caption2)
-                            .padding(.horizontal, 8).padding(.vertical, 4)
-                            .background((mecanico.estaEnHorario ? estadoColor : .gray).opacity(0.18))
-                            .foregroundColor(mecanico.estaEnHorario ? estadoColor : .gray)
-                            .cornerRadius(6)
+                        
+                        // Badge de Estado
+                        if mecanico.esFuturoIngreso {
+                            Text("Futuro Ingreso")
+                                .font(.caption2)
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Color.indigo.opacity(0.18))
+                                .foregroundColor(.indigo)
+                                .cornerRadius(6)
+                        } else {
+                            Text(mecanico.estaEnHorario ? mecanico.estado.rawValue : "Fuera de Turno")
+                                .font(.caption2)
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background((mecanico.estaEnHorario ? estadoColor : .gray).opacity(0.18))
+                                .foregroundColor(mecanico.estaEnHorario ? estadoColor : .gray)
+                                .cornerRadius(6)
+                        }
                         
                         // Botón Editar
                         Button {
@@ -1757,6 +1768,10 @@ fileprivate struct AutoPayrollGrid: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color("MercedesBackground").opacity(0.6))
                 .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
         }
     }
 }

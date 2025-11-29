@@ -122,7 +122,19 @@ class Personal {
     var asistencias: [AsistenciaDiaria] = []
 
     // Calculadas
+    // Calculadas
+    var esFuturoIngreso: Bool {
+        // Compara solo fecha (inicio del día) para evitar problemas de hora
+        let calendario = Calendar.current
+        let inicioHoy = calendario.startOfDay(for: Date())
+        let inicioIngreso = calendario.startOfDay(for: fechaIngreso)
+        return inicioIngreso > inicioHoy
+    }
+
     var estaEnHorario: Bool {
+        // Si su fecha de ingreso es futura, no está en horario
+        if esFuturoIngreso { return false }
+        
         let calendario = Calendar.current
         let ahora = Date()
         let diaDeSemana = calendario.component(.weekday, from: ahora)
