@@ -101,6 +101,9 @@ struct InventarioView: View {
     @State private var productoAEliminar: Producto?
     @State private var mostrandoConfirmacionBorrado = false
     
+    // NUEVO: Filtro de activos
+    @State private var incluirInactivos = false
+    
     // NUEVO: Ordenamiento
     enum SortOption: String, CaseIterable, Identifiable {
         case nombre = "Nombre"
@@ -123,6 +126,10 @@ struct InventarioView: View {
         var base = productos
         if filtroCategoria != "Todas" {
             base = base.filter { $0.categoria == filtroCategoria }
+        }
+        // Filtro de activos
+        if !incluirInactivos {
+            base = base.filter { $0.activo }
         }
         if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let query = searchQuery.lowercased()
@@ -384,7 +391,15 @@ struct InventarioView: View {
                     }
                     .font(.caption2)
                     .foregroundColor(.gray)
+                    .foregroundColor(.gray)
                 }
+                
+                // Toggle inactivos
+                Toggle("Ver inactivos", isOn: $incluirInactivos)
+                    .toggleStyle(.switch)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .help("Mostrar productos dados de baja temporalmente")
                 
                 Spacer()
             }
@@ -472,6 +487,11 @@ fileprivate struct ProductoCard: View {
                     Text("Costo: $\(producto.costo, specifier: "%.2f")")
                         .font(.caption2).foregroundColor(.gray)
                 }
+            }
+            
+            // Banner de Inactivo
+            if !producto.activo {
+                banner(text: "Producto inactivo (Baja temporal)", color: .gray, systemImage: "eye.slash.fill")
             }
             
             // Avisos de caducidad
@@ -604,6 +624,7 @@ fileprivate struct ProductFormView: View {
     @State private var proveedor = ""
     @State private var lote = ""
     @State private var fechaCaducidad: Date? = nil
+    @State private var activo = true
     
     @State private var costoString = ""
     @State private var cantidadString = ""
@@ -626,6 +647,9 @@ fileprivate struct ProductFormView: View {
     @State private var authError = ""
     @State private var passwordAttempt = ""
     @State private var errorMsg: String?
+    
+    // NUEVO: Alerta para activar/desactivar producto
+    @State private var showingStatusAlert = false
     
     // Enum para la razón de la autenticación
     private enum AuthReason {
@@ -702,6 +726,7 @@ fileprivate struct ProductFormView: View {
             _isrPorcentajeString = State(initialValue: String(format: "%.2f", producto.isrPorcentajeEstimado))
             _precioFinalString = State(initialValue: String(format: "%.2f", producto.precioVenta))
             _precioModificadoManualmente = State(initialValue: producto.precioModificadoManualmente)
+            _activo = State(initialValue: producto.activo)
         }
     }
     
@@ -978,6 +1003,27 @@ fileprivate struct ProductFormView: View {
                 }
                 .buttonStyle(.plain)
                 
+                // Botón de Activar/Desactivar
+                if productoAEditar != nil {
+                    Button {
+                        // Mostrar alerta de confirmación en lugar de togglear directo
+                        showingStatusAlert = true
+                    } label: {
+                        Text(activo ? "Quitar temporalmente" : "Devolver al inventario")
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 16)
+                            .background(activo ? Color.orange.opacity(0.15) : Color.green.opacity(0.15))
+                            .foregroundColor(activo ? .orange : .green)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(activo ? Color.orange.opacity(0.3) : Color.green.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(activo ? "Ocultar temporalmente (Baja)" : "Reactivar producto")
+                }
+                
                 Spacer()
                 
                 Button {
@@ -1005,6 +1051,19 @@ fileprivate struct ProductFormView: View {
         .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
+        }
+        // ALERTA: Confirmar activar/desactivar
+        .alert(activo ? "¿Quitar temporalmente?" : "¿Devolver al inventario?", isPresented: $showingStatusAlert) {
+            Button(activo ? "Quitar temporalmente" : "Devolver al inventario", role: .destructive) {
+                activo.toggle()
+            }
+            Button("Cancelar", role: .cancel) { }
+        } message: {
+            Text(
+                activo
+                ? "No se borrarán los datos del producto; solo quedará inactivo. Podrás devolverlo al inventario más adelante."
+                : "El producto volverá al inventario"
+            )
         }
     }
     
@@ -1127,6 +1186,7 @@ fileprivate struct ProductFormView: View {
             // Precio final
             producto.precioVenta = finalEditable
             producto.precioModificadoManualmente = precioModificadoManualmente
+            producto.activo = activo
         } else {
             let nuevoProducto = Producto(
                 nombre: trimmedNombre,
@@ -1144,7 +1204,8 @@ fileprivate struct ProductFormView: View {
                 porcentajeGastosAdministrativos: pAdmin,
                 tipoFiscal: .iva16, // fijo en 16% para el cálculo
                 isrPorcentajeEstimado: pISR,
-                precioModificadoManualmente: precioModificadoManualmente
+                precioModificadoManualmente: precioModificadoManualmente,
+                activo: activo
             )
             modelContext.insert(nuevoProducto)
         }
