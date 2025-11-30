@@ -709,183 +709,241 @@ fileprivate struct ProductFormView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Título y guía
-            VStack(spacing: 2) {
-                Text(formTitle).font(.title2).fontWeight(.bold)
+            VStack(spacing: 4) {
+                Text(formTitle).font(.title).fontWeight(.bold)
                 Text("Completa los datos básicos. IVA 16% fijo.")
-                    .font(.caption).foregroundColor(.gray)
+                    .font(.footnote).foregroundColor(.gray)
             }
-            .padding(.top, 10).padding(.bottom, 6)
+            .padding(16)
 
-            Form {
-                // Sección 1: Datos básicos del producto
-                Section {
-                    SectionHeader(title: "Datos del Producto", subtitle: "Nombre, categoría, unidad y proveedor")
+            ScrollView {
+                VStack(spacing: 24) {
                     
-                    // Nombre con candado en edición
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            Text("• Nombre del Producto").font(.caption2).foregroundColor(.gray)
-                            if productoAEditar != nil {
-                                Image(systemName: isNombreUnlocked ? "lock.open.fill" : "lock.fill")
-                                    .foregroundColor(isNombreUnlocked ? .green : .red)
-                                    .font(.caption2)
-                            }
-                        }
-                        HStack(spacing: 6) {
-                            TextField("", text: $nombre)
-                                .disabled(productoAEditar != nil && !isNombreUnlocked)
-                                .padding(6)
-                                .background(Color("MercedesBackground").opacity(0.9))
-                                .cornerRadius(6)
-                                .help("Identificador único del producto")
-                            
-                            if productoAEditar != nil {
-                                Button {
-                                    if isNombreUnlocked { isNombreUnlocked = false }
-                                    else {
-                                        authReason = .unlockNombre
-                                        showingAuthModal = true
-                                    }
-                                } label: {
-                                    Text(isNombreUnlocked ? "Bloquear" : "Desbloquear")
+                    // Sección 1: Datos básicos del producto
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "1. Datos del Producto", subtitle: "Nombre, categoría, unidad y proveedor")
+                        
+                        // Nombre con candado en edición
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text("• Nombre del Producto").font(.caption2).foregroundColor(.gray)
+                                if productoAEditar != nil {
+                                    Image(systemName: isNombreUnlocked ? "lock.open.fill" : "lock.fill")
+                                        .foregroundColor(isNombreUnlocked ? .green : .red)
                                         .font(.caption2)
                                 }
-                                .buttonStyle(.plain)
-                                .foregroundColor(isNombreUnlocked ? .green : .red)
-                                .help(isNombreUnlocked ? "Bloquear edición del nombre" : "Requiere autorización")
+                            }
+                            HStack(spacing: 6) {
+                                TextField("", text: $nombre)
+                                    .disabled(productoAEditar != nil && !isNombreUnlocked)
+                                    .textFieldStyle(.plain)
+                                    .padding(10)
+                                    .background(Color("MercedesBackground"))
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .help("Identificador único del producto")
+                                
+                                if productoAEditar != nil {
+                                    Button {
+                                        if isNombreUnlocked { isNombreUnlocked = false }
+                                        else {
+                                            authReason = .unlockNombre
+                                            showingAuthModal = true
+                                        }
+                                    } label: {
+                                        Text(isNombreUnlocked ? "Bloquear" : "Desbloquear")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundColor(isNombreUnlocked ? .green : .red)
+                                    .help(isNombreUnlocked ? "Bloquear edición del nombre" : "Requiere autorización")
+                                }
+                            }
+                            .validationHint(isInvalid: nombreInvalido, message: "El nombre debe tener al menos 3 caracteres.")
+                        }
+                        
+                        HStack(spacing: 16) {
+                            FormField(title: "Categoría", placeholder: "ej. Aceites", text: $categoria)
+                                .help("Clasifica el producto para filtrar más fácil")
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("• Unidad de Medida").font(.caption2).foregroundColor(.gray)
+                                Picker("", selection: $unidadDeMedida) {
+                                    ForEach(opcionesUnidad, id: \.self) { Text($0).tag($0) }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity)
+                                .padding(4)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+                                .help("Unidad en la que controlas el stock")
                             }
                         }
-                        .validationHint(isInvalid: nombreInvalido, message: "El nombre debe tener al menos 3 caracteres.")
-                    }
-                    
-                    HStack(spacing: 12) {
-                        FormField(title: "Categoría", placeholder: "", text: $categoria)
-                            .help("Clasifica el producto para filtrar más fácil")
-                        Picker("• Unidad de Medida", selection: $unidadDeMedida) {
-                            ForEach(opcionesUnidad, id: \.self) { Text($0) }
+                        
+                        HStack(spacing: 16) {
+                            FormField(title: "Proveedor", placeholder: "ej. Mobil 1", text: $proveedor)
+                            FormField(title: "Lote", placeholder: "ej. L-12345", text: $lote)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Fecha de caducidad").font(.caption2).foregroundColor(.gray)
+                                HStack {
+                                    DatePicker("", selection: Binding(
+                                        get: { fechaCaducidad ?? Date() },
+                                        set: { fechaCaducidad = $0 }
+                                    ), displayedComponents: .date)
+                                    .labelsHidden()
+                                    
+                                    Toggle("Sin fecha", isOn: Binding(
+                                        get: { fechaCaducidad == nil },
+                                        set: { noDate in fechaCaducidad = noDate ? nil : Date() }
+                                    ))
+                                    .toggleStyle(.switch)
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .help("Selecciona la fecha de caducidad si aplica")
                         }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: .infinity)
-                        .help("Unidad en la que controlas el stock")
+                        
+                        HStack(spacing: 16) {
+                            FormField(title: "• Costo de compra", placeholder: "$0.00", text: $costoString)
+                                .validationHint(isInvalid: costoInvalido, message: "Debe ser un número.")
+                                .help("Costo unitario de adquisición")
+                            FormField(title: "• Cantidad en stock", placeholder: "0", text: $cantidadString)
+                                .validationHint(isInvalid: cantidadInvalida, message: "Debe ser un número.")
+                                .help("Cantidad actual disponible")
+                        }
+                        
+                        FormField(title: "Información (opcional)", placeholder: "Notas adicionales...", text: $informacion)
+                            .help("Notas útiles para identificar/usar el producto")
                     }
                     
-                    HStack(spacing: 12) {
-                        FormField(title: "Proveedor", placeholder: "", text: $proveedor)
-                        FormField(title: "Lote", placeholder: "", text: $lote)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Fecha de caducidad")
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // Sección 2: Porcentajes y reglas
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "2. Reglas de Precio", subtitle: "Porcentajes aplicados sobre el costo")
+                        HStack(spacing: 16) {
+                            FormField(title: "• % Ganancia", placeholder: "0-100", text: $porcentajeMargenSugeridoString)
+                                .validationHint(isInvalid: pMargenInvalido, message: "0 a 100.")
+                                .help("Porcentaje de ganancia sobre el costo")
+                            FormField(title: "• % Gastos administrativos", placeholder: "0-100", text: $porcentajeAdminString)
+                                .validationHint(isInvalid: pAdminInvalido, message: "0 a 100.")
+                                .help("Porcentaje para cubrir administración sobre el costo")
+                            FormField(title: "% ISR (aprox.)", placeholder: "0-100", text: $isrPorcentajeString)
+                                .validationHint(isInvalid: pISRInvalido, message: "0 a 100.")
+                                .help("Se calcula solo sobre la GANANCIA (margen)")
+                        }
+                        HStack(spacing: 6) {
+                            Label("IVA: 16% (fijo)", systemImage: "info.circle")
                                 .font(.caption2)
                                 .foregroundColor(.gray)
-                            HStack {
-                                DatePicker("", selection: Binding(
-                                    get: { fechaCaducidad ?? Date() },
-                                    set: { fechaCaducidad = $0 }
-                                ), displayedComponents: .date)
-                                .labelsHidden()
-                                Toggle("Sin fecha", isOn: Binding(
-                                    get: { fechaCaducidad == nil },
-                                    set: { noDate in fechaCaducidad = noDate ? nil : Date() }
-                                ))
-                                .toggleStyle(.switch)
+                            Spacer()
+                        }
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // Sección 3: Cálculo automático (compacto)
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "3. Cálculo Automático", subtitle: "Lectura")
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 8) {
+                            roField("Ganancia (monto)", resultadoReglas.ganancia)
+                            roField("Gastos administrativos (monto)", resultadoReglas.gastosAdmin)
+                            roField("Subtotal antes de IVA", resultadoReglas.subtotalAntesIVA)
+                            roField("IVA (16%)", resultadoReglas.iva)
+                            roField("Precio sugerido (con IVA)", resultadoReglas.precioSugeridoConIVA)
+                        }
+                        HStack(spacing: 16) {
+                            roField("ISR (solo sobre ganancia)", resultadoReglas.isr)
+                            roField("Precio neto después de ISR", resultadoReglas.precioNetoDespuesISR)
+                        }
+                        
+                        // NUEVO: Reparto real después del ISR
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Reparto real después del ISR")
+                                .font(.headline).foregroundColor(.white)
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 8) {
+                                roField("Utilidad real después de ISR", resultadoReglas.utilidadRealDespuesISR)
+                            }
+                            Text("El ISR solo afecta al margen de ganancia.")
                                 .font(.caption2)
                                 .foregroundColor(.gray)
+                        }
+                        .padding(16)
+                        .background(Color("MercedesBackground").opacity(0.3))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                        )
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // Sección 4: Precio final editable
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "4. Precio Final", subtitle: "Ajustable")
+                        HStack(spacing: 16) {
+                            FormField(title: "Precio final al cliente", placeholder: "0.00", text: $precioFinalString)
+                                .onChange(of: precioFinalString) { _, new in
+                                    let final = Double(new.replacingOccurrences(of: ",", with: ".")) ?? 0
+                                    precioModificadoManualmente = abs(final - precioSugerido) > 0.009
+                                }
+                                .help("Si lo editas, se marcará como modificado manualmente")
+                            if precioModificadoManualmente {
+                                Text("Modificado manualmente")
+                                    .font(.caption2)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Color.yellow.opacity(0.2))
+                                    .foregroundColor(.yellow)
+                                    .cornerRadius(6)
                             }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .help("Selecciona la fecha de caducidad si aplica")
-                    }
-                    
-                    HStack(spacing: 12) {
-                        FormField(title: "• Costo de compra", placeholder: "$0.00", text: $costoString)
-                            .validationHint(isInvalid: costoInvalido, message: "Debe ser un número.")
-                            .help("Costo unitario de adquisición")
-                        FormField(title: "• Cantidad en stock", placeholder: "0", text: $cantidadString)
-                            .validationHint(isInvalid: cantidadInvalida, message: "Debe ser un número.")
-                            .help("Cantidad actual disponible")
-                    }
-                    
-                    FormField(title: "Información (opcional)", placeholder: "", text: $informacion)
-                        .help("Notas útiles para identificar/usar el producto")
-                }
-                
-                // Sección 2: Porcentajes y reglas
-                Section {
-                    SectionHeader(title: "Reglas de Precio", subtitle: "Porcentajes aplicados sobre el costo")
-                    HStack(spacing: 12) {
-                        FormField(title: "• % Ganancia", placeholder: "0-100", text: $porcentajeMargenSugeridoString)
-                            .validationHint(isInvalid: pMargenInvalido, message: "0 a 100.")
-                            .help("Porcentaje de ganancia sobre el costo")
-                        FormField(title: "• % Gastos administrativos", placeholder: "0-100", text: $porcentajeAdminString)
-                            .validationHint(isInvalid: pAdminInvalido, message: "0 a 100.")
-                            .help("Porcentaje para cubrir administración sobre el costo")
-                        FormField(title: "% ISR (aprox.)", placeholder: "0-100", text: $isrPorcentajeString)
-                            .validationHint(isInvalid: pISRInvalido, message: "0 a 100.")
-                            .help("Se calcula solo sobre la GANANCIA (margen)")
-                    }
-                    HStack(spacing: 6) {
-                        Label("IVA: 16% (fijo)", systemImage: "info.circle")
-                            .font(.caption2)
-                            .foregroundColor(.gray)
-                        Spacer()
-                    }
-                }
-                
-                // Sección 3: Cálculo automático (compacto)
-                Section {
-                    SectionHeader(title: "Cálculo Automático", subtitle: "Lectura")
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 6) {
-                        roField("Ganancia (monto)", resultadoReglas.ganancia)
-                        roField("Gastos administrativos (monto)", resultadoReglas.gastosAdmin)
-                        roField("Subtotal antes de IVA", resultadoReglas.subtotalAntesIVA)
-                        roField("IVA (16%)", resultadoReglas.iva)
-                        roField("Precio sugerido (con IVA)", resultadoReglas.precioSugeridoConIVA)
-                    }
-                    HStack(spacing: 10) {
-                        roField("ISR (solo sobre ganancia)", resultadoReglas.isr)
-                        roField("Precio neto después de ISR", resultadoReglas.precioNetoDespuesISR)
-                    }
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-                    
-                    // NUEVO: Reparto real después del ISR
-                    VStack(alignment: .leading, spacing: 6) {
-                        SectionHeader(title: "Reparto real después del ISR", subtitle: "Ganancia neta")
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 6) {
-                            roField("Utilidad real después de ISR", resultadoReglas.utilidadRealDespuesISR)
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 8) {
+                            roField("Variación vs sugerido", ProductPricingHelpers.variacionPrecio(final: precioFinalEditable, sugerido: precioSugerido))
                         }
-                        Text("El ISR solo afecta al margen de ganancia.")
-                            .font(.caption2)
-                            .foregroundColor(.gray)
                     }
-                }
-                
-                // Sección 4: Precio final editable
-                Section {
-                    SectionHeader(title: "Precio Final", subtitle: "Ajustable")
-                    HStack(spacing: 10) {
-                        FormField(title: "Precio final al cliente", placeholder: "", text: $precioFinalString)
-                            .onChange(of: precioFinalString) { _, new in
-                                let final = Double(new.replacingOccurrences(of: ",", with: ".")) ?? 0
-                                precioModificadoManualmente = abs(final - precioSugerido) > 0.009
+                    
+                    // Zona de Peligro
+                    if case .edit = mode {
+                        Divider().background(Color.red.opacity(0.3))
+                        VStack(spacing: 12) {
+                            Text("Esta acción no se puede deshacer y eliminará permanentemente el producto.")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .multilineTextAlignment(.center)
+                            
+                            Button(role: .destructive) {
+                                authReason = .deleteProduct
+                                showingAuthModal = true
+                            } label: {
+                                Label("Eliminar producto permanentemente", systemImage: "trash.fill")
+                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 24)
+                                    .background(Color.red.opacity(0.15))
+                                    .foregroundColor(.red)
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.red.opacity(0.5), lineWidth: 1)
+                                    )
                             }
-                            .help("Si lo editas, se marcará como modificado manualmente")
-                        if precioModificadoManualmente {
-                            Text("Modificado manualmente")
-                                .font(.caption2)
-                                .padding(.horizontal, 6).padding(.vertical, 3)
-                                .background(Color.yellow.opacity(0.2))
-                                .foregroundColor(.yellow)
-                                .cornerRadius(6)
+                            .buttonStyle(.plain)
                         }
-                    }
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 6) {
-                        roField("Variación vs sugerido", ProductPricingHelpers.variacionPrecio(final: precioFinalEditable, sugerido: precioSugerido))
+                        .padding(.top, 8)
                     }
                 }
+                .padding(24)
             }
-            .textFieldStyle(PlainTextFieldStyle())
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
             .onAppear {
                 if productoAEditar == nil {
                     precioFinalString = String(format: "%.2f", precioSugerido)
@@ -899,57 +957,71 @@ fileprivate struct ProductFormView: View {
             // Mensaje de Error
             if let errorMsg {
                 Text(errorMsg)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundColor(.red)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 6)
             }
             
             // --- Barra de Botones ---
-            HStack {
-                Button("Cancelar") { dismiss() }
-                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.gray)
-                    .help("Cerrar sin guardar cambios")
+            HStack(spacing: 12) {
+                Button { dismiss() } label: {
+                    Text("Cancelar")
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .background(Color("MercedesBackground"))
+                        .foregroundColor(.gray)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
                 
-                if case .edit = mode {
-                    Button("Eliminar", role: .destructive) {
-                        authReason = .deleteProduct
-                        showingAuthModal = true
-                    }
-                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.red)
-                    .help("Eliminar este producto")
-                }
                 Spacer()
-                Button(productoAEditar == nil ? "Guardar y Añadir" : "Guardar Cambios") {
+                
+                Button {
                     guardarCambios()
+                } label: {
+                    Text(productoAEditar == nil ? "Guardar y añadir" : "Guardar cambios")
+                        .fontWeight(.semibold)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 24)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                        .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
-                .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 10)
-                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(6)
+                .buttonStyle(.plain)
                 .disabled(nombreInvalido || costoInvalido || cantidadInvalida || pMargenInvalido || pAdminInvalido || pISRInvalido)
                 .opacity((nombreInvalido || costoInvalido || cantidadInvalida || pMargenInvalido || pAdminInvalido || pISRInvalido) ? 0.6 : 1.0)
-                .help("Guardar los cambios realizados")
             }
-            .padding(.horizontal).padding(.bottom, 6)
+            .padding(20)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 760, minHeight: 600, maxHeight: 600)
-        .cornerRadius(12)
+        .frame(minWidth: 800, minHeight: 600, maxHeight: 600)
+        .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
         }
     }
     
     private func roField(_ title: String, _ value: Double) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.caption2).foregroundColor(.gray)
             Text(value.formatted(.number.precision(.fractionLength(2))))
-                .font(.subheadline)
+                .font(.headline)
                 .foregroundColor(.white)
-                .padding(6)
+                .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color("MercedesBackground").opacity(0.6))
-                .cornerRadius(6)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
         }
     }
     
@@ -1143,22 +1215,25 @@ fileprivate struct FormField: View {
     @Binding var text: String
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.caption2)
                 .foregroundColor(.gray)
-            
-            ZStack(alignment: .leading) {
-                TextField("", text: $text)
-                    .padding(6)
-                    .background(Color("MercedesBackground").opacity(0.9))
-                    .cornerRadius(6)
-                if text.isEmpty && !placeholder.isEmpty {
-                    Text(placeholder)
-                        .foregroundColor(Color.white.opacity(0.35))
-                        .padding(.horizontal, 10)
-                        .allowsHitTesting(false)
-                }
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .frame(maxWidth: .infinity)
+                .background(Color("MercedesBackground"))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
+            if !placeholder.isEmpty {
+                Text(placeholder)
+                    .font(.caption2)
+                    .foregroundColor(.gray.opacity(0.7))
+                    .padding(.leading, 4)
             }
         }
     }
