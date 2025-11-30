@@ -5,7 +5,6 @@ import SwiftData
 
 enum Rol: String, CaseIterable, Codable {
     case jefeDeTaller = "Jefe de Taller"
-    case adminFinanzas = "Administración / Finanzas"
     case atencionCliente = "Atención al Cliente"
     case mecanicoFrenos = "Mecánico"
     case ayudante = "Ayudante"

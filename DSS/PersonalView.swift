@@ -662,10 +662,16 @@ fileprivate struct PersonalFormView: View {
         return hs - he != 8
     }
     private var salarioMinimoInvalido: Bool {
-        Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) == nil
+        // Debe ser número y > 0
+        guard let val = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) else { return true }
+        return val <= 0
     }
     private var comisionesInvalidas: Bool {
-        Double(comisionesString.replacingOccurrences(of: ",", with: ".")) == nil
+        // Si el salario es mínimo, no se consideran comisiones (oculto y deshabilitado), no invalidar por ello
+        if mecanicoAEditar == nil ? (tipoSalarioSeleccion == .minimo) : (tipoSalario == .minimo) {
+            return false
+        }
+        return Double(comisionesString.replacingOccurrences(of: ",", with: ".")) == nil
     }
     private var factorIntegracionInvalido: Bool {
         Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) == nil || (Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) ?? 0) <= 0
@@ -696,7 +702,6 @@ fileprivate struct PersonalFormView: View {
         return tipoContratoSeleccion == nil
     }
     private var estadoNoSeleccionado: Bool {
-        // Eliminado el uso, pero lo dejamos false para compatibilidad del botón
         false
     }
     private var frecuenciaPagoNoSeleccionada: Bool {
@@ -722,11 +727,10 @@ fileprivate struct PersonalFormView: View {
         return registro?.estadoFinal == .ausente
     }
     private var puedeMostrarAsistencia: Bool {
-        if case .add = mode { return false } // Ocultar en alta
+        if case .add = mode { return false }
         return true
     }
     private var puedeMarcarAusencia: Bool {
-        // Solo en edición, si no está ya ausente ni bloqueado hoy
         guard mecanicoAEditar != nil else { return false }
         return !yaAusenteHoy && !estaBloqueadoHoy
     }
@@ -998,7 +1002,7 @@ fileprivate struct PersonalFormView: View {
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 2) {
                                 FormField(title: "• Salario mínimo de referencia", placeholder: "ej. 248.93", text: $salarioMinimoReferenciaString)
-                                    .validationHint(isInvalid: salarioMinimoInvalido, message: "Número válido.")
+                                    .validationHint(isInvalid: salarioMinimoInvalido, message: "Debe ser un número mayor a 0.")
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("Este valor se puede modificar si no coincide con el vigente.")
                                         .font(.caption2).foregroundColor(.gray)
@@ -1022,17 +1026,13 @@ fileprivate struct PersonalFormView: View {
                                 .font(.caption2)
                                 .foregroundColor(.gray)
                             Spacer()
-                            if (mecanicoAEditar == nil ? (tipoSalarioSeleccion == .mixto) : (tipoSalario == .mixto)) {
+                            // CAMBIO: Ocultar completamente el campo de comisiones si salario es mínimo.
+                            let isMinInAdd = (mecanicoAEditar == nil ? (tipoSalarioSeleccion == .minimo) : false)
+                            let isMinInEdit = (mecanicoAEditar != nil ? (tipoSalario == .minimo) : false)
+                            if !(isMinInAdd || isMinInEdit) {
                                 FormField(title: "• Comisiones acumuladas", placeholder: "0.00", text: $comisionesString)
                                     .frame(width: 180)
                                     .validationHint(isInvalid: comisionesInvalidas, message: "Número válido.")
-                            } else {
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text("Comisiones (solo lectura)").font(.caption2).foregroundColor(.gray)
-                                    Text(String(format: "$%.2f", Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0))
-                                        .font(.subheadline)
-                                        .foregroundColor(.white)
-                                }
                             }
                         }
                     }
@@ -1324,12 +1324,11 @@ fileprivate struct PersonalFormView: View {
                     horasInvalidas ||
                     salarioMinimoInvalido ||
                     sinDiasLaborales ||
-                    diasExcedenLimite || // NUEVO: no permitir más de 6 días
+                    diasExcedenLimite ||
                     comisionesInvalidas ||
                     factorIntegracionInvalido ||
                     telefonoInvalido ||
                     curpInvalido ||
-                    // Nuevas reglas de selección obligatoria en "add"
                     rolNoSeleccionado ||
                     tipoContratoNoSeleccionado ||
                     frecuenciaPagoNoSeleccionada ||
@@ -1342,7 +1341,7 @@ fileprivate struct PersonalFormView: View {
                      horasInvalidas ||
                      salarioMinimoInvalido ||
                      sinDiasLaborales ||
-                     diasExcedenLimite || // NUEVO
+                     diasExcedenLimite ||
                      comisionesInvalidas ||
                      factorIntegracionInvalido ||
                      telefonoInvalido ||
@@ -1392,7 +1391,6 @@ fileprivate struct PersonalFormView: View {
     // MARK: - Gestión de Archivos
     
     private func currentRFCForFiles() -> String {
-        // En edición, usar el RFC del registro; en alta, usar RFC válido del campo, si no, usar carpeta temporal.
         if let mec = mecanicoAEditar {
             return mec.rfc
         }
@@ -1486,11 +1484,9 @@ fileprivate struct PersonalFormView: View {
     private func prepararApplyAllYGuardar() {
         errorMsg = nil
         
-        // Parse valores nuevos
         let newSMI = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) ?? 0
         let newFactor = Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) ?? 0
         
-        // Valores actuales (para comparación simple)
         let currentSMI = mecanicoAEditar?.salarioMinimoReferencia
         let currentFactor = mecanicoAEditar?.factorIntegracion
         
@@ -1498,10 +1494,7 @@ fileprivate struct PersonalFormView: View {
         var smiToApply: Double?
         var factorToApply: Double?
         
-        // Regla: si en el formulario hay un valor distinto al del empleado que editas (o si estás creando),
-        // proponemos aplicarlo globalmente.
         if mecanicoAEditar == nil {
-            // En alta, si el SMI difiere del promedio (o del PayrollSettings si lo usas), proponemos.
             smiToApply = newSMI
             factorToApply = newFactor
             willAsk = true
@@ -1516,7 +1509,6 @@ fileprivate struct PersonalFormView: View {
             }
         }
         
-        // Acción real de guardado
         postApplyAllAction = { guardarCambios() }
         
         if willAsk {
@@ -1552,13 +1544,11 @@ fileprivate struct PersonalFormView: View {
         }
         let nombreNormalizado = titleCasedName(nombre)
         
-        // Regla legal: máximo 6 días laborables
         if diasLaborales.count > 6 {
             errorMsg = "Por ley, solo se permiten hasta 6 días laborables por semana."
             return
         }
         
-        // Resolver selecciones obligatorias en "add"
         if mecanicoAEditar == nil {
             if let s = rolSeleccion { rol = s } else {
                 errorMsg = "Selecciona un Rol."; return
@@ -1579,7 +1569,6 @@ fileprivate struct PersonalFormView: View {
             errorMsg = "Las horas deben ser números válidos."
             return
         }
-        // Reglas diurnas: 06–20 y 8 horas exactas
         guard (6...20).contains(horaEntrada), (6...20).contains(horaSalida) else {
             errorMsg = "Turno diurno obligatorio: horas entre 06 y 20."
             return
@@ -1589,8 +1578,8 @@ fileprivate struct PersonalFormView: View {
             return
         }
         
-        guard let salarioMinimoRef = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) else {
-            errorMsg = "Salario mínimo de referencia inválido."
+        guard let salarioMinimoRef = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")), salarioMinimoRef > 0 else {
+            errorMsg = "Salario mínimo de referencia inválido (debe ser > 0)."
             return
         }
         guard RFCValidator.isValidRFC(rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()) else {
@@ -1598,7 +1587,6 @@ fileprivate struct PersonalFormView: View {
             return
         }
         
-        // Validación duplicidad RFC
         let rfcToValidate = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let descriptor = FetchDescriptor<Personal>(
             predicate: #Predicate { $0.rfc == rfcToValidate }
@@ -1623,7 +1611,13 @@ fileprivate struct PersonalFormView: View {
             errorMsg = "CURP inválida."
             return
         }
-        guard let comisionesValor = Double(comisionesString.replacingOccurrences(of: ",", with: ".")) else {
+        // Comisiones: si salario es mínimo, forzar a 0.
+        let isMinSalary = mecanicoAEditar == nil ? (tipoSalarioSeleccion == .minimo) : (tipoSalario == .minimo)
+        let comisionesValor: Double = {
+            if isMinSalary { return 0.0 }
+            return Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0.0
+        }()
+        if !isMinSalary && Double(comisionesString.replacingOccurrences(of: ",", with: ".")) == nil {
             errorMsg = "Comisiones inválidas."
             return
         }
@@ -1644,12 +1638,12 @@ fileprivate struct PersonalFormView: View {
         // Cálculos previos
         let salarioDiarioBase = salarioMinimoRef
         let diasProm = (frecuenciaPago == .quincena) ? 15.0 : 30.4
-        let comisionesPromDiarias = (tipoSalario == .mixto) ? (comisionesValor / diasProm) : 0.0
+        let comisionesPromDiarias = (!isMinSalary && tipoSalario == .mixto) ? (comisionesValor / diasProm) : 0.0
         let sbcCalculado = Personal.calcularSBC(salarioDiario: salarioDiarioBase, comisionesPromedioDiarias: comisionesPromDiarias, factorIntegracion: factorIntegracionValor)
         let (obrera, patronal, imssTotal) = Personal.calcularIMSS(desdeSBC: sbcCalculado, salarioDiario: salarioDiarioBase, prestacionesMinimas: prestacionesMinimas)
         let isrCalc = Personal.calcularISR(salarioDiario: salarioDiarioBase, comisionesPromedioDiarias: comisionesPromDiarias, tipoSalario: tipoSalario)
         
-        let ingresoMensualBruto = (salarioDiarioBase * 30.4) + (tipoSalario == .mixto ? comisionesValor : 0.0)
+        let ingresoMensualBruto = (salarioDiarioBase * 30.4) + ((tipoSalario == .mixto && !isMinSalary) ? comisionesValor : 0.0)
         let sueldoNeto = max(0, ingresoMensualBruto - isrCalc - obrera)
         let costoReal = ingresoMensualBruto + patronal
         let horasMes = horasSemanalesRequeridas * 4.0
@@ -1675,7 +1669,6 @@ fileprivate struct PersonalFormView: View {
             if isRFCUnlocked { mec.rfc = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
             mec.curp = curp.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : curp.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             mec.rol = rol
-            // Si hoy está bloqueado por ausencia, no permitir cambios de estado; mantener .ausente
             if !estaBloqueadoHoy {
                 mec.estado = estado
             } else {
@@ -1692,16 +1685,14 @@ fileprivate struct PersonalFormView: View {
             mec.prestacionesMinimas = prestacionesMinimas
             mec.tipoSalario = tipoSalario
             mec.frecuenciaPago = frecuenciaPago
-            mec.salarioMinimoReferencia = salarioMinimoRef
+            mec.salarioMinimoReferencia = salarioDiarioBase
             mec.factorIntegracion = factorIntegracionValor
-            mec.comisiones = comisionesValor
+            mec.comisiones = isMinSalary ? 0.0 : comisionesValor
             
-            // Asignar rutas de documentos
             mec.ineAdjuntoPath = ineAdjuntoPath.isEmpty ? nil : ineAdjuntoPath
             mec.comprobanteDomicilioPath = comprobanteDomicilioPath.isEmpty ? nil : comprobanteDomicilioPath
             mec.comprobanteEstudiosPath = comprobanteEstudiosPath.isEmpty ? nil : comprobanteEstudiosPath
             
-            // Si veníamos de carpeta temporal y ahora hay RFC definitivo distinto, mover archivos
             if let temp = tempFolderID, temp.hasPrefix("TEMP-"), mec.rfc != temp {
                 moveAllDocsIfNeeded(fromTemp: temp, toRFC: mec.rfc)
                 tempFolderID = nil
@@ -1721,12 +1712,10 @@ fileprivate struct PersonalFormView: View {
             horasSemanalesRequeridas = mec.horasSemanalesRequeridas
             manoDeObraSugerida = mec.manoDeObraSugerida
         } else {
-            // Crear nuevo y asegurar mover desde TEMP a RFC definitivo si aplicó
             let finalRFC = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             if let temp = tempFolderID, temp.hasPrefix("TEMP-"), finalRFC != temp {
                 moveAllDocsIfNeeded(fromTemp: temp, toRFC: finalRFC)
                 tempFolderID = nil
-                // actualizar paths si movimos
                 ineAdjuntoPath = updatePathAfterMove(ineAdjuntoPath, from: temp, to: finalRFC)
                 comprobanteDomicilioPath = updatePathAfterMove(comprobanteDomicilioPath, from: temp, to: finalRFC)
                 comprobanteEstudiosPath = updatePathAfterMove(comprobanteEstudiosPath, from: temp, to: finalRFC)
@@ -1742,7 +1731,7 @@ fileprivate struct PersonalFormView: View {
                 horaEntrada: horaEntrada,
                 horaSalida: horaSalida,
                 rol: rol,
-                estado: estado, // en alta no se muestra ni obliga, se usa .disponible por default del estado actual o el binding
+                estado: estado,
                 especialidades: especialidadesArray,
                 fechaIngreso: fechaIngreso,
                 tipoContrato: tipoContrato,
@@ -1752,8 +1741,8 @@ fileprivate struct PersonalFormView: View {
                 prestacionesMinimas: prestacionesMinimas,
                 tipoSalario: tipoSalario,
                 frecuenciaPago: frecuenciaPago,
-                salarioMinimoReferencia: salarioMinimoRef,
-                comisiones: (Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0),
+                salarioMinimoReferencia: salarioDiarioBase,
+                comisiones: isMinSalary ? 0.0 : comisionesValor,
                 factorIntegracion: factorIntegracionValor,
                 salarioDiario: salarioDiario,
                 sbc: sbc,
@@ -1779,7 +1768,6 @@ fileprivate struct PersonalFormView: View {
         dismiss()
     }
     
-    // Mueve todos los documentos de una carpeta TEMP a la carpeta del RFC definitivo
     private func moveAllDocsIfNeeded(fromTemp tempFolder: String, toRFC finalRFC: String) {
         guard let src = FileLocations.folderFor(rfcOrTemp: tempFolder),
               let dst = FileLocations.folderFor(rfcOrTemp: finalRFC) else { return }
@@ -1793,7 +1781,6 @@ fileprivate struct PersonalFormView: View {
                 }
                 try FileManager.default.moveItem(at: file, to: target)
             }
-            // Opcional: borrar carpeta temp
             try? FileManager.default.removeItem(at: src)
         } catch {
             print("Error moviendo documentos de \(tempFolder) a \(finalRFC): \(error)")
@@ -1805,7 +1792,6 @@ fileprivate struct PersonalFormView: View {
         return oldPath.replacingOccurrences(of: "/\(oldFolder)/", with: "/\(newFolder)/")
     }
     
-    // Autenticación biométrica/contraseña
     func authenticateWithTouchID() async {
         let context = LAContext()
         let reason: String = {
@@ -1852,35 +1838,32 @@ fileprivate struct PersonalFormView: View {
     func marcarAusenciaDiaCompleto() {
         guard let empleado = mecanicoAEditar else { return }
         let hoy = Calendar.current.startOfDay(for: Date())
-        // Si ya hay registro hoy, úsalo; si no, crear
         let registro = empleado.asistencias.first(where: { Calendar.current.isDate($0.fecha, inSameDayAs: hoy) }) ?? {
             let nuevo = AsistenciaDiaria(empleado: empleado, fecha: hoy)
             modelContext.insert(nuevo)
             empleado.asistencias.append(nuevo)
             return nuevo
         }()
-        // Aplicar ausencia y bloquear
         registro.estadoFinal = .ausente
         registro.bloqueada = true
-        // Bloquear cambios de estado del empleado durante el día y reflejar estado operativo
         empleado.bloqueoAsistenciaFecha = hoy
         empleado.estado = .ausente
         asistenciaBloqueada = true
     }
     
-    // Recalcular preview de nómina
     func recalcularNominaPreview() {
         let sm = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) ?? 0
         let factor = max(Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) ?? 1.0452, 0.0001)
         let com = (Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0)
         let salarioDiarioBase = sm
-        let promCom = ((mecanicoAEditar == nil ? (tipoSalarioSeleccion == .mixto) : (tipoSalario == .mixto))) ? (com / diasPromedio) : 0
+        let isMinSalary = mecanicoAEditar == nil ? (tipoSalarioSeleccion == .minimo) : (tipoSalario == .minimo)
+        let promCom = (!isMinSalary && (mecanicoAEditar == nil ? (tipoSalarioSeleccion == .mixto) : (tipoSalario == .mixto))) ? (com / diasPromedio) : 0
         
         let sbcCalc = Personal.calcularSBC(salarioDiario: salarioDiarioBase, comisionesPromedioDiarias: promCom, factorIntegracion: factor)
         let (obrera, patronal, imssTotal) = Personal.calcularIMSS(desdeSBC: sbcCalc, salarioDiario: salarioDiarioBase, prestacionesMinimas: prestacionesMinimas)
         let isr = Personal.calcularISR(salarioDiario: salarioDiarioBase, comisionesPromedioDiarias: promCom, tipoSalario: (mecanicoAEditar == nil ? (tipoSalarioSeleccion ?? .minimo) : tipoSalario))
         
-        let ingresoMensual = (salarioDiarioBase * 30.4) + (((mecanicoAEditar == nil ? (tipoSalarioSeleccion == .mixto) : (tipoSalario == .mixto))) ? com : 0)
+        let ingresoMensual = (salarioDiarioBase * 30.4) + ((!isMinSalary && (mecanicoAEditar == nil ? (tipoSalarioSeleccion == .mixto) : (tipoSalario == .mixto))) ? com : 0)
         let neto = max(0, ingresoMensual - isr - obrera)
         let costo = ingresoMensual + patronal
         let horasMes = horasSemanalesRequeridas * 4.0
@@ -1900,7 +1883,6 @@ fileprivate struct PersonalFormView: View {
         horasSemanalesRequeridas = 48
     }
     
-    // Validación y normalización de nombre
     private func validateNombreCompleto(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "El nombre no puede estar vacío." }
@@ -2152,7 +2134,6 @@ fileprivate struct DocumentDropField: View {
     @State private var isTargeted: Bool = false
     @State private var lastError: String?
     
-    // Extensiones permitidas
     private let allowedExtensions: Set<String> = ["pdf", "jpg", "jpeg", "png", "zip"]
     
     var body: some View {
@@ -2218,7 +2199,6 @@ fileprivate struct DocumentDropField: View {
     }
     
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        // Preferir fileURL
         if let item = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }) {
             _ = item.loadObject(ofClass: URL.self) { url, _ in
                 guard let srcURL = url else { return }
@@ -2226,11 +2206,9 @@ fileprivate struct DocumentDropField: View {
             }
             return true
         }
-        // Aceptar datos genéricos (intentamos con extensión segura si es permitida)
         if let item = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.data.identifier) }) {
             _ = item.loadDataRepresentation(forTypeIdentifier: UTType.data.identifier) { data, _ in
                 guard let data else { return }
-                // Por defecto, usaremos "pdf" como extensión segura si está permitida
                 let fallbackExt = "pdf"
                 guard allowedExtensions.contains(fallbackExt) else {
                     DispatchQueue.main.async { lastError = "Tipo no permitido." }
@@ -2250,7 +2228,6 @@ fileprivate struct DocumentDropField: View {
     }
     
     private func saveIncomingFile(srcURL: URL) {
-        // Validación por extensión
         let ext = srcURL.pathExtension.lowercased()
         guard !ext.isEmpty, allowedExtensions.contains(ext) else {
             DispatchQueue.main.async {
@@ -2283,7 +2260,6 @@ fileprivate struct DocumentDropField: View {
 }
 
 fileprivate enum FileLocations {
-    // Base: Application Support/MercedesTaller/Personal/<RFC>/
     static func baseAppSupport() -> URL? {
         do {
             let appSupport = try FileManager.default.url(for: .applicationSupportDirectory,

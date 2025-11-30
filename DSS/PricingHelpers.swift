@@ -21,7 +21,11 @@ enum PricingHelpers {
         aplicarISR: Bool,
         porcentajeISR: Double
     ) -> DesglosePrecio {
-        let costosDirectos = manoDeObra + refacciones + costoInventario
+        // REGLA: si el costo de mano de obra es mayor a 0, no considerar refacciones ni inventario
+        let ref = (manoDeObra > 0) ? 0.0 : refacciones
+        let inventario = (manoDeObra > 0) ? 0.0 : costoInventario
+        
+        let costosDirectos = manoDeObra + ref + inventario
         let partesInternas = gananciaDeseada + gastosAdmin
         let subtotal = costosDirectos + partesInternas
         let iva = aplicarIVA ? (subtotal * 0.16) : 0.0
@@ -49,10 +53,12 @@ enum PricingHelpers {
     }
     
     static func precioSugeridoParaServicio(servicio: Servicio, productos: [Producto]) -> Double {
-        let costoInsumos = costoIngredientes(servicio: servicio, productos: productos)
+        // Si mano de obra > 0, ignorar inventario y refacciones en el precio sugerido
+        let costoInsumos = (servicio.costoManoDeObra > 0) ? 0.0 : costoIngredientes(servicio: servicio, productos: productos)
+        let ref = (servicio.costoManoDeObra > 0) ? 0.0 : (servicio.requiereRefacciones ? servicio.costoRefacciones : 0.0)
         let desglose = calcularDesglose(
             manoDeObra: servicio.costoManoDeObra,
-            refacciones: servicio.requiereRefacciones ? servicio.costoRefacciones : 0,
+            refacciones: ref,
             costoInventario: costoInsumos,
             gananciaDeseada: servicio.gananciaDeseada,
             gastosAdmin: servicio.gastosAdministrativos,
@@ -63,3 +69,4 @@ enum PricingHelpers {
         return desglose.precioFinal
     }
 }
+
