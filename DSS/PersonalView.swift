@@ -579,6 +579,12 @@ fileprivate struct PersonalFormView: View {
     // Gestión de carpeta temporal para alta sin RFC válido aún
     @State private var tempFolderID: String? = nil
     
+    // Opción B: confirmación para aplicar a todos
+    @State private var pendingApplyAllSMI: Double?
+    @State private var pendingApplyAllFactor: Double?
+    @State private var showingApplyAllAlert: Bool = false
+    @State private var postApplyAllAction: (() -> Void)? = nil
+    
     private var mecanicoAEditar: Personal?
     var formTitle: String { (mode == .add) ? "Añadir Personal" : "Editar Personal" }
     
@@ -1298,7 +1304,8 @@ fileprivate struct PersonalFormView: View {
                 Spacer()
                 
                 Button {
-                    guardarCambios()
+                    // Opción B: si cambió salario mínimo o factor, pedir confirmación para aplicar a todos y luego guardar
+                    prepararApplyAllYGuardar()
                 } label: {
                     Text(mecanicoAEditar == nil ? "Guardar y añadir" : "Guardar cambios")
                         .fontWeight(.semibold)
@@ -1355,6 +1362,30 @@ fileprivate struct PersonalFormView: View {
         .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
+        }
+        // Confirmación única para aplicar a todos (Opción B)
+        .alert("Aplicar cambios a todos los empleados", isPresented: $showingApplyAllAlert) {
+            Button("Aplicar a todos") {
+                let newSMI = pendingApplyAllSMI
+                let newFactor = pendingApplyAllFactor
+                Task {
+                    await applyToAllEmployees(newSMI: newSMI, newFactor: newFactor)
+                    // Continuar con guardado real
+                    postApplyAllAction?()
+                }
+            }
+            Button("Solo a este", role: .cancel) {
+                // Guardar sin aplicar global
+                postApplyAllAction?()
+            }
+        } message: {
+            let smiTxt = pendingApplyAllSMI.map { String(format: "%.2f", $0) }
+            let facTxt = pendingApplyAllFactor.map { String(format: "%.4f", $0) }
+            let parts: [String] = [
+                smiTxt != nil ? "Salario mínimo: \(smiTxt!)" : nil,
+                facTxt != nil ? "Factor de integración: \(facTxt!)" : nil
+            ].compactMap { $0 }
+            Text("Detectamos cambios en:\n\(parts.joined(separator: "\n"))\n¿Quieres aplicar estos valores a todos los empleados?")
         }
     }
     
@@ -1451,7 +1482,67 @@ fileprivate struct PersonalFormView: View {
         .onAppear { authError = ""; passwordAttempt = "" }
     }
     
-    // Guardar
+    // Guardar con Opción B (aplicar a todos si procede)
+    private func prepararApplyAllYGuardar() {
+        errorMsg = nil
+        
+        // Parse valores nuevos
+        let newSMI = Double(salarioMinimoReferenciaString.replacingOccurrences(of: ",", with: ".")) ?? 0
+        let newFactor = Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) ?? 0
+        
+        // Valores actuales (para comparación simple)
+        let currentSMI = mecanicoAEditar?.salarioMinimoReferencia
+        let currentFactor = mecanicoAEditar?.factorIntegracion
+        
+        var willAsk = false
+        var smiToApply: Double?
+        var factorToApply: Double?
+        
+        // Regla: si en el formulario hay un valor distinto al del empleado que editas (o si estás creando),
+        // proponemos aplicarlo globalmente.
+        if mecanicoAEditar == nil {
+            // En alta, si el SMI difiere del promedio (o del PayrollSettings si lo usas), proponemos.
+            smiToApply = newSMI
+            factorToApply = newFactor
+            willAsk = true
+        } else {
+            if let currentSMI, abs(currentSMI - newSMI) > 0.0001 {
+                smiToApply = newSMI
+                willAsk = true
+            }
+            if let currentFactor, abs(currentFactor - newFactor) > 0.0001 {
+                factorToApply = newFactor
+                willAsk = true
+            }
+        }
+        
+        // Acción real de guardado
+        postApplyAllAction = { guardarCambios() }
+        
+        if willAsk {
+            pendingApplyAllSMI = smiToApply
+            pendingApplyAllFactor = factorToApply
+            showingApplyAllAlert = true
+        } else {
+            guardarCambios()
+        }
+    }
+    
+    // Aplica a todos los empleados y recalcula snapshots
+    private func applyToAllEmployees(newSMI: Double?, newFactor: Double?) async {
+        do {
+            let descriptor = FetchDescriptor<Personal>()
+            let todos = try modelContext.fetch(descriptor)
+            for mec in todos {
+                if let s = newSMI { mec.salarioMinimoReferencia = s }
+                if let f = newFactor { mec.factorIntegracion = f }
+                mec.recalcularYActualizarSnapshots()
+            }
+        } catch {
+            print("Error aplicando a todos los empleados: \(error)")
+        }
+    }
+    
     func guardarCambios() {
         errorMsg = nil
         
