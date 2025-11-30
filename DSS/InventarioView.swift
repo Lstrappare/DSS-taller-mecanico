@@ -218,9 +218,10 @@ struct InventarioView: View {
             LinearGradient(colors: [Color("MercedesBackground"), Color("MercedesBackground").opacity(0.9)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         )
-        .sheet(item: $modalMode) { mode in
-            ProductFormView(mode: mode)
+        .sheet(item: $modalMode) { _ in
+            ProductFormView(mode: $modalMode)
                 .environment(\.modelContext, modelContext)
+                .id(modalMode?.id) // Force recreation when mode changes
         }
         .confirmationDialog(
             "Eliminar producto",
@@ -612,10 +613,13 @@ fileprivate struct ProductFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
+    // Query para validar duplicados
+    @Query private var allProducts: [Producto]
+    
     @AppStorage("user_password") private var userPassword = ""
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
 
-    let mode: ProductModalMode
+    @Binding var mode: ProductModalMode?
     
     // States para los campos
     @State private var nombre = ""
@@ -660,6 +664,7 @@ fileprivate struct ProductFormView: View {
     
     private var productoAEditar: Producto?
     var formTitle: String {
+        guard let mode = mode else { return "" }
         switch mode {
         case .add: return "Añadir Producto"
         case .edit: return "Editar Producto"
@@ -667,8 +672,25 @@ fileprivate struct ProductFormView: View {
     }
     
     // --- Bools de Validación ---
+    
+    // Validación de nombre duplicado
+    private var productoExistenteConMismoNombre: Producto? {
+        let trimmed = nombre.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        
+        // Buscar si existe otro producto con el mismo nombre (case insensitive)
+        return allProducts.first { p in
+            p.nombre.localizedCaseInsensitiveCompare(trimmed) == .orderedSame &&
+            p.nombre != productoAEditar?.nombre // Excluir el mismo si estamos editando
+        }
+    }
+    
+    private var nombreDuplicado: Bool {
+        productoExistenteConMismoNombre != nil
+    }
+
     private var nombreInvalido: Bool {
-        nombre.trimmingCharacters(in: .whitespaces).count < 3
+        nombre.trimmingCharacters(in: .whitespaces).count < 3 || nombreDuplicado
     }
     private var costoInvalido: Bool {
         Double(costoString.replacingOccurrences(of: ",", with: ".")) == nil
@@ -708,10 +730,10 @@ fileprivate struct ProductFormView: View {
     }
     
     // Inicializador
-    init(mode: ProductModalMode) {
-        self.mode = mode
+    init(mode: Binding<ProductModalMode?>) {
+        self._mode = mode
         
-        if case .edit(let producto) = mode {
+        if let currentMode = mode.wrappedValue, case .edit(let producto) = currentMode {
             self.productoAEditar = producto
             _nombre = State(initialValue: producto.nombre)
             _costoString = State(initialValue: String(format: "%.2f", producto.costo))
@@ -789,7 +811,29 @@ fileprivate struct ProductFormView: View {
                                     .help(isNombreUnlocked ? "Bloquear edición del nombre" : "Requiere autorización")
                                 }
                             }
-                            .validationHint(isInvalid: nombreInvalido, message: "El nombre debe tener al menos 3 caracteres.")
+                            .validationHint(isInvalid: nombreInvalido, message: nombreDuplicado ? "Este nombre ya está en uso." : "El nombre debe tener al menos 3 caracteres.")
+                            
+                            // Botón para editar el existente si hay duplicado
+                            if let existente = productoExistenteConMismoNombre {
+                                Button {
+                                    // Cambiar a modo edición del producto existente
+                                    // Esto cerrará el sheet actual y abrirá uno nuevo debido al cambio de ID
+                                    mode = .edit(existente)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "pencil.circle.fill")
+                                        Text("Editar '\(existente.nombre)' existente")
+                                    }
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.blue.opacity(0.2))
+                                    .foregroundColor(.blue)
+                                    .cornerRadius(6)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, 2)
+                            }
                         }
                         
                         HStack(spacing: 16) {
@@ -932,7 +976,7 @@ fileprivate struct ProductFormView: View {
                     }
                     
                     // Zona de Peligro
-                    if case .edit = mode {
+                    if let currentMode = mode, case .edit = currentMode {
                         Divider().background(Color.red.opacity(0.3))
                         VStack(spacing: 12) {
                             Text("Esta acción no se puede deshacer y eliminará permanentemente el producto.")
@@ -1238,7 +1282,7 @@ fileprivate struct ProductFormView: View {
         case .unlockNombre:
             isNombreUnlocked = true
         case .deleteProduct:
-            if case .edit(let producto) = mode {
+            if let currentMode = mode, case .edit(let producto) = currentMode {
                 eliminarProducto(producto)
             }
         }
