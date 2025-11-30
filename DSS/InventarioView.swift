@@ -40,6 +40,9 @@ fileprivate enum ProductPricingHelpers {
         let proporcionAdmin: Double
         let gananciaRealDespuesISR: Double
         let gastosAdminRealesDespuesISR: Double
+        // NUEVO: IVA Acreditable y IVA a Pagar
+        let ivaAcreditable: Double
+        let ivaPorPagar: Double
     }
     
     static func calcularPrecioVentaSegunReglas(costo: Double,
@@ -80,12 +83,14 @@ fileprivate enum ProductPricingHelpers {
             precioSugeridoConIVA: precioConIVA,
             utilidadTotal: utilidadTotal,
             isr: isr,
-            precioNetoDespuesISR: precioNetoDespuesISR,
+            precioNetoDespuesISR: precioConIVA - isr,
             utilidadRealDespuesISR: utilidadRealDespuesISR,
             proporcionGanancia: proporcionGanancia,
             proporcionAdmin: proporcionAdmin,
             gananciaRealDespuesISR: gananciaRealDespuesISR,
-            gastosAdminRealesDespuesISR: gastosAdminRealesDespuesISR
+            gastosAdminRealesDespuesISR: gastosAdminRealesDespuesISR,
+            ivaAcreditable: costo * ivaTasaFija,
+            ivaPorPagar: iva - (costo * ivaTasaFija)
         )
     }
 }
@@ -1004,7 +1009,9 @@ fileprivate struct ProductFormView: View {
                             roField("Margen de Ganancia (monto)", resultadoReglas.ganancia)
                             roField("Gastos administrativos (monto)", resultadoReglas.gastosAdmin)
                             roField("Subtotal antes de IVA", resultadoReglas.subtotalAntesIVA)
-                            roField("IVA (16%)", resultadoReglas.iva)
+                            roField("IVA Trasladado (16%)", resultadoReglas.iva)
+                            roField("IVA Acreditable (16% costo)", resultadoReglas.ivaAcreditable)
+                            roField("IVA a Pagar", resultadoReglas.ivaPorPagar)
                             roField("Precio (con IVA)", resultadoReglas.precioSugeridoConIVA)
                         }
                         HStack(spacing: 16) {
