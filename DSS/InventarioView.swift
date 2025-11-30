@@ -693,10 +693,16 @@ fileprivate struct ProductFormView: View {
         nombre.trimmingCharacters(in: .whitespaces).count < 3 || nombreDuplicado
     }
     private var costoInvalido: Bool {
-        Double(costoString.replacingOccurrences(of: ",", with: ".")) == nil
+        guard let v = Double(costoString.replacingOccurrences(of: ",", with: ".")) else { return true }
+        return v <= 0
     }
     private var cantidadInvalida: Bool {
-        Double(cantidadString.replacingOccurrences(of: ",", with: ".")) == nil
+        guard let v = Double(cantidadString.replacingOccurrences(of: ",", with: ".")) else { return true }
+        return v <= 0
+    }
+    private var contenidoInvalido: Bool {
+        guard let v = Double(contenidoNetoString.replacingOccurrences(of: ",", with: ".")) else { return true }
+        return v <= 0
     }
     private var pMargenInvalido: Bool { porcentajeInvalido(porcentajeMargenSugeridoString) }
     private var pAdminInvalido: Bool { porcentajeInvalido(porcentajeAdminString) }
@@ -793,7 +799,18 @@ fileprivate struct ProductFormView: View {
                                         RoundedRectangle(cornerRadius: 8)
                                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                                     )
-                                    .help("Identificador único del producto")
+                                    .onChange(of: nombre) { _, newValue in
+                                        if newValue.count > 21 {
+                                            nombre = String(newValue.prefix(21))
+                                        }
+                                    }
+                                    .help("Identificador único del producto (Máx 21 caracteres)")
+                                
+                                // Contador manual para Nombre
+                                Text("\(nombre.count)/21")
+                                    .font(.caption2)
+                                    .foregroundColor(nombre.count >= 21 ? .red : .gray)
+                                    .frame(width: 40, alignment: .trailing)
                                 
                                 if productoAEditar != nil {
                                     Button {
@@ -837,21 +854,52 @@ fileprivate struct ProductFormView: View {
                         }
                         
                         HStack(spacing: 16) {
-                            FormField(title: "Categoría", placeholder: "ej. Aceites", text: $categoria)
+                            FormField(title: "Categoría", placeholder: "ej. Aceites", text: $categoria, characterLimit: 21)
+                                .onChange(of: categoria) { _, newValue in
+                                    if newValue.count > 21 {
+                                        categoria = String(newValue.prefix(21))
+                                    }
+                                }
                                 .help("Clasifica el producto para filtrar más fácil")
                             
                             HStack(spacing: 8) {
                                 FormField(title: "Contenido", placeholder: "1.0", text: $contenidoNetoString)
                                     .frame(width: 80)
+                                    .onChange(of: contenidoNetoString) { _, newValue in
+                                        let filtered = newValue.filter { "0123456789.,".contains($0) }
+                                        if filtered != newValue {
+                                            contenidoNetoString = filtered
+                                        }
+                                    }
+                                    .validationHint(isInvalid: contenidoInvalido, message: "> 0")
                                     .help("Cantidad que conforma la unidad (ej. 3)")
-                                FormField(title: "• Unidad de Medida", placeholder: "ej. Litro, Pieza, Kit", text: $unidadDeMedida)
+                                FormField(title: "• Unidad de Medida", placeholder: "ej. Litro, Pieza, Kit", text: $unidadDeMedida, characterLimit: 11)
+                                    .onChange(of: unidadDeMedida) { _, newValue in
+                                        // Permitir solo letras (incluyendo acentos) y espacios
+                                        let filtered = newValue.filter { $0.isLetter || $0.isWhitespace }
+                                        if filtered.count > 11 {
+                                            unidadDeMedida = String(filtered.prefix(11))
+                                        } else if filtered != newValue {
+                                            unidadDeMedida = filtered
+                                        }
+                                    }
                                     .help("Unidad en la que controlas el stock")
                             }
                         }
                         
                         HStack(spacing: 16) {
-                            FormField(title: "Proveedor", placeholder: "ej. Mobil 1", text: $proveedor)
-                            FormField(title: "Lote", placeholder: "ej. L-12345", text: $lote)
+                            FormField(title: "Proveedor", placeholder: "ej. Mobil 1", text: $proveedor, characterLimit: 21)
+                                .onChange(of: proveedor) { _, newValue in
+                                    if newValue.count > 21 {
+                                        proveedor = String(newValue.prefix(21))
+                                    }
+                                }
+                            FormField(title: "Lote", placeholder: "ej. L-12345", text: $lote, characterLimit: 21)
+                                .onChange(of: lote) { _, newValue in
+                                    if newValue.count > 21 {
+                                        lote = String(newValue.prefix(21))
+                                    }
+                                }
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Fecha de caducidad").font(.caption2).foregroundColor(.gray)
@@ -877,14 +925,31 @@ fileprivate struct ProductFormView: View {
                         
                         HStack(spacing: 16) {
                             FormField(title: "• Costo de compra", placeholder: "$0.00", text: $costoString)
-                                .validationHint(isInvalid: costoInvalido, message: "Debe ser un número.")
+                                .onChange(of: costoString) { _, newValue in
+                                    let filtered = newValue.filter { "0123456789.,".contains($0) }
+                                    if filtered != newValue {
+                                        costoString = filtered
+                                    }
+                                }
+                                .validationHint(isInvalid: costoInvalido, message: "Debe ser mayor a 0.")
                                 .help("Costo unitario de adquisición")
                             FormField(title: "• Cantidad en stock", placeholder: "0", text: $cantidadString)
-                                .validationHint(isInvalid: cantidadInvalida, message: "Debe ser un número.")
+                                .onChange(of: cantidadString) { _, newValue in
+                                    let filtered = newValue.filter { "0123456789.,".contains($0) }
+                                    if filtered != newValue {
+                                        cantidadString = filtered
+                                    }
+                                }
+                                .validationHint(isInvalid: cantidadInvalida, message: "Debe ser mayor a 0.")
                                 .help("Cantidad actual disponible")
                         }
                         
-                        FormField(title: "Información (opcional)", placeholder: "Notas adicionales...", text: $informacion)
+                        FormField(title: "Información (opcional)", placeholder: "Notas adicionales...", text: $informacion, characterLimit: 51)
+                            .onChange(of: informacion) { _, newValue in
+                                if newValue.count > 51 {
+                                    informacion = String(newValue.prefix(51))
+                                }
+                            }
                             .help("Notas útiles para identificar/usar el producto")
                     }
                     
@@ -895,12 +960,30 @@ fileprivate struct ProductFormView: View {
                         SectionHeader(title: "2. Reglas de Precio", subtitle: "Porcentajes aplicados sobre el costo")
                         HStack(spacing: 16) {
                             FormField(title: "• % Ganancia", placeholder: "0-100", text: $porcentajeMargenSugeridoString)
+                                .onChange(of: porcentajeMargenSugeridoString) { _, newValue in
+                                    let filtered = newValue.filter { "0123456789.,".contains($0) }
+                                    if filtered != newValue {
+                                        porcentajeMargenSugeridoString = filtered
+                                    }
+                                }
                                 .validationHint(isInvalid: pMargenInvalido, message: "0 a 100.")
                                 .help("Porcentaje de ganancia sobre el costo")
                             FormField(title: "• % Gastos administrativos", placeholder: "0-100", text: $porcentajeAdminString)
+                                .onChange(of: porcentajeAdminString) { _, newValue in
+                                    let filtered = newValue.filter { "0123456789.,".contains($0) }
+                                    if filtered != newValue {
+                                        porcentajeAdminString = filtered
+                                    }
+                                }
                                 .validationHint(isInvalid: pAdminInvalido, message: "0 a 100.")
                                 .help("Porcentaje para cubrir administración sobre el costo")
                             FormField(title: "% ISR (aprox.)", placeholder: "0-100", text: $isrPorcentajeString)
+                                .onChange(of: isrPorcentajeString) { _, newValue in
+                                    let filtered = newValue.filter { "0123456789.,".contains($0) }
+                                    if filtered != newValue {
+                                        isrPorcentajeString = filtered
+                                    }
+                                }
                                 .validationHint(isInvalid: pISRInvalido, message: "0 a 100.")
                                 .help("Se calcula solo sobre la GANANCIA (margen)")
                         }
@@ -1076,8 +1159,8 @@ fileprivate struct ProductFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(nombreInvalido || costoInvalido || cantidadInvalida || pMargenInvalido || pAdminInvalido || pISRInvalido)
-                .opacity((nombreInvalido || costoInvalido || cantidadInvalida || pMargenInvalido || pAdminInvalido || pISRInvalido) ? 0.6 : 1.0)
+                .disabled(nombreInvalido || costoInvalido || cantidadInvalida || contenidoInvalido || pMargenInvalido || pAdminInvalido || pISRInvalido)
+                .opacity((nombreInvalido || costoInvalido || cantidadInvalida || contenidoInvalido || pMargenInvalido || pAdminInvalido || pISRInvalido) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
@@ -1183,12 +1266,16 @@ fileprivate struct ProductFormView: View {
             errorMsg = "El nombre del producto debe tener al menos 3 caracteres."
             return
         }
-        guard let costo = Double(costoString.replacingOccurrences(of: ",", with: ".")), costo >= 0 else {
-            errorMsg = "El Costo debe ser un número válido."
+        guard let costo = Double(costoString.replacingOccurrences(of: ",", with: ".")), costo > 0 else {
+            errorMsg = "El Costo debe ser mayor a 0."
             return
         }
-        guard let cantidad = Double(cantidadString.replacingOccurrences(of: ",", with: ".")), cantidad >= 0 else {
-            errorMsg = "La Cantidad debe ser un número válido."
+        guard let cantidad = Double(cantidadString.replacingOccurrences(of: ",", with: ".")), cantidad > 0 else {
+            errorMsg = "La Cantidad debe ser mayor a 0."
+            return
+        }
+        guard let contenido = Double(contenidoNetoString.replacingOccurrences(of: ",", with: ".")), contenido > 0 else {
+            errorMsg = "El Contenido debe ser mayor a 0."
             return
         }
         guard let pMargen = Double(porcentajeMargenSugeridoString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pMargen) else {
@@ -1313,12 +1400,21 @@ fileprivate struct FormField: View {
     var title: String
     var placeholder: String
     @Binding var text: String
+    var characterLimit: Int? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption2)
-                .foregroundColor(.gray)
+            HStack {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                Spacer()
+                if let limit = characterLimit {
+                    Text("\(text.count)/\(limit)")
+                        .font(.caption2)
+                        .foregroundColor(text.count >= limit ? .red : .gray)
+                }
+            }
             TextField("", text: $text)
                 .textFieldStyle(.plain)
                 .padding(10)
