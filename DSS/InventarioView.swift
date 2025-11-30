@@ -863,7 +863,7 @@ fileprivate struct ProductFormView: View {
                                 .help("Clasifica el producto para filtrar más fácil")
                             
                             HStack(spacing: 8) {
-                                FormField(title: "Contenido", placeholder: "1.0", text: $contenidoNetoString)
+                                FormField(title: "Contenido por producto", placeholder: "1.0", text: $contenidoNetoString)
                                     .frame(width: 80)
                                     .onChange(of: contenidoNetoString) { _, newValue in
                                         let filtered = newValue.filter { "0123456789.,".contains($0) }
@@ -924,7 +924,7 @@ fileprivate struct ProductFormView: View {
                         }
                         
                         HStack(spacing: 16) {
-                            FormField(title: "• Costo de compra", placeholder: "$0.00", text: $costoString)
+                            FormField(title: "• Costo de compra por producto", placeholder: "$0.00", text: $costoString)
                                 .onChange(of: costoString) { _, newValue in
                                     let filtered = newValue.filter { "0123456789.,".contains($0) }
                                     if filtered != newValue {
@@ -959,7 +959,7 @@ fileprivate struct ProductFormView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "2. Reglas de Precio", subtitle: "Porcentajes aplicados sobre el costo")
                         HStack(spacing: 16) {
-                            FormField(title: "• % Ganancia", placeholder: "0-100", text: $porcentajeMargenSugeridoString)
+                            FormField(title: "• % Margen de Ganancia", placeholder: "0-100", text: $porcentajeMargenSugeridoString)
                                 .onChange(of: porcentajeMargenSugeridoString) { _, newValue in
                                     let filtered = newValue.filter { "0123456789.,".contains($0) }
                                     if filtered != newValue {
@@ -999,13 +999,13 @@ fileprivate struct ProductFormView: View {
                     
                     // Sección 3: Cálculo automático (compacto)
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "3. Cálculo Automático", subtitle: "Lectura")
+                        SectionHeader(title: "Cálculo Automático", subtitle: "Lectura", color: "MercedesPetrolGreen")
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 8) {
-                            roField("Ganancia (monto)", resultadoReglas.ganancia)
+                            roField("Margen de Ganancia (monto)", resultadoReglas.ganancia)
                             roField("Gastos administrativos (monto)", resultadoReglas.gastosAdmin)
                             roField("Subtotal antes de IVA", resultadoReglas.subtotalAntesIVA)
                             roField("IVA (16%)", resultadoReglas.iva)
-                            roField("Precio sugerido (con IVA)", resultadoReglas.precioSugeridoConIVA)
+                            roField("Precio (con IVA)", resultadoReglas.precioSugeridoConIVA)
                         }
                         HStack(spacing: 16) {
                             roField("ISR (solo sobre ganancia)", resultadoReglas.isr)
@@ -1017,8 +1017,10 @@ fileprivate struct ProductFormView: View {
                             Text("Reparto real después del ISR")
                                 .font(.headline).foregroundColor(.white)
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 8) {
+                                roField("Margen de ganancia después del ISR", resultadoReglas.gananciaRealDespuesISR)
+                                roField("Gastos administrativos (monto)", resultadoReglas.gastosAdmin)
                                 roField("Utilidad real después de ISR", resultadoReglas.utilidadRealDespuesISR)
-                            }
+                                                            }
                             Text("El ISR solo afecta al margen de ganancia.")
                                 .font(.caption2)
                                 .foregroundColor(.gray)
@@ -1031,12 +1033,19 @@ fileprivate struct ProductFormView: View {
                                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
                         )
                     }
+                    .padding(16)
+                    .background(Color("MercedesBackground").opacity(0.2))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color("MercedesPetrolGreen").opacity(0.5), lineWidth: 1)
+                    )
                     
                     Divider().background(Color.gray.opacity(0.3))
                     
                     // Sección 4: Precio final editable
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "4. Precio Final", subtitle: "Ajustable")
+                        SectionHeader(title: "3. Precio Final", subtitle: "Ajustable")
                         HStack(spacing: 16) {
                             FormField(title: "Precio final al cliente", placeholder: "0.00", text: $precioFinalString)
                                 .onChange(of: precioFinalString) { _, new in
@@ -1384,9 +1393,10 @@ fileprivate struct ProductFormView: View {
 fileprivate struct SectionHeader: View {
     var title: String
     var subtitle: String?
+    var color: String? = nil
     var body: some View {
         HStack {
-            Text(title).font(.headline).foregroundColor(.white)
+            Text(title).font(.headline).foregroundColor(color != nil ? Color(color!) : .white)
             Spacer()
             if let subtitle, !subtitle.isEmpty {
                 Text(subtitle).font(.caption2).foregroundColor(.gray)

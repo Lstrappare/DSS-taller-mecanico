@@ -1075,7 +1075,7 @@ fileprivate struct PersonalFormView: View {
                     .cornerRadius(12)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                            .stroke(Color("MercedesPetrolGreen").opacity(0.5), lineWidth: 1)
                     )
                     
                     Divider().background(Color.gray.opacity(0.3))
