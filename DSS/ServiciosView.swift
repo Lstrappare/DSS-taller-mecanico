@@ -1351,7 +1351,10 @@ fileprivate struct ServicioFormView: View {
     private var nombreInvalido: Bool { 
         nombre.trimmingCharacters(in: .whitespaces).count < 3 || nombreDuplicado
     }
-    private var duracionInvalida: Bool { Double(duracionString) == nil || (Double(duracionString) ?? 0) <= 0 }
+    private var duracionInvalida: Bool { 
+        guard let d = Double(duracionString) else { return true }
+        return d <= 0 || d > 8
+    }
     private var costoMOInvalido: Bool { Double(costoManoDeObraString) == nil || (Double(costoManoDeObraString) ?? -1) < 0 }
     private var gananciaInvalida: Bool { Double(gananciaDeseadaString) == nil || (Double(gananciaDeseadaString) ?? -1) < 0 }
     private var gastosAdminInvalido: Bool { Double(gastosAdminString) == nil || (Double(gastosAdminString) ?? -1) < 0 }
@@ -1548,7 +1551,7 @@ fileprivate struct ServicioFormView: View {
                         
                         HStack(spacing: 16) {
                             FormField(title: "• Duración Estimada (Horas)", placeholder: "ej. 2.5", text: $duracionString, isNumeric: true)
-                                .validationHint(isInvalid: duracionInvalida, message: "Debe ser > 0.")
+                                .validationHint(isInvalid: duracionInvalida, message: "Debe ser > 0 y ≤ 8.")
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("• Especialidad Requerida").font(.caption2).foregroundColor(.gray)
