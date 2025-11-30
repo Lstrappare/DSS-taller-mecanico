@@ -46,7 +46,9 @@ enum PricingHelpers {
     static func costoIngredientes(servicio: Servicio, productos: [Producto]) -> Double {
         servicio.ingredientes.reduce(0) { acc, ing in
             if let p = productos.first(where: { $0.nombre == ing.nombreProducto }) {
-                return acc + (p.precioVenta * ing.cantidadUsada)
+                let contenido = max(p.contenidoNeto, 1.0)
+                let unidades = ing.cantidadUsada / contenido
+                return acc + (p.precioVenta * unidades)
             }
             return acc
         }

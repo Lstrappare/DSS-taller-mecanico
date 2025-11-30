@@ -1597,13 +1597,63 @@ fileprivate struct ServicioFormView: View {
                                     .font(.caption2)
                                     .foregroundColor(.gray)
                                 
-                                
                                 FormField(title: "Costo Refacciones ($)", placeholder: "ej. 300.00", text: $costoRefaccionesString, isNumeric: true)
                                     .validationHint(isInvalid: costoRefInvalido, message: "Número válido ≥ 0")
                                     .disabled(!requiereRefacciones)
                                     .opacity(requiereRefacciones ? 1 : 0.5)
                             }
                         }
+                        
+                        // Productos del Inventario (Movido aquí)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("• Productos del Inventario").font(.caption2).foregroundColor(.gray)
+                            
+                            VStack(spacing: 8) {
+                                ForEach(productos) { producto in
+                                    HStack {
+                                        Text("\(producto.nombre) (\(producto.unidadDeMedida))")
+                                            .font(.subheadline)
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                        HStack(spacing: 6) {
+                                            TextField("0.0", text: Binding(
+                                                get: {
+                                                    cantidadesProductos[producto.nombre].map { String(format: "%.2f", $0) } ?? ""
+                                                },
+                                                set: {
+                                                    cantidadesProductos[producto.nombre] = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0
+                                                }
+                                            ))
+                                            .multilineTextAlignment(.trailing)
+                                            .frame(width: 80)
+                                            .textFieldStyle(.plain)
+                                            .padding(6)
+                                            .background(Color("MercedesBackground"))
+                                            .cornerRadius(6)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                            )
+                                            
+                                            if (cantidadesProductos[producto.nombre] ?? 0) > 0 {
+                                                Button {
+                                                    cantidadesProductos[producto.nombre] = 0
+                                                } label: {
+                                                    Image(systemName: "xmark.circle.fill")
+                                                        .foregroundColor(.gray)
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                        }
+                                    }
+                                    .padding(8)
+                                    .background(Color("MercedesBackground").opacity(0.3))
+                                    .cornerRadius(8)
+                                }
+                            }
+                            .frame(maxHeight: 250)
+                        }
+
                         HStack {
                             roField("Costo de inventario (automático)", costoIngredientes)
                             Spacer()
@@ -1650,57 +1700,7 @@ fileprivate struct ServicioFormView: View {
                     
                     Divider().background(Color.gray.opacity(0.3))
                     
-                    // Sección 5: Productos del Inventario
-                    VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "5. Productos del Inventario", subtitle: "Selecciona los productos a utilizar")
-                        
-                        VStack(spacing: 8) {
-                            ForEach(productos) { producto in
-                                HStack {
-                                    Text("\(producto.nombre) (\(producto.unidadDeMedida))")
-                                        .font(.subheadline)
-                                        .foregroundColor(.white)
-                                    Spacer()
-                                    HStack(spacing: 6) {
-                                        TextField("0.0", text: Binding(
-                                            get: {
-                                                cantidadesProductos[producto.nombre].map { String(format: "%.2f", $0) } ?? ""
-                                            },
-                                            set: {
-                                                cantidadesProductos[producto.nombre] = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0
-                                            }
-                                        ))
-                                        .multilineTextAlignment(.trailing)
-                                        .frame(width: 80)
-                                        .textFieldStyle(.plain)
-                                        .padding(6)
-                                        .background(Color("MercedesBackground"))
-                                        .cornerRadius(6)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6)
-                                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                                        )
-                                        
-                                        if (cantidadesProductos[producto.nombre] ?? 0) > 0 {
-                                            Button {
-                                                cantidadesProductos[producto.nombre] = 0
-                                            } label: {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .foregroundColor(.gray)
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                }
-                                .padding(8)
-                                .background(Color("MercedesBackground").opacity(0.3))
-                                .cornerRadius(8)
-                            }
-                        }
-                        .frame(maxHeight: 250)
-                    }
-                    
-                    Divider().background(Color.gray.opacity(0.3))
+
                     
                     // Sección 6: Desglose Final
                     VStack(alignment: .leading, spacing: 16) {
