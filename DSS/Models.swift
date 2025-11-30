@@ -448,6 +448,9 @@ class Producto {
     
     // Estado de actividad (baja temporal)
     var activo: Bool
+    
+    // Contenido neto (ej. 3 Litros)
+    var contenidoNeto: Double
 
     init(
         nombre: String,
@@ -466,7 +469,8 @@ class Producto {
         tipoFiscal: TipoFiscalProducto = .iva16,
         isrPorcentajeEstimado: Double = 10.0,
         precioModificadoManualmente: Bool = false,
-        activo: Bool = true
+        activo: Bool = true,
+        contenidoNeto: Double = 1.0
     ) {
         self.nombre = nombre
         self.costo = costo
@@ -486,6 +490,7 @@ class Producto {
         self.isrPorcentajeEstimado = isrPorcentajeEstimado
         self.precioModificadoManualmente = precioModificadoManualmente
         self.activo = activo
+        self.contenidoNeto = contenidoNeto
     }
 
     var margen: Double {

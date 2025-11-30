@@ -621,6 +621,7 @@ fileprivate struct ProductFormView: View {
     @State private var nombre = ""
     @State private var categoria = ""
     @State private var unidadDeMedida = "Pieza"
+    @State private var contenidoNetoString = "1.0"
     @State private var proveedor = ""
     @State private var lote = ""
     @State private var fechaCaducidad: Date? = nil
@@ -717,6 +718,7 @@ fileprivate struct ProductFormView: View {
             _cantidadString = State(initialValue: String(format: "%.2f", producto.cantidad))
             _informacion = State(initialValue: producto.informacion)
             _unidadDeMedida = State(initialValue: producto.unidadDeMedida)
+            _contenidoNetoString = State(initialValue: String(format: "%.2f", producto.contenidoNeto))
             _categoria = State(initialValue: producto.categoria)
             _proveedor = State(initialValue: producto.proveedor)
             _lote = State(initialValue: producto.lote)
@@ -794,21 +796,12 @@ fileprivate struct ProductFormView: View {
                             FormField(title: "Categoría", placeholder: "ej. Aceites", text: $categoria)
                                 .help("Clasifica el producto para filtrar más fácil")
                             
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("• Unidad de Medida").font(.caption2).foregroundColor(.gray)
-                                Picker("", selection: $unidadDeMedida) {
-                                    ForEach(opcionesUnidad, id: \.self) { Text($0).tag($0) }
-                                }
-                                .pickerStyle(.menu)
-                                .frame(maxWidth: .infinity)
-                                .padding(4)
-                                .background(Color("MercedesBackground"))
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                                )
-                                .help("Unidad en la que controlas el stock")
+                            HStack(spacing: 8) {
+                                FormField(title: "Contenido", placeholder: "1.0", text: $contenidoNetoString)
+                                    .frame(width: 80)
+                                    .help("Cantidad que conforma la unidad (ej. 3)")
+                                FormField(title: "• Unidad de Medida", placeholder: "ej. Litro, Pieza, Kit", text: $unidadDeMedida)
+                                    .help("Unidad en la que controlas el stock")
                             }
                         }
                         
@@ -818,20 +811,20 @@ fileprivate struct ProductFormView: View {
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Fecha de caducidad").font(.caption2).foregroundColor(.gray)
-                                HStack {
+                                    Toggle("Con fecha", isOn: Binding(
+                                        get: { fechaCaducidad != nil },
+                                        set: { hasDate in fechaCaducidad = hasDate ? Date() : nil }
+                                    ))
+                                    .toggleStyle(.switch)
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+
+                                if fechaCaducidad != nil {
                                     DatePicker("", selection: Binding(
                                         get: { fechaCaducidad ?? Date() },
                                         set: { fechaCaducidad = $0 }
                                     ), displayedComponents: .date)
                                     .labelsHidden()
-                                    
-                                    Toggle("Sin fecha", isOn: Binding(
-                                        get: { fechaCaducidad == nil },
-                                        set: { noDate in fechaCaducidad = noDate ? nil : Date() }
-                                    ))
-                                    .toggleStyle(.switch)
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1175,6 +1168,7 @@ fileprivate struct ProductFormView: View {
             producto.cantidad = cantidad
             producto.informacion = informacion
             producto.unidadDeMedida = unidadDeMedida
+            producto.contenidoNeto = Double(contenidoNetoString.replacingOccurrences(of: ",", with: ".")) ?? 1.0
             producto.categoria = categoria
             producto.proveedor = proveedor
             producto.lote = lote
@@ -1205,7 +1199,8 @@ fileprivate struct ProductFormView: View {
                 tipoFiscal: .iva16, // fijo en 16% para el cálculo
                 isrPorcentajeEstimado: pISR,
                 precioModificadoManualmente: precioModificadoManualmente,
-                activo: activo
+                activo: activo,
+                contenidoNeto: Double(contenidoNetoString.replacingOccurrences(of: ",", with: ".")) ?? 1.0
             )
             modelContext.insert(nuevoProducto)
         }
