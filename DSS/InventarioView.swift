@@ -740,6 +740,17 @@ fileprivate struct ProductFormView: View {
         Double(precioFinalString.replacingOccurrences(of: ",", with: ".")) ?? precioSugerido
     }
     
+    // Listas para autocompletado
+    private var uniqueCategories: [String] {
+        Array(Set(allProducts.map { $0.categoria })).filter { !$0.isEmpty }.sorted()
+    }
+    private var uniqueUnits: [String] {
+        Array(Set(allProducts.map { $0.unidadDeMedida })).filter { !$0.isEmpty }.sorted()
+    }
+    private var uniqueProviders: [String] {
+        Array(Set(allProducts.map { $0.proveedor })).filter { !$0.isEmpty }.sorted()
+    }
+    
     // Inicializador
     init(mode: Binding<ProductModalMode?>, initialMode: ProductModalMode) {
         self._mode = mode
@@ -859,7 +870,7 @@ fileprivate struct ProductFormView: View {
                         }
                         
                         HStack(spacing: 16) {
-                            FormField(title: "Categoría", placeholder: "ej. Aceites", text: $categoria, characterLimit: 21)
+                            FormField(title: "Categoría", placeholder: "ej. Aceites", text: $categoria, characterLimit: 21, suggestions: uniqueCategories)
                                 .onChange(of: categoria) { _, newValue in
                                     if newValue.count > 21 {
                                         categoria = String(newValue.prefix(21))
@@ -878,7 +889,7 @@ fileprivate struct ProductFormView: View {
                                     }
                                     .validationHint(isInvalid: contenidoInvalido, message: "Debe de ser mayor a 0")
                                     .help("Cantidad que conforma la unidad (ej. 3)")
-                                FormField(title: "• Unidad de Medida", placeholder: "ej. Litro, Pieza, Kit", text: $unidadDeMedida, characterLimit: 11)
+                                FormField(title: "• Unidad de Medida", placeholder: "ej. Litro, Pieza, Kit", text: $unidadDeMedida, characterLimit: 11, suggestions: uniqueUnits)
                                     .onChange(of: unidadDeMedida) { _, newValue in
                                         // Permitir solo letras (incluyendo acentos) y espacios
                                         let filtered = newValue.filter { $0.isLetter || $0.isWhitespace }
@@ -894,7 +905,7 @@ fileprivate struct ProductFormView: View {
                         }
                         
                         HStack(spacing: 16) {
-                            FormField(title: "Proveedor", placeholder: "ej. Mobil 1", text: $proveedor, characterLimit: 21)
+                            FormField(title: "Proveedor", placeholder: "ej. Mobil 1", text: $proveedor, characterLimit: 21, suggestions: uniqueProviders)
                                 .onChange(of: proveedor) { _, newValue in
                                     if newValue.count > 21 {
                                         proveedor = String(newValue.prefix(21))
@@ -1423,6 +1434,7 @@ fileprivate struct FormField: View {
     var placeholder: String
     @Binding var text: String
     var characterLimit: Int? = nil
+    var suggestions: [String] = []
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1446,6 +1458,25 @@ fileprivate struct FormField: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
+                .overlay(
+                    HStack {
+                        Spacer()
+                        if !suggestions.isEmpty {
+                            Menu {
+                                ForEach(suggestions, id: \.self) { suggestion in
+                                    Button(suggestion) {
+                                        text = suggestion
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "chevron.down.circle.fill")
+                                    .foregroundColor(.gray)
+                                    .padding(.trailing, 8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 )
             if !placeholder.isEmpty {
                 Text(placeholder)
