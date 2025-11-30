@@ -1544,7 +1544,7 @@ fileprivate struct ServicioFormView: View {
                             }
                         }
                         
-                        FormField(title: "Descripción", placeholder: "ej. Reemplazo de balatas y rectificación de discos", text: $descripcion)
+                        FormField(title: "Descripción", placeholder: "ej. Reemplazo de balatas y rectificación de discos", text: $descripcion, characterLimit: 231, isMultiline: true)
                         
                         HStack(spacing: 16) {
                             FormField(title: "• Duración Estimada (Horas)", placeholder: "ej. 2.5", text: $duracionString)
@@ -2076,6 +2076,7 @@ fileprivate struct FormField: View {
     var placeholder: String
     @Binding var text: String
     var characterLimit: Int? = nil
+    var isMultiline: Bool = false
     var suggestions: [String] = []
     
     var body: some View {
@@ -2091,8 +2092,9 @@ fileprivate struct FormField: View {
                         .foregroundColor(text.count >= limit ? .red : .gray)
                 }
             }
-            TextField("", text: $text)
+            TextField("", text: $text, axis: isMultiline ? .vertical : .horizontal)
                 .textFieldStyle(.plain)
+                .lineLimit(isMultiline ? 3...6 : 1...1)
                 .padding(10)
                 .frame(maxWidth: .infinity)
                 .background(Color("MercedesBackground"))
@@ -2120,6 +2122,11 @@ fileprivate struct FormField: View {
                         }
                     }
                 )
+                .onChange(of: text) { _, newValue in
+                    if let limit = characterLimit, newValue.count > limit {
+                        text = String(newValue.prefix(limit))
+                    }
+                }
             if !placeholder.isEmpty {
                 Text(placeholder)
                     .font(.caption2)
