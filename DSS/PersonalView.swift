@@ -515,14 +515,16 @@ fileprivate struct PersonalFormView: View {
     @State private var rfc = ""
     @State private var curp = ""
     
-    // Trabajo
+    // Trabajo (UI opcional en "add" para forzar selección)
     @State private var rol: Rol = .ayudante
+    @State private var rolSeleccion: Rol? = nil
     @State private var especialidadesString = ""
     @State private var fechaIngreso = Date()
     @State private var tipoContrato: TipoContrato = .indefinido
-    @State private var horaEntradaString = "9"
-    @State private var horaSalidaString = "18"
-    @State private var diasLaborales: Set<Int> = [2,3,4,5,6] // L-V
+    @State private var tipoContratoSeleccion: TipoContrato? = nil
+    @State private var horaEntradaString = ""
+    @State private var horaSalidaString = ""
+    @State private var diasLaborales: Set<Int> = [] // vacío en "add" para obligar selección
     
     // Alta/Baja
     @State private var activo: Bool = true
@@ -531,7 +533,9 @@ fileprivate struct PersonalFormView: View {
     // Nómina (configuración)
     @State private var prestacionesMinimas = true
     @State private var tipoSalario: TipoSalario = .minimo
+    @State private var tipoSalarioSeleccion: TipoSalario? = nil
     @State private var frecuenciaPago: FrecuenciaPago = .quincena
+    @State private var frecuenciaPagoSeleccion: FrecuenciaPago? = nil
     @State private var salarioMinimoReferenciaString = "248.93"
     @State private var comisionesString = "0.00"
     @State private var factorIntegracionString = "1.0452"
@@ -543,6 +547,7 @@ fileprivate struct PersonalFormView: View {
     
     // Estado operacional
     @State private var estado: EstadoEmpleado = .disponible
+    @State private var estadoSeleccion: EstadoEmpleado? = nil
     
     // Bloqueos/Seguridad
     @State private var isRFCUnlocked = false
@@ -644,12 +649,10 @@ fileprivate struct PersonalFormView: View {
         if trimmed.isEmpty { return false }
         return !CURPValidator.isValidCURP(trimmed)
     }
-    // NUEVO: Validación diurna y 8 horas exactas
+    // NUEVO: Validación diurna y 8 horas exactas (requiere que ambos campos no estén vacíos)
     private var horasInvalidas: Bool {
         guard let he = Int(horaEntradaString), let hs = Int(horaSalidaString) else { return true }
-        // rango diurno 6..20 inclusive
         guard (6...20).contains(he), (6...20).contains(hs) else { return true }
-        // duración exacta 8 horas y sin nocturno
         return hs - he != 8
     }
     private var salarioMinimoInvalido: Bool {
@@ -674,6 +677,27 @@ fileprivate struct PersonalFormView: View {
         case .quincena: return 15.0
         case .mes: return 30.4
         }
+    }
+    // NUEVO: Validaciones de selección obligatoria cuando se está añadiendo
+    private var rolNoSeleccionado: Bool {
+        if mecanicoAEditar != nil { return false }
+        return rolSeleccion == nil
+    }
+    private var tipoContratoNoSeleccionado: Bool {
+        if mecanicoAEditar != nil { return false }
+        return tipoContratoSeleccion == nil
+    }
+    private var estadoNoSeleccionado: Bool {
+        // Eliminado el uso, pero lo dejamos false para compatibilidad del botón
+        false
+    }
+    private var frecuenciaPagoNoSeleccionada: Bool {
+        if mecanicoAEditar != nil { return false }
+        return frecuenciaPagoSeleccion == nil
+    }
+    private var tipoSalarioNoSeleccionado: Bool {
+        if mecanicoAEditar != nil { return false }
+        return tipoSalarioSeleccion == nil
     }
     
     // Helpers de asistencia/estado del día
@@ -794,20 +818,36 @@ fileprivate struct PersonalFormView: View {
                     
                     Divider().background(Color.gray.opacity(0.3))
                     
-                    // 3. Puesto y Estado
+                    // 3. Puesto
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "3. Puesto y Estado", subtitle: "Rol, estado y fecha de ingreso")
+                        SectionHeader(title: "3. Puesto", subtitle: "Rol y fecha de ingreso")
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("• Rol").font(.caption2).foregroundColor(.gray)
-                                Picker("", selection: $rol) {
-                                    ForEach(Rol.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                if mecanicoAEditar == nil {
+                                    Picker("", selection: Binding(
+                                        get: { rolSeleccion as Rol? },
+                                        set: { rolSeleccion = $0 }
+                                    )) {
+                                        Text("Selecciona un rol…").tag(Rol?.none)
+                                        ForEach(Rol.allCases, id: \.self) { Text($0.rawValue).tag(Rol?.some($0)) }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(4)
+                                    .background(Color("MercedesBackground").opacity(0.9))
+                                    .cornerRadius(8)
+                                    .validationHint(isInvalid: rolNoSeleccionado, message: "Debes seleccionar un rol.")
+                                } else {
+                                    Picker("", selection: $rol) {
+                                        ForEach(Rol.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(4)
+                                    .background(Color("MercedesBackground").opacity(0.9))
+                                    .cornerRadius(8)
                                 }
-                                .pickerStyle(.menu)
-                                .frame(maxWidth: .infinity)
-                                .padding(4)
-                                .background(Color("MercedesBackground").opacity(0.9))
-                                .cornerRadius(8)
                             }
                             FormField(title: "Especialidades (coma separadas)", placeholder: "Motor, Frenos...", text: $especialidadesString)
                                 .help("Ejemplo: Motor, Frenos. Se guardarán con mayúscula inicial.")
@@ -822,53 +862,32 @@ fileprivate struct PersonalFormView: View {
                             }
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("• Tipo de contrato").font(.caption2).foregroundColor(.gray)
-                                Picker("", selection: $tipoContrato) {
-                                    ForEach(TipoContrato.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                if mecanicoAEditar == nil {
+                                    Picker("", selection: Binding(
+                                        get: { tipoContratoSeleccion as TipoContrato? },
+                                        set: { tipoContratoSeleccion = $0 }
+                                    )) {
+                                        Text("Selecciona un contrato…").tag(TipoContrato?.none)
+                                        ForEach(TipoContrato.allCases, id: \.self) { Text($0.rawValue).tag(TipoContrato?.some($0)) }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(4)
+                                    .background(Color("MercedesBackground").opacity(0.9))
+                                    .cornerRadius(8)
+                                    .validationHint(isInvalid: tipoContratoNoSeleccionado, message: "Debes seleccionar un tipo de contrato.")
+                                } else {
+                                    Picker("", selection: $tipoContrato) {
+                                        ForEach(TipoContrato.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(4)
+                                    .background(Color("MercedesBackground").opacity(0.9))
+                                    .cornerRadius(8)
                                 }
-                                .pickerStyle(.menu)
-                                .frame(maxWidth: .infinity)
-                                .padding(4)
-                                .background(Color("MercedesBackground").opacity(0.9))
-                                .cornerRadius(8)
                             }
                         }
-                        // Estado operativo actual: deshabilitado si está bloqueado por asistencia hoy
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Estado actual").font(.caption2).foregroundColor(.gray)
-                            HStack(spacing: 10) {
-                                Text(activo ? "Activo" : "De baja")
-                                    .font(.headline)
-                                    .foregroundColor(activo ? .green : .red)
-                                    .frame(width: 80, alignment: .leading)
-                                
-                                if !activo, let f = fechaBaja {
-                                    Text("Desde: \(f.formatted(date: .abbreviated, time: .omitted))")
-                                        .font(.caption2).foregroundColor(.gray)
-                                }
-                                Spacer()
-                                Text(estaBloqueadoHoy ? "Ausente (bloqueado hoy)" : "Operación: \(estado.rawValue)")
-                                    .font(.caption2)
-                                    .padding(.horizontal, 8).padding(.vertical, 4)
-                                    .background(Color("MercedesBackground"))
-                                    .cornerRadius(6)
-                                    .overlay(
-                                        Group {
-                                            if estaBloqueadoHoy {
-                                                RoundedRectangle(cornerRadius: 6)
-                                                    .stroke(Color.red.opacity(0.4), lineWidth: 1)
-                                            }
-                                        }
-                                    )
-                            }
-                            if estaBloqueadoHoy {
-                                Text("Bloqueado por inasistencia hoy. No se puede cambiar el estado hasta mañana.")
-                                    .font(.caption2)
-                                    .foregroundColor(.red)
-                            }
-                        }
-                        .padding(10)
-                        .background(Color("MercedesBackground").opacity(0.5))
-                        .cornerRadius(8)
                     }
                     
                     Divider().background(Color.gray.opacity(0.3))
@@ -910,35 +929,71 @@ fileprivate struct PersonalFormView: View {
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("• Tipo de salario").font(.caption2).foregroundColor(.gray)
-                                Picker("", selection: $tipoSalario) {
-                                    Text(TipoSalario.minimo.rawValue).tag(TipoSalario.minimo)
-                                    Text(TipoSalario.mixto.rawValue).tag(TipoSalario.mixto)
+                                if mecanicoAEditar == nil {
+                                    Picker("", selection: Binding(
+                                        get: { tipoSalarioSeleccion as TipoSalario? },
+                                        set: { tipoSalarioSeleccion = $0 }
+                                    )) {
+                                        Text("Selecciona tipo…").tag(TipoSalario?.none)
+                                        ForEach(TipoSalario.allCases, id: \.self) { Text($0.rawValue).tag(TipoSalario?.some($0)) }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(4)
+                                    .background(Color("MercedesBackground").opacity(0.9))
+                                    .cornerRadius(8)
+                                    .validationHint(isInvalid: tipoSalarioNoSeleccionado, message: "Debes seleccionar el tipo de salario (Mínimo o Mixto).")
+                                } else {
+                                    Picker("", selection: $tipoSalario) {
+                                        ForEach(TipoSalario.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(4)
+                                    .background(Color("MercedesBackground").opacity(0.9))
+                                    .cornerRadius(8)
                                 }
-                                .pickerStyle(.menu)
-                                .frame(maxWidth: .infinity)
-                                .padding(4)
-                                .background(Color("MercedesBackground").opacity(0.9))
-                                .cornerRadius(8)
                             }
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("• Frecuencia de pago").font(.caption2).foregroundColor(.gray)
-                                Picker("", selection: $frecuenciaPago) {
-                                    ForEach(FrecuenciaPago.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                if mecanicoAEditar == nil {
+                                    Picker("", selection: Binding(
+                                        get: { frecuenciaPagoSeleccion as FrecuenciaPago? },
+                                        set: { frecuenciaPagoSeleccion = $0 }
+                                    )) {
+                                        Text("Selecciona frecuencia…").tag(FrecuenciaPago?.none)
+                                        ForEach(FrecuenciaPago.allCases, id: \.self) { Text($0.rawValue).tag(FrecuenciaPago?.some($0)) }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(4)
+                                    .background(Color("MercedesBackground").opacity(0.9))
+                                    .cornerRadius(8)
+                                    .validationHint(isInvalid: frecuenciaPagoNoSeleccionada, message: "Debes seleccionar la frecuencia de pago.")
+                                } else {
+                                    Picker("", selection: $frecuenciaPago) {
+                                        ForEach(FrecuenciaPago.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                    }
+                                    .pickerStyle(.menu)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(4)
+                                    .background(Color("MercedesBackground").opacity(0.9))
+                                    .cornerRadius(8)
                                 }
-                                .pickerStyle(.menu)
-                                .frame(maxWidth: .infinity)
-                                .padding(4)
-                                .background(Color("MercedesBackground").opacity(0.9))
-                                .cornerRadius(8)
                             }
                         }
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 2) {
                                 FormField(title: "• Salario mínimo de referencia", placeholder: "ej. 248.93", text: $salarioMinimoReferenciaString)
                                     .validationHint(isInvalid: salarioMinimoInvalido, message: "Número válido.")
-                                Text("Base de cálculo (diario).")
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Este valor se puede modificar si no coincide con el vigente.")
+                                        .font(.caption2).foregroundColor(.gray)
+                                    Link("Consultar salario mínimo vigente (CONASAMI)",
+                                         destination: URL(string: "https://www.gob.mx/conasami/documentos/tabla-de-salarios-minimos-generales-y-profesionales-por-areas-geograficas?idiom=es")!)
+                                        .font(.caption2)
+                                        .foregroundColor(Color("MercedesPetrolGreen"))
+                                }
                             }
                             VStack(alignment: .leading, spacing: 2) {
                                 FormField(title: "• Factor de integración", placeholder: "ej. 1.0452", text: $factorIntegracionString)
@@ -952,8 +1007,9 @@ fileprivate struct PersonalFormView: View {
                             Toggle("Prestaciones mínimas", isOn: $prestacionesMinimas)
                                 .toggleStyle(.switch)
                                 .font(.caption2)
+                                .foregroundColor(.gray)
                             Spacer()
-                            if tipoSalario == .mixto {
+                            if (mecanicoAEditar == nil ? (tipoSalarioSeleccion == .mixto) : (tipoSalario == .mixto)) {
                                 FormField(title: "• Comisiones acumuladas", placeholder: "0.00", text: $comisionesString)
                                     .frame(width: 180)
                                     .validationHint(isInvalid: comisionesInvalidas, message: "Número válido.")
@@ -1072,7 +1128,52 @@ fileprivate struct PersonalFormView: View {
                         }
                     }
                     
-                    // 9. Zona de Peligro
+                    // 9. Estado actual (movido abajo y solo en edición)
+                    if mecanicoAEditar != nil {
+                        Divider().background(Color.gray.opacity(0.3))
+                        VStack(alignment: .leading, spacing: 8) {
+                            SectionHeader(title: "Estado actual del empleado", subtitle: "Solo lectura")
+                            HStack(spacing: 10) {
+                                Text(activo ? "Activo" : "De baja")
+                                    .font(.headline)
+                                    .foregroundColor(activo ? .green : .red)
+                                    .frame(width: 80, alignment: .leading)
+                                
+                                if !activo, let f = fechaBaja {
+                                    Text("Desde: \(f.formatted(date: .abbreviated, time: .omitted))")
+                                        .font(.caption2).foregroundColor(.gray)
+                                }
+                                Spacer()
+                                let estadoTexto: String = {
+                                    if estaBloqueadoHoy { return "Ausente (bloqueado hoy)" }
+                                    return estado.rawValue
+                                }()
+                                Text(estadoTexto)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Color("MercedesBackground"))
+                                    .cornerRadius(6)
+                                    .overlay(
+                                        Group {
+                                            if estaBloqueadoHoy {
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .stroke(Color.red.opacity(0.4), lineWidth: 1)
+                                            }
+                                        }
+                                    )
+                            }
+                            if estaBloqueadoHoy {
+                                Text("Bloqueado por inasistencia hoy. No se puede cambiar el estado hasta mañana.")
+                                    .font(.caption2)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                        .padding(10)
+                        .background(Color("MercedesBackground").opacity(0.5))
+                        .cornerRadius(8)
+                    }
+                    
+                    // 10. Zona de Peligro
                     if case .edit = mode {
                         Divider().background(Color.red.opacity(0.3))
                         VStack(spacing: 12) {
@@ -1104,6 +1205,18 @@ fileprivate struct PersonalFormView: View {
                 .padding(24)
             }
             .onAppear { 
+                // En "add", mantener salario por defecto pero obligar selecciones y campos vacíos
+                if mecanicoAEditar == nil {
+                    rolSeleccion = nil
+                    tipoContratoSeleccion = nil
+                    // estado inicial oculto en alta, no usar estadoSeleccion
+                    estadoSeleccion = nil
+                    tipoSalarioSeleccion = nil
+                    frecuenciaPagoSeleccion = nil
+                    diasLaborales = []
+                    horaEntradaString = ""
+                    horaSalidaString = ""
+                }
                 recalcularNominaPreview()
                 ensureTempFolderIfNeeded()
             }
@@ -1190,8 +1303,39 @@ fileprivate struct PersonalFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido || telefonoInvalido || curpInvalido)
-                .opacity((nombreInvalido || emailInvalido || rfcInvalido || horasInvalidas || salarioMinimoInvalido || sinDiasLaborales || comisionesInvalidas || factorIntegracionInvalido || telefonoInvalido || curpInvalido) ? 0.6 : 1.0)
+                .disabled(
+                    nombreInvalido ||
+                    emailInvalido ||
+                    rfcInvalido ||
+                    horasInvalidas ||
+                    salarioMinimoInvalido ||
+                    sinDiasLaborales ||
+                    comisionesInvalidas ||
+                    factorIntegracionInvalido ||
+                    telefonoInvalido ||
+                    curpInvalido ||
+                    // Nuevas reglas de selección obligatoria en "add"
+                    rolNoSeleccionado ||
+                    tipoContratoNoSeleccionado ||
+                    frecuenciaPagoNoSeleccionada ||
+                    tipoSalarioNoSeleccionado
+                )
+                .opacity(
+                    (nombreInvalido ||
+                     emailInvalido ||
+                     rfcInvalido ||
+                     horasInvalidas ||
+                     salarioMinimoInvalido ||
+                     sinDiasLaborales ||
+                     comisionesInvalidas ||
+                     factorIntegracionInvalido ||
+                     telefonoInvalido ||
+                     curpInvalido ||
+                     rolNoSeleccionado ||
+                     tipoContratoNoSeleccionado ||
+                     frecuenciaPagoNoSeleccionada ||
+                     tipoSalarioNoSeleccionado) ? 0.6 : 1.0
+                )
             }
             .padding(20)
             .background(Color("MercedesCard"))
@@ -1307,6 +1451,22 @@ fileprivate struct PersonalFormView: View {
             return
         }
         let nombreNormalizado = titleCasedName(nombre)
+        
+        // Resolver selecciones obligatorias en "add"
+        if mecanicoAEditar == nil {
+            if let s = rolSeleccion { rol = s } else {
+                errorMsg = "Selecciona un Rol."; return
+            }
+            if let s = tipoContratoSeleccion { tipoContrato = s } else {
+                errorMsg = "Selecciona un Tipo de contrato."; return
+            }
+            if let s = tipoSalarioSeleccion { tipoSalario = s } else {
+                errorMsg = "Selecciona el Tipo de salario."; return
+            }
+            if let s = frecuenciaPagoSeleccion { frecuenciaPago = s } else {
+                errorMsg = "Selecciona la Frecuencia de pago."; return
+            }
+        }
         
         guard let horaEntrada = Int(horaEntradaString),
               let horaSalida = Int(horaSalidaString) else {
@@ -1476,7 +1636,7 @@ fileprivate struct PersonalFormView: View {
                 horaEntrada: horaEntrada,
                 horaSalida: horaSalida,
                 rol: rol,
-                estado: estado,
+                estado: estado, // en alta no se muestra ni obliga, se usa .disponible por default del estado actual o el binding
                 especialidades: especialidadesArray,
                 fechaIngreso: fechaIngreso,
                 tipoContrato: tipoContrato,
@@ -1608,13 +1768,13 @@ fileprivate struct PersonalFormView: View {
         let factor = max(Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) ?? 1.0452, 0.0001)
         let com = (Double(comisionesString.replacingOccurrences(of: ",", with: ".")) ?? 0)
         let salarioDiarioBase = sm
-        let promCom = (tipoSalario == .mixto) ? (com / diasPromedio) : 0
+        let promCom = ((mecanicoAEditar == nil ? (tipoSalarioSeleccion == .mixto) : (tipoSalario == .mixto))) ? (com / diasPromedio) : 0
         
         let sbcCalc = Personal.calcularSBC(salarioDiario: salarioDiarioBase, comisionesPromedioDiarias: promCom, factorIntegracion: factor)
         let (obrera, patronal, imssTotal) = Personal.calcularIMSS(desdeSBC: sbcCalc, salarioDiario: salarioDiarioBase, prestacionesMinimas: prestacionesMinimas)
-        let isr = Personal.calcularISR(salarioDiario: salarioDiarioBase, comisionesPromedioDiarias: promCom, tipoSalario: tipoSalario)
+        let isr = Personal.calcularISR(salarioDiario: salarioDiarioBase, comisionesPromedioDiarias: promCom, tipoSalario: (mecanicoAEditar == nil ? (tipoSalarioSeleccion ?? .minimo) : tipoSalario))
         
-        let ingresoMensual = (salarioDiarioBase * 30.4) + (tipoSalario == .mixto ? com : 0)
+        let ingresoMensual = (salarioDiarioBase * 30.4) + (((mecanicoAEditar == nil ? (tipoSalarioSeleccion == .mixto) : (tipoSalario == .mixto))) ? com : 0)
         let neto = max(0, ingresoMensual - isr - obrera)
         let costo = ingresoMensual + patronal
         let horasMes = horasSemanalesRequeridas * 4.0
