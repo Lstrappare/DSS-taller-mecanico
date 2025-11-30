@@ -218,10 +218,10 @@ struct InventarioView: View {
             LinearGradient(colors: [Color("MercedesBackground"), Color("MercedesBackground").opacity(0.9)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         )
-        .sheet(item: $modalMode) { _ in
-            ProductFormView(mode: $modalMode)
+        .sheet(item: $modalMode) { mode in
+            ProductFormView(mode: $modalMode, initialMode: mode)
                 .environment(\.modelContext, modelContext)
-                .id(modalMode?.id) // Force recreation when mode changes
+                .id(mode.id) // Force recreation when mode changes
         }
         .confirmationDialog(
             "Eliminar producto",
@@ -730,10 +730,10 @@ fileprivate struct ProductFormView: View {
     }
     
     // Inicializador
-    init(mode: Binding<ProductModalMode?>) {
+    init(mode: Binding<ProductModalMode?>, initialMode: ProductModalMode) {
         self._mode = mode
         
-        if let currentMode = mode.wrappedValue, case .edit(let producto) = currentMode {
+        if case .edit(let producto) = initialMode {
             self.productoAEditar = producto
             _nombre = State(initialValue: producto.nombre)
             _costoString = State(initialValue: String(format: "%.2f", producto.costo))
