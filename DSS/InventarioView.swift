@@ -629,8 +629,8 @@ fileprivate struct ProductFormView: View {
     // States para los campos
     @State private var nombre = ""
     @State private var categoria = ""
-    @State private var unidadDeMedida = "Pieza"
-    @State private var contenidoNetoString = "1.0"
+    @State private var unidadDeMedida = ""
+    @State private var contenidoNetoString = ""
     @State private var proveedor = ""
     @State private var lote = ""
     @State private var fechaCaducidad: Date? = nil
@@ -641,9 +641,9 @@ fileprivate struct ProductFormView: View {
     @State private var informacion = ""
     
     // Configuraciones financieras (todas en %)
-    @State private var porcentajeMargenSugeridoString = "30.0"
-    @State private var porcentajeAdminString = "10.0"
-    @State private var isrPorcentajeString = "10.0"
+    @State private var porcentajeMargenSugeridoString = ""
+    @State private var porcentajeAdminString = ""
+    @State private var isrPorcentajeString = ""
     
     // Precio final editable
     @State private var precioFinalString = ""
@@ -868,7 +868,7 @@ fileprivate struct ProductFormView: View {
                                 .help("Clasifica el producto para filtrar más fácil")
                             
                             HStack(spacing: 8) {
-                                FormField(title: "Contenido por producto", placeholder: "1.0", text: $contenidoNetoString)
+                                FormField(title: "• Contenido por producto", placeholder: "1.0", text: $contenidoNetoString)
                                     .frame(width: 80)
                                     .onChange(of: contenidoNetoString) { _, newValue in
                                         let filtered = newValue.filter { "0123456789.,".contains($0) }
@@ -876,7 +876,7 @@ fileprivate struct ProductFormView: View {
                                             contenidoNetoString = filtered
                                         }
                                     }
-                                    .validationHint(isInvalid: contenidoInvalido, message: "> 0")
+                                    .validationHint(isInvalid: contenidoInvalido, message: "Debe de ser mayor a 0")
                                     .help("Cantidad que conforma la unidad (ej. 3)")
                                 FormField(title: "• Unidad de Medida", placeholder: "ej. Litro, Pieza, Kit", text: $unidadDeMedida, characterLimit: 11)
                                     .onChange(of: unidadDeMedida) { _, newValue in
@@ -889,6 +889,7 @@ fileprivate struct ProductFormView: View {
                                         }
                                     }
                                     .help("Unidad en la que controlas el stock")
+                                    .validationHint(isInvalid: unidadDeMedida.trimmingCharacters(in: .whitespaces).isEmpty, message: "Requerido")
                             }
                         }
                         
@@ -1280,6 +1281,10 @@ fileprivate struct ProductFormView: View {
         
         guard trimmedNombre.count >= 3 else {
             errorMsg = "El nombre del producto debe tener al menos 3 caracteres."
+            return
+        }
+        guard !unidadDeMedida.trimmingCharacters(in: .whitespaces).isEmpty else {
+            errorMsg = "La Unidad de Medida es requerida."
             return
         }
         guard let costo = Double(costoString.replacingOccurrences(of: ",", with: ".")), costo > 0 else {
