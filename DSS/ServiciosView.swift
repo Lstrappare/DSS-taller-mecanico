@@ -1547,7 +1547,7 @@ fileprivate struct ServicioFormView: View {
                         FormField(title: "Descripción", placeholder: "ej. Reemplazo de balatas y rectificación de discos", text: $descripcion, characterLimit: 231, isMultiline: true)
                         
                         HStack(spacing: 16) {
-                            FormField(title: "• Duración Estimada (Horas)", placeholder: "ej. 2.5", text: $duracionString)
+                            FormField(title: "• Duración Estimada (Horas)", placeholder: "ej. 2.5", text: $duracionString, isNumeric: true)
                                 .validationHint(isInvalid: duracionInvalida, message: "Debe ser > 0.")
                             
                             VStack(alignment: .leading, spacing: 4) {
@@ -1585,7 +1585,7 @@ fileprivate struct ServicioFormView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "2. Costos Directos", subtitle: "Mano de obra, refacciones e inventario")
                         HStack(spacing: 16) {
-                            FormField(title: "• Costo Mano de Obra ($)", placeholder: "ej. 500.00", text: $costoManoDeObraString)
+                            FormField(title: "• Costo Mano de Obra ($)", placeholder: "ej. 500.00", text: $costoManoDeObraString, isNumeric: true)
                                 .validationHint(isInvalid: costoMOInvalido, message: "Número válido ≥ 0")
                             
                             VStack(alignment: .leading, spacing: 4) {
@@ -1594,7 +1594,8 @@ fileprivate struct ServicioFormView: View {
                                     .font(.caption2)
                                     .foregroundColor(.gray)
                                 
-                                FormField(title: "Costo Refacciones ($)", placeholder: "ej. 300.00", text: $costoRefaccionesString)
+                                
+                                FormField(title: "Costo Refacciones ($)", placeholder: "ej. 300.00", text: $costoRefaccionesString, isNumeric: true)
                                     .validationHint(isInvalid: costoRefInvalido, message: "Número válido ≥ 0")
                                     .disabled(!requiereRefacciones)
                                     .opacity(requiereRefacciones ? 1 : 0.5)
@@ -1612,10 +1613,10 @@ fileprivate struct ServicioFormView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "3. Partes Internas", subtitle: "Ganancia y gastos operativos")
                         HStack(spacing: 16) {
-                            FormField(title: "• Ganancia Deseada ($)", placeholder: "ej. 400.00", text: $gananciaDeseadaString)
+                            FormField(title: "• Ganancia Deseada ($)", placeholder: "ej. 400.00", text: $gananciaDeseadaString, isNumeric: true)
                                 .validationHint(isInvalid: gananciaInvalida, message: "Número válido ≥ 0")
                             
-                            FormField(title: "• Gastos Administrativos ($)", placeholder: "ej. 150.00", text: $gastosAdminString)
+                            FormField(title: "• Gastos Administrativos ($)", placeholder: "ej. 150.00", text: $gastosAdminString, isNumeric: true)
                                 .validationHint(isInvalid: gastosAdminInvalido, message: "Número válido ≥ 0")
                         }
                     }
@@ -1632,7 +1633,7 @@ fileprivate struct ServicioFormView: View {
                             HStack(spacing: 8) {
                                 Toggle("Aplicar ISR", isOn: $aplicarISR)
                                     .toggleStyle(.switch)
-                                FormField(title: "% ISR", placeholder: "ej. 10", text: $porcentajeISRString)
+                                FormField(title: "% ISR", placeholder: "ej. 10", text: $porcentajeISRString, isNumeric: true)
                                     .frame(width: 80)
                                     .validationHint(isInvalid: pISRInvalido, message: "0-100")
                                     .disabled(!aplicarISR)
@@ -1724,7 +1725,7 @@ fileprivate struct ServicioFormView: View {
                         VStack(alignment: .leading, spacing: 16) {
                             SectionHeader(title: "Precio Final al Cliente", subtitle: "Ajustable")
                             HStack(spacing: 16) {
-                                FormField(title: "Precio final al cliente", placeholder: "ej. 2500.00", text: $precioFinalString)
+                                FormField(title: "Precio final al cliente", placeholder: "ej. 2500.00", text: $precioFinalString, isNumeric: true)
                                     .onChange(of: precioFinalString) { _, new in
                                         let final = Double(new.replacingOccurrences(of: ",", with: ".")) ?? 0
                                         precioModificadoManualmente = abs(final - desglose.precioFinal) > 0.009
@@ -2077,6 +2078,7 @@ fileprivate struct FormField: View {
     @Binding var text: String
     var characterLimit: Int? = nil
     var isMultiline: Bool = false
+    var isNumeric: Bool = false
     var suggestions: [String] = []
     
     var body: some View {
@@ -2125,6 +2127,16 @@ fileprivate struct FormField: View {
                 .onChange(of: text) { _, newValue in
                     if let limit = characterLimit, newValue.count > limit {
                         text = String(newValue.prefix(limit))
+                    }
+                    if isNumeric {
+                        let filtered = newValue.filter { "0123456789.".contains($0) }
+                        if filtered != newValue {
+                            text = filtered
+                        }
+                        // Evitar múltiples puntos
+                        if text.filter({ $0 == "." }).count > 1 {
+                             text = String(text.dropLast())
+                        }
                     }
                 }
             if !placeholder.isEmpty {
