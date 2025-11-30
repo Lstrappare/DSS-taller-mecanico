@@ -114,10 +114,10 @@ struct ServiciosView: View {
         .sheet(item: $modalMode) { mode in
             switch mode {
             case .add:
-                ServicioFormView(mode: .add)
+                ServicioFormView(mode: .add, modalMode: $modalMode)
                     .environment(\.modelContext, modelContext)
             case .edit(let servicio):
-                ServicioFormView(mode: .edit(servicio))
+                ServicioFormView(mode: .edit(servicio), modalMode: $modalMode)
                     .environment(\.modelContext, modelContext)
             case .assign(let servicio):
                 AsignarServicioModal(servicio: servicio, appState: appState)
@@ -1280,8 +1280,10 @@ fileprivate struct ServicioFormView: View {
     
     @Query private var productos: [Producto]
     @Query private var personal: [Personal]
+    @Query private var servicios: [Servicio] // Para validar duplicados
 
     let mode: ServiceModalMode
+    @Binding var modalMode: ServiceModalMode? // Para cambiar a modo edición si hay duplicado
     
     // Datos base
     @State private var nombre = ""
@@ -1332,8 +1334,23 @@ fileprivate struct ServicioFormView: View {
         }
     }
     
+
+    
     // Validaciones
-    private var nombreInvalido: Bool { nombre.trimmingCharacters(in: .whitespaces).count < 3 }
+    private var productoExistenteConMismoNombre: Servicio? {
+        let trimmed = nombre.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 3 else { return nil }
+        return servicios.first { s in
+            s.nombre.localizedCaseInsensitiveCompare(trimmed) == .orderedSame &&
+            s.id != servicioAEditar?.id
+        }
+    }
+    
+    private var nombreDuplicado: Bool { productoExistenteConMismoNombre != nil }
+    
+    private var nombreInvalido: Bool { 
+        nombre.trimmingCharacters(in: .whitespaces).count < 3 || nombreDuplicado
+    }
     private var duracionInvalida: Bool { Double(duracionString) == nil || (Double(duracionString) ?? 0) <= 0 }
     private var costoMOInvalido: Bool { Double(costoManoDeObraString) == nil || (Double(costoManoDeObraString) ?? -1) < 0 }
     private var gananciaInvalida: Bool { Double(gananciaDeseadaString) == nil || (Double(gananciaDeseadaString) ?? -1) < 0 }
@@ -1398,8 +1415,9 @@ fileprivate struct ServicioFormView: View {
         return dummy
     }
     
-    init(mode: ServiceModalMode) {
+    init(mode: ServiceModalMode, modalMode: Binding<ServiceModalMode?>) {
         self.mode = mode
+        self._modalMode = modalMode
         
         if case .edit(let servicio) = mode {
             self.servicioAEditar = servicio
@@ -1451,7 +1469,7 @@ fileprivate struct ServicioFormView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "1. Datos del Servicio", subtitle: "Información básica")
                         
-                        // Nombre con candado en edición
+                        // Nombre con candado en edición y validación de duplicados
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
                                 Text("• Nombre del Servicio").font(.caption2).foregroundColor(.gray)
@@ -1461,6 +1479,7 @@ fileprivate struct ServicioFormView: View {
                                         .font(.caption2)
                                 }
                             }
+                            
                             HStack(spacing: 6) {
                                 TextField("", text: $nombre)
                                     .disabled(servicioAEditar != nil && !isNombreUnlocked)
@@ -1472,7 +1491,18 @@ fileprivate struct ServicioFormView: View {
                                         RoundedRectangle(cornerRadius: 8)
                                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                                     )
-                                    .help("Nombre descriptivo del servicio")
+                                    .onChange(of: nombre) { _, newValue in
+                                        if newValue.count > 21 {
+                                            nombre = String(newValue.prefix(21))
+                                        }
+                                    }
+                                    .help("Identificador único del producto (Máx 21 caracteres)")
+                                
+                                // Contador manual para Nombre
+                                Text("\(nombre.count)/21")
+                                    .font(.caption2)
+                                    .foregroundColor(nombre.count >= 21 ? .red : .gray)
+                                    .frame(width: 40, alignment: .trailing)
                                 
                                 if servicioAEditar != nil {
                                     Button {
@@ -1487,9 +1517,31 @@ fileprivate struct ServicioFormView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .foregroundColor(isNombreUnlocked ? .green : .red)
+                                    .help(isNombreUnlocked ? "Bloquear edición del nombre" : "Requiere autorización")
                                 }
                             }
-                            .validationHint(isInvalid: nombreInvalido, message: "El nombre debe tener al menos 3 caracteres.")
+                            .validationHint(isInvalid: nombreInvalido, message: nombreDuplicado ? "Este nombre ya está en uso." : "El nombre debe tener al menos 3 caracteres.")
+                            
+                            // Botón para editar el existente si hay duplicado
+                            if let existente = productoExistenteConMismoNombre {
+                                Button {
+                                    // Cambiar a modo edición del producto existente
+                                    modalMode = .edit(existente)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "pencil.circle.fill")
+                                        Text("Editar '\(existente.nombre)' existente")
+                                    }
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.blue.opacity(0.2))
+                                    .foregroundColor(.blue)
+                                    .cornerRadius(6)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, 2)
+                            }
                         }
                         
                         FormField(title: "Descripción", placeholder: "ej. Reemplazo de balatas y rectificación de discos", text: $descripcion)
