@@ -1436,208 +1436,292 @@ fileprivate struct ServicioFormView: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            // Título y guía
             VStack(spacing: 4) {
-                Text(formTitle).font(.title2).fontWeight(.bold)
+                Text(formTitle).font(.title).fontWeight(.bold)
                 Text("Completa los datos. Los campos marcados con • son obligatorios.")
-                    .font(.caption).foregroundColor(.gray)
+                    .font(.footnote).foregroundColor(.gray)
             }
-            .padding(.top, 10).padding(.bottom, 6)
+            .padding(16)
 
-            Form {
-                Section {
-                    SectionHeader(title: "Detalles del Servicio", subtitle: nil)
+            ScrollView {
+                VStack(spacing: 24) {
                     
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text("• Nombre del Servicio").font(.caption2).foregroundColor(.gray)
-                            if servicioAEditar != nil {
-                                Image(systemName: isNombreUnlocked ? "lock.open.fill" : "lock.fill")
-                                    .foregroundColor(isNombreUnlocked ? .green : .red)
-                                    .font(.caption2)
-                            }
-                        }
-                        HStack(spacing: 8) {
-                            ZStack(alignment: .leading) {
-                                TextField("", text: $nombre)
-                                    .disabled(servicioAEditar != nil && !isNombreUnlocked)
-                                    .padding(6).background(Color("MercedesBackground").opacity(0.9)).cornerRadius(6)
-                                if nombre.isEmpty {
-                                    Text("ej. Cambio de Frenos Delanteros")
-                                        .foregroundColor(Color.white.opacity(0.35))
-                                        .padding(.horizontal, 10).allowsHitTesting(false)
-                                }
-                            }
-                            if servicioAEditar != nil {
-                                Button {
-                                    if isNombreUnlocked { isNombreUnlocked = false }
-                                    else {
-                                        authReason = .unlockNombre
-                                        showingAuthModal = true
-                                    }
-                                } label: {
-                                    Text(isNombreUnlocked ? "Bloquear" : "Desbloquear")
+                    // Sección 1: Datos del Servicio
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "1. Datos del Servicio", subtitle: "Información básica")
+                        
+                        // Nombre con candado en edición
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text("• Nombre del Servicio").font(.caption2).foregroundColor(.gray)
+                                if servicioAEditar != nil {
+                                    Image(systemName: isNombreUnlocked ? "lock.open.fill" : "lock.fill")
+                                        .foregroundColor(isNombreUnlocked ? .green : .red)
                                         .font(.caption2)
                                 }
-                                .buttonStyle(.plain)
-                                .foregroundColor(isNombreUnlocked ? .green : .red)
                             }
-                        }
-                        .validationHint(isInvalid: nombreInvalido, message: "El nombre debe tener al menos 3 caracteres.")
-                    }
-                    
-                    FormField(title: "Descripción", placeholder: "ej. Reemplazo de balatas y rectificación de discos", text: $descripcion)
-                    
-                    HStack(spacing: 12) {
-                        FormField(title: "• Duración Estimada (Horas)", placeholder: "ej. 2.5", text: $duracionString)
-                            .validationHint(isInvalid: duracionInvalida, message: "Debe ser un número > 0.")
-                        Picker("• Especialidad Requerida", selection: $especialidadRequerida) {
-                            Text("Seleccionar...").tag("")
-                            ForEach(especialidadesDisponibles, id: \.self) { Text($0).tag($0) }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: .infinity)
-                        Picker("• Rol Requerido", selection: $rolRequerido) {
-                            ForEach(Rol.allCases, id: \.self) { rol in
-                                Text(rol.rawValue).tag(rol)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-                
-                // 1. Costos Directos
-                Section {
-                    SectionHeader(title: "1. Costos Directos", subtitle: "Mano de obra, refacciones e inventario")
-                    HStack(spacing: 12) {
-                        FormField(title: "• Costo Mano de Obra ($)", placeholder: "ej. 500.00", text: $costoManoDeObraString)
-                            .validationHint(isInvalid: costoMOInvalido, message: "Número válido ≥ 0")
-                        
-                        Toggle("¿Refacciones?", isOn: $requiereRefacciones)
-                            .toggleStyle(.switch)
-                            .font(.caption2)
-                            .foregroundColor(.gray)
-                        
-                        FormField(title: "Costo Refacciones ($)", placeholder: "ej. 300.00", text: $costoRefaccionesString)
-                            .validationHint(isInvalid: costoRefInvalido, message: "Número válido ≥ 0")
-                            .disabled(!requiereRefacciones)
-                            .opacity(requiereRefacciones ? 1 : 0.5)
-                    }
-                    HStack {
-                        Text("Costo de inventario (automático): $\(costoIngredientes, specifier: "%.2f")")
-                            .font(.caption2)
-                            .foregroundColor(.gray)
-                        Spacer()
-                    }
-                }
-                
-                // 2. Partes Internas (Ganancia y Gastos)
-                Section {
-                    SectionHeader(title: "2. Partes Internas", subtitle: "Ganancia y gastos operativos")
-                    HStack(spacing: 12) {
-                        FormField(title: "• Ganancia Deseada ($)", placeholder: "ej. 400.00", text: $gananciaDeseadaString)
-                            .validationHint(isInvalid: gananciaInvalida, message: "Número válido ≥ 0")
-                        
-                        FormField(title: "• Gastos Administrativos ($)", placeholder: "ej. 150.00", text: $gastosAdminString)
-                            .validationHint(isInvalid: gastosAdminInvalido, message: "Número válido ≥ 0")
-                    }
-                }
-                
-                // Configuración de Impuestos
-                Section {
-                    SectionHeader(title: "Impuestos", subtitle: "IVA e ISR")
-                    HStack(spacing: 12) {
-                        Toggle("Aplicar IVA (16%)", isOn: $aplicarIVA)
-                        Toggle("Aplicar ISR (sobre ganancia)", isOn: $aplicarISR)
-                        FormField(title: "% ISR", placeholder: "ej. 10", text: $porcentajeISRString)
-                            .validationHint(isInvalid: pISRInvalido, message: "0 a 100.")
-                            .disabled(!aplicarISR)
-                            .opacity(aplicarISR ? 1 : 0.5)
-                    }
-                    Text("El ISR se calcula solo sobre la ganancia deseada y NO se suma al precio final (es gasto interno).")
-                        .font(.caption2)
-                        .foregroundColor(.yellow)
-                }
-                
-                // Ingredientes
-                Section {
-                    SectionHeader(title: "Productos del Inventario", subtitle: "Selecciona los productos a utilizar")
-                    
-                    List(productos) { producto in
-                        HStack {
-                            Text("\(producto.nombre) (\(producto.unidadDeMedida))")
-                            Spacer()
                             HStack(spacing: 6) {
-                                TextField("0.0", text: Binding(
-                                    get: {
-                                        cantidadesProductos[producto.nombre].map { String(format: "%.2f", $0) } ?? ""
-                                    },
-                                    set: {
-                                        cantidadesProductos[producto.nombre] = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0
-                                    }
-                                ))
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 80)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                TextField("", text: $nombre)
+                                    .disabled(servicioAEditar != nil && !isNombreUnlocked)
+                                    .textFieldStyle(.plain)
+                                    .padding(10)
+                                    .background(Color("MercedesBackground"))
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .help("Nombre descriptivo del servicio")
                                 
-                                if (cantidadesProductos[producto.nombre] ?? 0) > 0 {
+                                if servicioAEditar != nil {
                                     Button {
-                                        cantidadesProductos[producto.nombre] = 0
+                                        if isNombreUnlocked { isNombreUnlocked = false }
+                                        else {
+                                            authReason = .unlockNombre
+                                            showingAuthModal = true
+                                        }
                                     } label: {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundColor(.gray)
+                                        Text(isNombreUnlocked ? "Bloquear" : "Desbloquear")
+                                            .font(.caption)
                                     }
                                     .buttonStyle(.plain)
+                                    .foregroundColor(isNombreUnlocked ? .green : .red)
                                 }
                             }
+                            .validationHint(isInvalid: nombreInvalido, message: "El nombre debe tener al menos 3 caracteres.")
                         }
-                        .listRowBackground(Color("MercedesCard"))
-                    }
-                    .frame(minHeight: 150, maxHeight: 250)
-                }
-                
-                // Desglose Final
-                Section {
-                    SectionHeader(title: "Desglose de Precio", subtitle: "Cálculo automático")
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 10)], spacing: 6) {
-                        roField("Costos Directos", desglose.costosDirectos)
-                        roField("Ganancia Real", desglose.partesInternas - (Double(gastosAdminString) ?? 0)) // Ganancia + Gastos - Gastos = Ganancia
-                        roField("Gastos Administrativos", Double(gastosAdminString) ?? 0)
-                        roField("Subtotal (Sin IVA)", desglose.subtotal)
-                        roField("IVA (16%)", desglose.iva)
-                        roField("Precio Final", desglose.precioFinal)
-                        roField("ISR (Gasto Interno)", desglose.isrSobreGanancia)
-                        roField("Ganancia Neta (Post ISR)", desglose.gananciaNeta)
+                        
+                        FormField(title: "Descripción", placeholder: "ej. Reemplazo de balatas y rectificación de discos", text: $descripcion)
+                        
+                        HStack(spacing: 16) {
+                            FormField(title: "• Duración Estimada (Horas)", placeholder: "ej. 2.5", text: $duracionString)
+                                .validationHint(isInvalid: duracionInvalida, message: "Debe ser > 0.")
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("• Especialidad Requerida").font(.caption2).foregroundColor(.gray)
+                                Picker("", selection: $especialidadRequerida) {
+                                    Text("Seleccionar...").tag("")
+                                    ForEach(especialidadesDisponibles, id: \.self) { Text($0).tag($0) }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity)
+                                .padding(6)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(8)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("• Rol Requerido").font(.caption2).foregroundColor(.gray)
+                                Picker("", selection: $rolRequerido) {
+                                    ForEach(Rol.allCases, id: \.self) { rol in
+                                        Text(rol.rawValue).tag(rol)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity)
+                                .padding(6)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(8)
+                            }
+                        }
                     }
                     
-                    // Precio sugerido y final
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Precio Calculado: $\(desglose.precioFinal, specifier: "%.2f")")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        HStack(spacing: 10) {
-                            FormField(title: "Precio final al cliente (editable)", placeholder: "ej. 2500.00", text: $precioFinalString)
-                                .onChange(of: precioFinalString) { _, new in
-                                    let final = Double(new.replacingOccurrences(of: ",", with: ".")) ?? 0
-                                    precioModificadoManualmente = abs(final - desglose.precioFinal) > 0.009
-                                }
-                            if precioModificadoManualmente {
-                                Text("Modificado manualmente")
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // Sección 2: Costos Directos
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "2. Costos Directos", subtitle: "Mano de obra, refacciones e inventario")
+                        HStack(spacing: 16) {
+                            FormField(title: "• Costo Mano de Obra ($)", placeholder: "ej. 500.00", text: $costoManoDeObraString)
+                                .validationHint(isInvalid: costoMOInvalido, message: "Número válido ≥ 0")
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Toggle("¿Refacciones?", isOn: $requiereRefacciones)
+                                    .toggleStyle(.switch)
                                     .font(.caption2)
-                                    .padding(.horizontal, 6).padding(.vertical, 3)
-                                    .background(Color.yellow.opacity(0.2))
-                                    .foregroundColor(.yellow)
-                                    .cornerRadius(6)
+                                    .foregroundColor(.gray)
+                                
+                                FormField(title: "Costo Refacciones ($)", placeholder: "ej. 300.00", text: $costoRefaccionesString)
+                                    .validationHint(isInvalid: costoRefInvalido, message: "Número válido ≥ 0")
+                                    .disabled(!requiereRefacciones)
+                                    .opacity(requiereRefacciones ? 1 : 0.5)
                             }
                         }
-                        Text("El precio calculado se mantiene como referencia si editas el precio final.")
-                            .font(.caption2).foregroundColor(.gray)
+                        HStack {
+                            roField("Costo de inventario (automático)", costoIngredientes)
+                            Spacer()
+                        }
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // Sección 3: Partes Internas
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "3. Partes Internas", subtitle: "Ganancia y gastos operativos")
+                        HStack(spacing: 16) {
+                            FormField(title: "• Ganancia Deseada ($)", placeholder: "ej. 400.00", text: $gananciaDeseadaString)
+                                .validationHint(isInvalid: gananciaInvalida, message: "Número válido ≥ 0")
+                            
+                            FormField(title: "• Gastos Administrativos ($)", placeholder: "ej. 150.00", text: $gastosAdminString)
+                                .validationHint(isInvalid: gastosAdminInvalido, message: "Número válido ≥ 0")
+                        }
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // Sección 4: Impuestos
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "4. Impuestos", subtitle: "IVA e ISR")
+                        HStack(spacing: 24) {
+                            Toggle("Aplicar IVA (16%)", isOn: $aplicarIVA)
+                                .toggleStyle(.switch)
+                            
+                            HStack(spacing: 8) {
+                                Toggle("Aplicar ISR", isOn: $aplicarISR)
+                                    .toggleStyle(.switch)
+                                FormField(title: "% ISR", placeholder: "ej. 10", text: $porcentajeISRString)
+                                    .frame(width: 80)
+                                    .validationHint(isInvalid: pISRInvalido, message: "0-100")
+                                    .disabled(!aplicarISR)
+                                    .opacity(aplicarISR ? 1 : 0.5)
+                            }
+                        }
+                        Text("El ISR se calcula solo sobre la ganancia deseada y NO se suma al precio final (es gasto interno).")
+                            .font(.caption2)
+                            .foregroundColor(.yellow)
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // Sección 5: Productos del Inventario
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "5. Productos del Inventario", subtitle: "Selecciona los productos a utilizar")
+                        
+                        VStack(spacing: 8) {
+                            ForEach(productos) { producto in
+                                HStack {
+                                    Text("\(producto.nombre) (\(producto.unidadDeMedida))")
+                                        .font(.subheadline)
+                                        .foregroundColor(.white)
+                                    Spacer()
+                                    HStack(spacing: 6) {
+                                        TextField("0.0", text: Binding(
+                                            get: {
+                                                cantidadesProductos[producto.nombre].map { String(format: "%.2f", $0) } ?? ""
+                                            },
+                                            set: {
+                                                cantidadesProductos[producto.nombre] = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0
+                                            }
+                                        ))
+                                        .multilineTextAlignment(.trailing)
+                                        .frame(width: 80)
+                                        .textFieldStyle(.plain)
+                                        .padding(6)
+                                        .background(Color("MercedesBackground"))
+                                        .cornerRadius(6)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                        )
+                                        
+                                        if (cantidadesProductos[producto.nombre] ?? 0) > 0 {
+                                            Button {
+                                                cantidadesProductos[producto.nombre] = 0
+                                            } label: {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundColor(.gray)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                }
+                                .padding(8)
+                                .background(Color("MercedesBackground").opacity(0.3))
+                                .cornerRadius(8)
+                            }
+                        }
+                        .frame(maxHeight: 250)
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // Sección 6: Desglose Final
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "Desglose de Precio", subtitle: "Cálculo automático", color: "MercedesPetrolGreen")
+                        
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 8) {
+                            roField("Costos Directos", desglose.costosDirectos)
+                            roField("Ganancia Real", desglose.partesInternas - (Double(gastosAdminString) ?? 0))
+                            roField("Gastos Administrativos", Double(gastosAdminString) ?? 0)
+                            roField("Subtotal (Sin IVA)", desglose.subtotal)
+                            roField("IVA (16%)", desglose.iva)
+                            roField("Precio Final", desglose.precioFinal)
+                            roField("ISR (Gasto Interno)", desglose.isrSobreGanancia)
+                            roField("Ganancia Neta (Post ISR)", desglose.gananciaNeta)
+                        }
+                        .padding(16)
+                        .background(Color("MercedesBackground").opacity(0.2))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color("MercedesPetrolGreen").opacity(0.5), lineWidth: 1)
+                        )
+                        
+                        // Precio final editable
+                        VStack(alignment: .leading, spacing: 16) {
+                            SectionHeader(title: "Precio Final al Cliente", subtitle: "Ajustable")
+                            HStack(spacing: 16) {
+                                FormField(title: "Precio final al cliente", placeholder: "ej. 2500.00", text: $precioFinalString)
+                                    .onChange(of: precioFinalString) { _, new in
+                                        let final = Double(new.replacingOccurrences(of: ",", with: ".")) ?? 0
+                                        precioModificadoManualmente = abs(final - desglose.precioFinal) > 0.009
+                                    }
+                                if precioModificadoManualmente {
+                                    Text("Modificado manualmente")
+                                        .font(.caption2)
+                                        .padding(.horizontal, 8).padding(.vertical, 4)
+                                        .background(Color.yellow.opacity(0.2))
+                                        .foregroundColor(.yellow)
+                                        .cornerRadius(6)
+                                }
+                            }
+                            Text("El precio calculado se mantiene como referencia si editas el precio final.")
+                                .font(.caption2).foregroundColor(.gray)
+                        }
+                    }
+                    
+                    // Zona de Peligro
+                    if case .edit = mode {
+                        Divider().background(Color.red.opacity(0.3))
+                        VStack(spacing: 12) {
+                            Text("Esta acción no se puede deshacer y eliminará permanentemente el servicio.")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .multilineTextAlignment(.center)
+                            
+                            Button(role: .destructive) {
+                                authReason = .deleteServicio
+                                showingAuthModal = true
+                            } label: {
+                                Label("Eliminar servicio permanentemente", systemImage: "trash.fill")
+                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 24)
+                                    .background(Color.red.opacity(0.15))
+                                    .foregroundColor(.red)
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.red.opacity(0.5), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.top, 8)
                     }
                 }
+                .padding(24)
             }
-            .textFieldStyle(PlainTextFieldStyle())
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
             .onAppear {
                 let todasLasHabilidades = personal.flatMap { $0.especialidades }
                 especialidadesDisponibles = Array(Set(todasLasHabilidades)).sorted()
@@ -1647,11 +1731,9 @@ fileprivate struct ServicioFormView: View {
                     if let primera = especialidadesDisponibles.first {
                         especialidadRequerida = primera
                     }
-                    // Inicializar precio final con el sugerido al abrir "add"
                     precioFinalString = String(format: "%.2f", desglose.precioFinal)
                 }
             }
-            // Sincronización automática
             .onChange(of: costoManoDeObraString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
             .onChange(of: gananciaDeseadaString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
             .onChange(of: gastosAdminString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
@@ -1662,55 +1744,74 @@ fileprivate struct ServicioFormView: View {
             .onChange(of: porcentajeISRString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
             .onChange(of: cantidadesProductos) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
             
+            // Mensaje de Error
             if let errorMsg {
                 Text(errorMsg)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundColor(.red)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, 6)
             }
             
-            HStack {
-                Button("Cancelar") { dismiss() }
-                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.gray)
+            // Barra de Botones
+            HStack(spacing: 12) {
+                Button { dismiss() } label: {
+                    Text("Cancelar")
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .background(Color("MercedesBackground"))
+                        .foregroundColor(.gray)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
                 
-                if case .edit = mode {
-                    Button("Eliminar", role: .destructive) {
-                        authReason = .deleteServicio
-                        showingAuthModal = true
-                    }
-                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.red)
-                }
                 Spacer()
-                Button(servicioAEditar == nil ? "Añadir Servicio" : "Guardar Cambios") {
+                
+                Button {
                     guardarCambios()
+                } label: {
+                    Text(servicioAEditar == nil ? "Guardar y añadir" : "Guardar cambios")
+                        .fontWeight(.semibold)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 24)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                        .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
-                .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 10)
-                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(6)
+                .buttonStyle(.plain)
                 .disabled(nombreInvalido || duracionInvalida || costoMOInvalido || gananciaInvalida || gastosAdminInvalido || costoRefInvalido || pISRInvalido || especialidadRequerida.isEmpty)
                 .opacity((nombreInvalido || duracionInvalida || costoMOInvalido || gananciaInvalida || gastosAdminInvalido || costoRefInvalido || pISRInvalido || especialidadRequerida.isEmpty) ? 0.6 : 1.0)
             }
-            .padding(.horizontal).padding(.bottom, 6)
+            .padding(20)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 760, minHeight: 600, maxHeight: 600)
-        .cornerRadius(12)
+        .frame(minWidth: 800, minHeight: 600, maxHeight: 600)
+        .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
         }
     }
     
     private func roField(_ title: String, _ value: Double) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.caption2).foregroundColor(.gray)
             Text(value.formatted(.number.precision(.fractionLength(2))))
-                .font(.subheadline)
+                .font(.headline)
                 .foregroundColor(.white)
-                .padding(6)
+                .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color("MercedesBackground").opacity(0.6))
-                .cornerRadius(6)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
         }
     }
     
@@ -1905,9 +2006,10 @@ fileprivate struct ServicioFormView: View {
 fileprivate struct SectionHeader: View {
     var title: String
     var subtitle: String?
+    var color: String? = nil
     var body: some View {
         HStack {
-            Text(title).font(.headline).foregroundColor(.white)
+            Text(title).font(.headline).foregroundColor(color != nil ? Color(color!) : .white)
             Spacer()
             if let subtitle, !subtitle.isEmpty {
                 Text(subtitle).font(.caption2).foregroundColor(.gray)
@@ -1921,23 +2023,56 @@ fileprivate struct FormField: View {
     var title: String
     var placeholder: String
     @Binding var text: String
+    var characterLimit: Int? = nil
+    var suggestions: [String] = []
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption2)
-                .foregroundColor(.gray)
-            ZStack(alignment: .leading) {
-                TextField("", text: $text)
-                    .padding(6)
-                    .background(Color("MercedesBackground").opacity(0.9))
-                    .cornerRadius(6)
-                if text.isEmpty {
-                    Text(placeholder)
-                        .foregroundColor(Color.white.opacity(0.35))
-                        .padding(.horizontal, 10)
-                        .allowsHitTesting(false)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                Spacer()
+                if let limit = characterLimit {
+                    Text("\(text.count)/\(limit)")
+                        .font(.caption2)
+                        .foregroundColor(text.count >= limit ? .red : .gray)
                 }
+            }
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .frame(maxWidth: .infinity)
+                .background(Color("MercedesBackground"))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
+                .overlay(
+                    HStack {
+                        Spacer()
+                        if !suggestions.isEmpty {
+                            Menu {
+                                ForEach(suggestions, id: \.self) { suggestion in
+                                    Button(suggestion) {
+                                        text = suggestion
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "chevron.down.circle.fill")
+                                    .foregroundColor(.gray)
+                                    .padding(.trailing, 8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                )
+            if !placeholder.isEmpty {
+                Text(placeholder)
+                    .font(.caption2)
+                    .foregroundColor(.gray.opacity(0.7))
+                    .padding(.leading, 4)
             }
         }
     }
