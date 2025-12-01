@@ -455,8 +455,6 @@ fileprivate struct ClienteConVehiculoFormView: View {
     @State private var marca = ""
     @State private var modelo = ""
     @State private var anioString = ""
-    @State private var observaciones = ""
-    
     @State private var errorMsg: String?
     
     // Bools de Validación
@@ -505,11 +503,6 @@ fileprivate struct ClienteConVehiculoFormView: View {
     private var modeloInvalido: Bool {
         let m = modelo.trimmingCharacters(in: .whitespaces)
         return m.count < 2
-    }
-    private var observacionesInvalidas: Bool {
-        let obs = observaciones.trimmingCharacters(in: .whitespaces)
-        if obs.isEmpty { return false }
-        return obs.count < 150 || obs.count > 300
     }
 
     var body: some View {
@@ -645,14 +638,7 @@ fileprivate struct ClienteConVehiculoFormView: View {
                                     if newValue.count > 40 { modelo = String(newValue.prefix(40)) }
                                 }
                                 .validationHint(isInvalid: modeloInvalido, message: "Mínimo 2 caracteres.")
-                                .validationHint(isInvalid: modeloInvalido, message: "Mínimo 2 caracteres.")
                         }
-                        
-                        FormField(title: "Observaciones (Opcional)", placeholder: "Detalles del estado del vehículo...", text: $observaciones, characterLimit: 300)
-                            .onChange(of: observaciones) { _, newValue in
-                                if newValue.count > 300 { observaciones = String(newValue.prefix(300)) }
-                            }
-                            .validationHint(isInvalid: observacionesInvalidas, message: "Debe tener entre 150 y 300 caracteres.")
                     }
                 }
                 .padding(24)
@@ -697,8 +683,8 @@ fileprivate struct ClienteConVehiculoFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido || observacionesInvalidas)
-                .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido || observacionesInvalidas) ? 0.6 : 1.0)
+                .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido)
+                .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
@@ -738,17 +724,13 @@ fileprivate struct ClienteConVehiculoFormView: View {
             errorMsg = "La Marca y el Modelo deben tener al menos 2 caracteres."
             return
         }
-        if observacionesInvalidas {
-            errorMsg = "Las observaciones deben tener entre 150 y 300 caracteres."
-            return
-        }
         guard let anio = Int(anioString) else {
             errorMsg = "El Año debe ser un número."
             return
         }
         
         let nuevoCliente = Cliente(nombre: nombreTrimmed, telefono: telefonoTrimmed, email: email.trimmingCharacters(in: .whitespaces))
-        let nuevoVehiculo = Vehiculo(placas: placasTrimmed, marca: marcaTrimmed, modelo: modeloTrimmed, anio: anio, observaciones: observaciones.trimmingCharacters(in: .whitespaces))
+        let nuevoVehiculo = Vehiculo(placas: placasTrimmed, marca: marcaTrimined(marcaTrimmed), modelo: modeloTrimmed, anio: anio)
         
         nuevoVehiculo.cliente = nuevoCliente
         nuevoCliente.vehiculos.append(nuevoVehiculo)
@@ -1189,11 +1171,6 @@ fileprivate struct VehiculoFormView: View {
     private var modeloInvalido: Bool {
         vehiculo.modelo.trimmingCharacters(in: .whitespaces).count < 2
     }
-    private var observacionesInvalidas: Bool {
-        let obs = vehiculo.observaciones.trimmingCharacters(in: .whitespaces)
-        if obs.isEmpty { return false }
-        return obs.count < 150 || obs.count > 300
-    }
     
     init(cliente: Cliente) {
         self.clientePadre = cliente
@@ -1321,12 +1298,6 @@ fileprivate struct VehiculoFormView: View {
                                 }
                                 .validationHint(isInvalid: anioInvalido, message: "Año inválido.")
                         }
-                        
-                        FormField(title: "Observaciones (Opcional)", placeholder: "Detalles del estado del vehículo...", text: $vehiculo.observaciones, characterLimit: 300)
-                            .onChange(of: vehiculo.observaciones) { _, newValue in
-                                if newValue.count > 300 { vehiculo.observaciones = String(newValue.prefix(300)) }
-                            }
-                            .validationHint(isInvalid: observacionesInvalidas, message: "Debe tener entre 150 y 300 caracteres.")
                     }
                     
                     if esModoEdicion {
@@ -1401,8 +1372,8 @@ fileprivate struct VehiculoFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(placasInvalida || anioInvalido || marcaInvalida || modeloInvalido || observacionesInvalidas)
-                .opacity((placasInvalida || anioInvalido || marcaInvalida || modeloInvalido || observacionesInvalidas) ? 0.6 : 1.0)
+                .disabled(placasInvalida || anioInvalido || marcaInvalida || modeloInvalido)
+                .opacity((placasInvalida || anioInvalido || marcaInvalida || modeloInvalido) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
@@ -1475,10 +1446,6 @@ fileprivate struct VehiculoFormView: View {
         }
         guard vehiculo.anio > 1900 && vehiculo.anio <= (Calendar.current.component(.year, from: Date()) + 1) else {
             errorMsg = "Por favor, ingresa un año válido."
-            return
-        }
-        if observacionesInvalidas {
-            errorMsg = "Las observaciones deben tener entre 150 y 300 caracteres."
             return
         }
         

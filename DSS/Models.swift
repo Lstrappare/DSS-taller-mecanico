@@ -852,19 +852,17 @@ class Vehiculo {
     var marca: String
     var modelo: String
     var anio: Int
-    var observaciones: String
 
     var cliente: Cliente?
 
     @Relationship(deleteRule: .cascade)
     var serviciosEnProceso: [ServicioEnProceso] = []
 
-    init(placas: String, marca: String, modelo: String, anio: Int, observaciones: String = "") {
+    init(placas: String, marca: String, modelo: String, anio: Int) {
         self.placas = placas
         self.marca = marca
         self.modelo = modelo
         self.anio = anio
-        self.observaciones = observaciones
     }
 }
 
