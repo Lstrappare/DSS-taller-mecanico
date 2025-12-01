@@ -1289,7 +1289,7 @@ fileprivate struct ServicioFormView: View {
     @State private var nombre = ""
     @State private var descripcion = ""
     @State private var especialidadRequerida = ""
-    @State private var rolRequerido: Rol = .ayudante
+    @State private var rolRequerido: Rol? = nil
     @State private var duracionString = ""
     
     // Ingredientes
@@ -1410,7 +1410,7 @@ fileprivate struct ServicioFormView: View {
             nombre: nombre.isEmpty ? "tmp" : nombre,
             descripcion: descripcion,
             especialidadRequerida: especialidadRequerida,
-            rolRequerido: rolRequerido,
+            rolRequerido: rolRequerido ?? .ayudante,
             ingredientes: ingredientesArray,
             precioAlCliente: Double(precioFinalString) ?? 0,
             duracionHoras: Double(duracionString) ?? 1.0,
@@ -1595,13 +1595,15 @@ fileprivate struct ServicioFormView: View {
                                 .padding(6)
                                 .background(Color("MercedesBackground"))
                                 .cornerRadius(8)
+                                .validationHint(isInvalid: especialidadRequerida.isEmpty, message: "Requerido")
                             }
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("• Rol Requerido").font(.caption2).foregroundColor(.gray)
                                 Picker("", selection: $rolRequerido) {
+                                    Text("Seleccionar...").tag(nil as Rol?)
                                     ForEach(Rol.allCases, id: \.self) { rol in
-                                        Text(rol.rawValue).tag(rol)
+                                        Text(rol.rawValue).tag(rol as Rol?)
                                     }
                                 }
                                 .pickerStyle(.menu)
@@ -1609,6 +1611,7 @@ fileprivate struct ServicioFormView: View {
                                 .padding(6)
                                 .background(Color("MercedesBackground"))
                                 .cornerRadius(8)
+                                .validationHint(isInvalid: rolRequerido == nil, message: "Requerido")
                             }
                         }
                     }
@@ -1861,10 +1864,7 @@ fileprivate struct ServicioFormView: View {
                 especialidadesDisponibles = Array(Set(todasLasHabilidades)).sorted()
                 
                 if servicioAEditar == nil {
-                    rolRequerido = .ayudante
-                    if let primera = especialidadesDisponibles.first {
-                        especialidadRequerida = primera
-                    }
+                    // Ya no forzamos valores por defecto aquí
                     precioFinalString = String(format: "%.2f", desglose.precioFinal)
                 }
             }
@@ -2033,6 +2033,11 @@ fileprivate struct ServicioFormView: View {
             errorMsg = "% ISR inválido."
             return
         }
+        // NEW: ensure rolRequerido is selected for both edit/add
+        guard let rol = rolRequerido else {
+            errorMsg = "Selecciona un rol requerido."
+            return
+        }
         
         let ingredientesArray: [Ingrediente] = cantidadesProductos.compactMap { (nombre, cantidad) in
             guard cantidad > 0 else { return nil }
@@ -2046,7 +2051,7 @@ fileprivate struct ServicioFormView: View {
             servicio.nombre = trimmedNombre
             servicio.descripcion = descripcion
             servicio.especialidadRequerida = especialidadRequerida
-            servicio.rolRequerido = rolRequerido
+            servicio.rolRequerido = rol
             servicio.duracionHoras = duracion
             servicio.ingredientes = ingredientesArray
             
@@ -2063,6 +2068,10 @@ fileprivate struct ServicioFormView: View {
             servicio.isrPorcentajeEstimado = pISR
             
             servicio.precioFinalAlCliente = final
+           if nombreInvalido || duracionInvalida || costoMOInvalido || gananciaInvalida || gastosAdminInvalido || costoRefInvalido || pISRInvalido || especialidadRequerida.isEmpty || rolRequerido == nil {
+            errorMsg = "Por favor corrige los campos marcados en rojo."
+            return
+        }
             servicio.precioModificadoManualmente = precioModificadoManualmente
             
             // Compatibilidad
@@ -2072,7 +2081,7 @@ fileprivate struct ServicioFormView: View {
                 nombre: trimmedNombre,
                 descripcion: descripcion,
                 especialidadRequerida: especialidadRequerida,
-                rolRequerido: rolRequerido,
+                rolRequerido: rol,
                 ingredientes: ingredientesArray,
                 precioAlCliente: final, // compat
                 duracionHoras: duracion,
@@ -2268,3 +2277,4 @@ fileprivate struct FormModal<Content: View>: View {
         .preferredColorScheme(.dark)
     }
 }
+
