@@ -1414,7 +1414,6 @@ fileprivate struct PersonalFormView: View {
                     rfcInvalido ||
                     horasInvalidas ||
                     salarioMinimoInvalido ||
-                    salarioMinimoInvalido ||
                     diasInsuficientes ||
                     comisionesInvalidas ||
                     factorIntegracionInvalido ||
@@ -1431,7 +1430,6 @@ fileprivate struct PersonalFormView: View {
                      emailInvalido ||
                      rfcInvalido ||
                      horasInvalidas ||
-                     salarioMinimoInvalido ||
                      salarioMinimoInvalido ||
                      diasInsuficientes ||
                      comisionesInvalidas ||
@@ -1727,6 +1725,11 @@ fileprivate struct PersonalFormView: View {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces).capitalized }
             .filter { !$0.isEmpty }
+        
+        if especialidadesArray.isEmpty {
+            errorMsg = "Debes ingresar al menos una especialidad."
+            return
+        }
         
         // Cálculos previos
         let salarioDiarioBase = salarioMinimoRef
