@@ -772,13 +772,12 @@ fileprivate struct AsignarServicioModal: View {
     private func recalcularPreview() {
         // Candidato justo por balance
         let ahora = Date()
-        let fin = ahora.addingTimeInterval(servicio.duracionHoras * 3600)
         let candidatos = personal.filter { mec in
             mec.isAsignable &&
             mec.especialidades.contains(servicio.especialidadRequerida) &&
             mec.rol == servicio.rolRequerido
         }
-        let ordenados = ordenarCandidatosJusto(candidatos: candidatos, inicio: ahora, fin: fin)
+        let ordenados = ordenarCandidatosJusto(candidatos: candidatos, inicio: ahora, duracionHoras: servicio.duracionHoras)
         candidato = ordenados.first
         
         // Costo y stock
@@ -831,14 +830,13 @@ fileprivate struct AsignarServicioModal: View {
         
         // Selección justa en el momento de confirmar
         let ahora = Date()
-        let fin = ahora.addingTimeInterval(servicio.duracionHoras * 3600)
         
         let candidatosElegibles = personal.filter { mec in
             mec.isAsignable &&
             mec.especialidades.contains(servicio.especialidadRequerida) &&
             mec.rol == servicio.rolRequerido
         }
-        let ordenados = ordenarCandidatosJusto(candidatos: candidatosElegibles, inicio: ahora, fin: fin)
+        let ordenados = ordenarCandidatosJusto(candidatos: candidatosElegibles, inicio: ahora, duracionHoras: servicio.duracionHoras)
         guard let mecanico = ordenados.first else {
             alertaError = "No se encontraron mecánicos disponibles que cumplan los requisitos de ROL y ESPECIALIDAD."
             mostrandoAlerta = true
@@ -870,6 +868,9 @@ fileprivate struct AsignarServicioModal: View {
             vehiculo: vehiculo
         )
         nuevoServicio.estado = .enProceso
+        // Ajustar fecha fin estimada respetando horario
+        nuevoServicio.horaFinEstimada = mecanico.calcularFechaFin(inicio: ahora, duracionHoras: servicio.duracionHoras)
+        
         modelContext.insert(nuevoServicio)
         
         mecanico.estado = .ocupado
@@ -922,10 +923,14 @@ fileprivate struct AsignarServicioModal: View {
         return ultimo
     }
     
-    private func ordenarCandidatosJusto(candidatos: [Personal], inicio: Date, fin: Date) -> [Personal] {
+    private func ordenarCandidatosJusto(candidatos: [Personal], inicio: Date, duracionHoras: Double) -> [Personal] {
         return candidatos.sorted { a, b in
-            let cargaA = calcularCargaHoras(rfc: a.rfc, en: inicio, fin: fin)
-            let cargaB = calcularCargaHoras(rfc: b.rfc, en: inicio, fin: fin)
+            let finA = a.calcularFechaFin(inicio: inicio, duracionHoras: duracionHoras)
+            let finB = b.calcularFechaFin(inicio: inicio, duracionHoras: duracionHoras)
+            
+            let cargaA = calcularCargaHoras(rfc: a.rfc, en: inicio, fin: finA)
+            let cargaB = calcularCargaHoras(rfc: b.rfc, en: inicio, fin: finB)
+            
             if abs(cargaA - cargaB) > 0.0001 {
                 return cargaA < cargaB
             }
@@ -1146,24 +1151,25 @@ fileprivate struct ProgramarServicioModal: View {
         // 1) Posibles candidatos por rol/especialidad y disponibilidad laboral (día/horas)
         let cal = Calendar.current
         let weekday = cal.component(.weekday, from: fechaInicio)
-        let endDate = fechaInicio.addingTimeInterval(servicio.duracionHoras * 3600)
         let startHour = cal.component(.hour, from: fechaInicio)
-        let endHour = cal.component(.hour, from: endDate)
         
+        // Filtramos solo por inicio dentro del horario (o cerca), pero NO exigimos que termine hoy.
         let candidatosBase = personal.filter { mec in
             mec.rol == servicio.rolRequerido &&
             mec.especialidades.contains(servicio.especialidadRequerida) &&
             mec.diasLaborales.contains(weekday) &&
-            (mec.horaEntrada <= startHour) && (mec.horaSalida >= endHour)
+            (mec.horaEntrada <= startHour) // Debe haber empezado su turno (o estar en él)
         }
         
         // 2) Evitar solapes
-        let candidatosSinSolape = candidatosBase.filter {
-            !ServicioEnProceso.existeSolape(paraRFC: $0.rfc, inicio: fechaInicio, fin: endDate, tickets: tickets)
+        // Para verificar solapes, necesitamos calcular el fin REAL para cada candidato
+        let candidatosSinSolape = candidatosBase.filter { mec in
+            let finEstimado = mec.calcularFechaFin(inicio: fechaInicio, duracionHoras: servicio.duracionHoras)
+            return !ServicioEnProceso.existeSolape(paraRFC: mec.rfc, inicio: fechaInicio, fin: finEstimado, tickets: tickets)
         }
         
         // 3) Balance justo: carga + última asignación + nombre
-        let ordenados = ordenarCandidatosJusto(candidatos: candidatosSinSolape, inicio: fechaInicio, fin: endDate)
+        let ordenados = ordenarCandidatosJusto(candidatos: candidatosSinSolape, inicio: fechaInicio, duracionHoras: servicio.duracionHoras)
         candidato = ordenados.first
         
         if candidato == nil && !candidatosBase.isEmpty {
@@ -1205,6 +1211,9 @@ fileprivate struct ProgramarServicioModal: View {
         ticket.duracionHoras = servicio.duracionHoras
         ticket.rfcMecanicoSugerido = candidato.rfc
         ticket.nombreMecanicoSugerido = candidato.nombre
+        
+        // Ajustar fin estimado real
+        ticket.horaFinEstimada = candidato.calcularFechaFin(inicio: fechaInicio, duracionHoras: servicio.duracionHoras)
         
         modelContext.insert(ticket)
         
@@ -1248,10 +1257,14 @@ fileprivate struct ProgramarServicioModal: View {
         return ultimo
     }
     
-    private func ordenarCandidatosJusto(candidatos: [Personal], inicio: Date, fin: Date) -> [Personal] {
+    private func ordenarCandidatosJusto(candidatos: [Personal], inicio: Date, duracionHoras: Double) -> [Personal] {
         return candidatos.sorted { a, b in
-            let cargaA = calcularCargaHoras(rfc: a.rfc, en: inicio, fin: fin)
-            let cargaB = calcularCargaHoras(rfc: b.rfc, en: inicio, fin: fin)
+            let finA = a.calcularFechaFin(inicio: inicio, duracionHoras: duracionHoras)
+            let finB = b.calcularFechaFin(inicio: inicio, duracionHoras: duracionHoras)
+            
+            let cargaA = calcularCargaHoras(rfc: a.rfc, en: inicio, fin: finA)
+            let cargaB = calcularCargaHoras(rfc: b.rfc, en: inicio, fin: finB)
+            
             if abs(cargaA - cargaB) > 0.0001 {
                 return cargaA < cargaB
             }

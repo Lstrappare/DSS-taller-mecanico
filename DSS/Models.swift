@@ -157,6 +157,92 @@ class Personal {
         return esDiaLaboral && esHoraLaboral
     }
 
+    /// Calcula la fecha de finalización de un servicio respetando el horario laboral.
+    /// Si el servicio no termina hoy, busca el siguiente hueco laboral disponible.
+    func calcularFechaFin(inicio: Date, duracionHoras: Double) -> Date {
+        let calendario = Calendar.current
+        var tiempoRestante = duracionHoras * 3600 // en segundos
+        var cursor = inicio
+        
+        // Evitar bucles infinitos por seguridad (máx 30 días)
+        let limiteSeguridad = calendario.date(byAdding: .day, value: 30, to: inicio)!
+        
+        while tiempoRestante > 0 && cursor < limiteSeguridad {
+            // 1. Verificar si 'cursor' es válido (fecha ingreso pasada)
+            let inicioIngreso = calendario.startOfDay(for: fechaIngreso)
+            if cursor < inicioIngreso {
+                // Saltar hasta la fecha de ingreso a la hora de entrada
+                if let salto = calendario.date(bySettingHour: horaEntrada, minute: 0, second: 0, of: fechaIngreso) {
+                    cursor = salto
+                    continue
+                }
+            }
+            
+            // 2. Determinar si es día laboral
+            let diaSemana = calendario.component(.weekday, from: cursor)
+            if !diasLaborales.contains(diaSemana) {
+                // Avanzar al siguiente día a la hora de entrada
+                if let manana = calendario.date(byAdding: .day, value: 1, to: cursor),
+                   let inicioManana = calendario.date(bySettingHour: horaEntrada, minute: 0, second: 0, of: manana) {
+                    cursor = inicioManana
+                    continue
+                }
+            }
+            
+            // 3. Determinar ventana laboral del día actual
+            // Normalizamos las fechas de entrada y salida para el día del cursor
+            guard let fechaEntrada = calendario.date(bySettingHour: horaEntrada, minute: 0, second: 0, of: cursor),
+                  let fechaSalidaBase = calendario.date(bySettingHour: horaSalida, minute: 0, second: 0, of: cursor) else {
+                // Fallback raro, avanzar 1 hora
+                cursor = cursor.addingTimeInterval(3600)
+                continue
+            }
+            
+            var ventanaInicio = fechaEntrada
+            var ventanaFin = fechaSalidaBase
+            
+            // Ajuste para turno nocturno (si entrada > salida, la salida es al día siguiente)
+            if horaEntrada > horaSalida {
+                ventanaFin = calendario.date(byAdding: .day, value: 1, to: fechaSalidaBase)!
+            }
+            
+            // 4. Si el cursor ya pasó la ventana de hoy, ir a mañana
+            if cursor >= ventanaFin {
+                if let manana = calendario.date(byAdding: .day, value: 1, to: cursor),
+                   let inicioManana = calendario.date(bySettingHour: horaEntrada, minute: 0, second: 0, of: manana) {
+                    cursor = inicioManana
+                    continue
+                }
+            }
+            
+            // 5. Si el cursor está antes de la entrada, moverlo a la entrada
+            if cursor < ventanaInicio {
+                cursor = ventanaInicio
+            }
+            
+            // 6. Calcular tiempo disponible en este turno desde 'cursor'
+            let disponible = ventanaFin.timeIntervalSince(cursor)
+            
+            if disponible > 0 {
+                if tiempoRestante <= disponible {
+                    // Cabe todo el resto
+                    return cursor.addingTimeInterval(tiempoRestante)
+                } else {
+                    // Consumimos lo que queda del turno y avanzamos
+                    tiempoRestante -= disponible
+                    // El cursor salta al inicio del siguiente turno (que la lógica de arriba manejará al iterar)
+                    // Simplemente ponemos el cursor al final de este turno para que el loop lo avance
+                    cursor = ventanaFin
+                }
+            } else {
+                // Caso borde, avanzar
+                cursor = cursor.addingTimeInterval(3600)
+            }
+        }
+        
+        return cursor
+    }
+
     var isAsignable: Bool {
         return activo && estaEnHorario && (estado == .disponible)
     }
