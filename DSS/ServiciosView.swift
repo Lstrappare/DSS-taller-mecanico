@@ -744,6 +744,21 @@ fileprivate struct AsignarServicioModal: View {
                     }
                 }
                 Spacer()
+                
+                Button("Cancelar") {
+                    dismiss()
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .foregroundColor(.gray)
+                .background(Color("MercedesBackground"))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
+                
                 Button {
                     ejecutarAsignacion()
                 } label: {
