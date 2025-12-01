@@ -235,8 +235,12 @@ class Personal {
                     cursor = ventanaFin
                 }
             } else {
-                // Caso borde, avanzar
-                cursor = cursor.addingTimeInterval(3600)
+                // Caso borde, avanzar 1 hora usando calendario
+                if let nextHour = calendario.date(byAdding: .hour, value: 1, to: cursor) {
+                    cursor = nextHour
+                } else {
+                    cursor = cursor.addingTimeInterval(3600)
+                }
             }
         }
         
@@ -275,20 +279,14 @@ class Personal {
         var cursor = ahora
         var tiempoAcumulado: TimeInterval = 0
         
-        // Iterar por horas o bloques hasta llegar a 'hasta'
-        // Para eficiencia, avanzamos día a día si es posible, o hora a hora
-        
         // Límite de seguridad
         let limiteSeguridad = calendario.date(byAdding: .day, value: 30, to: ahora)!
-        if hasta > limiteSeguridad { return 0 } // Algo anda mal o es muy lejos
+        if hasta > limiteSeguridad { return 0 }
         
         while cursor < hasta {
             // Determinar fin del bloque actual (siguiente hora en punto)
-            guard let siguienteHora = calendario.date(byAdding: .hour, value: 1, to: cursor),
-                  let finBloqueMin = calendario.date(bySetting: .minute, value: 0, of: siguienteHora),
-                  let finBloque = calendario.date(bySetting: .second, value: 0, of: finBloqueMin) else {
-                break
-            }
+            guard let range = calendario.dateInterval(of: .hour, for: cursor) else { break }
+            let finBloque = range.end
             
             let finIteracion = min(finBloque, hasta)
             
