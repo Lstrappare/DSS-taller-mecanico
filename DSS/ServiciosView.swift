@@ -1513,7 +1513,12 @@ fileprivate struct ServicioFormView: View {
     private var costoMOInvalido: Bool { Double(costoManoDeObraString) == nil || (Double(costoManoDeObraString) ?? -1) < 0 }
     private var gananciaInvalida: Bool { Double(gananciaDeseadaString) == nil || (Double(gananciaDeseadaString) ?? -1) < 0 }
     private var gastosAdminInvalido: Bool { Double(gastosAdminString) == nil || (Double(gastosAdminString) ?? -1) < 0 }
-    private var costoRefInvalido: Bool { Double(costoRefaccionesString) == nil || (Double(costoRefaccionesString) ?? -1) < 0 }
+    private var costoRefInvalido: Bool {
+        if requiereRefacciones {
+            return Double(costoRefaccionesString) == nil || (Double(costoRefaccionesString) ?? -1) < 0
+        }
+        return !costoRefaccionesString.isEmpty && (Double(costoRefaccionesString) == nil || (Double(costoRefaccionesString) ?? -1) < 0)
+    }
     private var pISRInvalido: Bool { porcentajeInvalido(porcentajeISRString) }
     
     private func porcentajeInvalido(_ s: String) -> Bool {
@@ -2165,9 +2170,23 @@ fileprivate struct ServicioFormView: View {
             errorMsg = "Gastos administrativos inválidos."
             return
         }
-        guard let costoRef = Double(costoRefaccionesString.replacingOccurrences(of: ",", with: ".")), (!requiereRefacciones || costoRef >= 0) else {
-            errorMsg = "Costo de refacciones inválido."
-            return
+        let costoRef: Double
+        if requiereRefacciones {
+            guard let val = Double(costoRefaccionesString.replacingOccurrences(of: ",", with: ".")), val >= 0 else {
+                errorMsg = "Costo de refacciones inválido."
+                return
+            }
+            costoRef = val
+        } else {
+            if costoRefaccionesString.isEmpty {
+                costoRef = 0.0
+            } else {
+                 guard let val = Double(costoRefaccionesString.replacingOccurrences(of: ",", with: ".")), val >= 0 else {
+                    errorMsg = "Costo de refacciones inválido."
+                    return
+                 }
+                 costoRef = val
+            }
         }
         guard let pISR = Double(porcentajeISRString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pISR) else {
             errorMsg = "% ISR inválido."
