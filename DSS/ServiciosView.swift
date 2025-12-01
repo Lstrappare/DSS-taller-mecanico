@@ -978,6 +978,7 @@ fileprivate struct ProgramarServicioModal: View {
     @State private var vehiculoSeleccionadoID: Vehiculo.ID?
     @State private var searchVehiculo = ""
     @State private var fechaInicio: Date = Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date()
+    @State private var horaTexto: String = ""
     
     // Preview calculada
     @State private var candidato: Personal?
@@ -1074,7 +1075,7 @@ fileprivate struct ProgramarServicioModal: View {
                             }
                         }
                     }
-                    .frame(maxHeight: 160)
+                    .frame(maxHeight: 200)
                 }
                 .frame(maxWidth: .infinity)
                 
@@ -1082,7 +1083,56 @@ fileprivate struct ProgramarServicioModal: View {
                     Text("Fecha y hora de inicio").font(.headline)
                     DatePicker("Inicio", selection: $fechaInicio, in: Calendar.current.startOfDay(for: Date())..., displayedComponents: [.date, .hourAndMinute])
                         .datePickerStyle(.graphical)
-                        .onChange(of: fechaInicio) { _, _ in recalcularCandidato() }
+                        .onChange(of: fechaInicio) { _, newValue in
+                            recalcularCandidato()
+                            // Sincronizar texto si la fecha cambió externamente (no por el campo de texto)
+                            let formatter = DateFormatter()
+                            formatter.dateFormat = "HH:mm"
+                            let str = formatter.string(from: newValue)
+                            if horaTexto != str {
+                                horaTexto = str
+                            }
+                        }
+                    
+                    // Input manual de hora
+                    HStack {
+                        Image(systemName: "clock").foregroundColor(.gray)
+                        TextField("HH:mm (24h)", text: $horaTexto)
+                            .textFieldStyle(.plain)
+                            .onChange(of: horaTexto) { _, newValue in
+                                // Intentar parsear HH:mm
+                                let formatter = DateFormatter()
+                                formatter.dateFormat = "HH:mm"
+                                if let dateTime = formatter.date(from: newValue) {
+                                    let cal = Calendar.current
+                                    let compTime = cal.dateComponents([.hour, .minute], from: dateTime)
+                                    
+                                    // Combinar con la fecha actual de fechaInicio
+                                    let compDate = cal.dateComponents([.year, .month, .day], from: fechaInicio)
+                                    
+                                    var newComps = DateComponents()
+                                    newComps.year = compDate.year
+                                    newComps.month = compDate.month
+                                    newComps.day = compDate.day
+                                    newComps.hour = compTime.hour
+                                    newComps.minute = compTime.minute
+                                    
+                                    if let newDate = cal.date(from: newComps) {
+                                        // Solo actualizar si es diferente para evitar bucles
+                                        if newDate != fechaInicio {
+                                            fechaInicio = newDate
+                                        }
+                                    }
+                                }
+                            }
+                    }
+                    .padding(8)
+                    .background(Color("MercedesBackground"))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
                     
                     if let c = candidato {
                         let finReal = c.calcularFechaFin(inicio: fechaInicio, duracionHoras: servicio.duracionHoras)
@@ -1170,7 +1220,12 @@ fileprivate struct ProgramarServicioModal: View {
         .background(Color("MercedesBackground"))
         .cornerRadius(12)
         .preferredColorScheme(.dark)
-        .onAppear { recalcularCandidato() }
+        .onAppear {
+            recalcularCandidato()
+            let formatter = DateFormatter()
+            formatter.dateFormat = "HH:mm"
+            horaTexto = formatter.string(from: fechaInicio)
+        }
     }
     
     private func chip(text: String, systemImage: String) -> some View {
