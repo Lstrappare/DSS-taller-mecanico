@@ -549,15 +549,15 @@ fileprivate struct ClienteConVehiculoFormView: View {
                                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                                     )
                                     .onChange(of: nombre) { _, newValue in
-                                        if newValue.count > 21 {
-                                            nombre = String(newValue.prefix(21))
+                                        if newValue.count > 80 {
+                                            nombre = String(newValue.prefix(80))
                                         }
                                     }
                                 
                                 // Contador manual
-                                Text("\(nombre.count)/21")
+                                Text("\(nombre.count)/80")
                                     .font(.caption2)
-                                    .foregroundColor(nombre.count >= 21 ? .red : .gray)
+                                    .foregroundColor(nombre.count >= 80 ? .red : .gray)
                                     .frame(width: 40, alignment: .trailing)
                             }
                             .validationHint(
@@ -855,15 +855,15 @@ fileprivate struct ClienteFormView: View {
                                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                                     )
                                     .onChange(of: cliente.nombre) { _, newValue in
-                                        if newValue.count > 21 {
-                                            cliente.nombre = String(newValue.prefix(21))
+                                        if newValue.count > 80 {
+                                            cliente.nombre = String(newValue.prefix(80))
                                         }
                                     }
                                 
                                 // Contador manual para Nombre
-                                Text("\(cliente.nombre.count)/21")
+                                Text("\(cliente.nombre.count)/80")
                                     .font(.caption2)
-                                    .foregroundColor(cliente.nombre.count >= 21 ? .red : .gray)
+                                    .foregroundColor(cliente.nombre.count >= 80 ? .red : .gray)
                                     .frame(width: 40, alignment: .trailing)
                                 
                                 Button {

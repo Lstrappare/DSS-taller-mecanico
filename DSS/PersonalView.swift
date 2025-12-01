@@ -778,7 +778,7 @@ fileprivate struct PersonalFormView: View {
                     // 1. Identificación y Contacto
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "1. Identificación y Contacto", subtitle: "Datos básicos")
-                        FormField(title: "• Nombre completo", placeholder: "ej. José Cisneros Torres", text: $nombre, characterLimit: 21, customCount: nombreLettersCount)
+                        FormField(title: "• Nombre completo", placeholder: "ej. José Cisneros Torres", text: $nombre, characterLimit: 80, customCount: nombreLettersCount)
                             .validationHint(isInvalid: nombreInvalido, message: nombreValidationMessage ?? "")
                         
                         // Botón para editar el existente si hay duplicado
@@ -1285,7 +1285,7 @@ fileprivate struct PersonalFormView: View {
             .onChange(of: comisionesString) { _, _ in recalcularNominaPreview() }
             .onChange(of: factorIntegracionString) { _, _ in recalcularNominaPreview() }
             .onChange(of: nombre) { _, newValue in
-                let limited = limitNameToMaxLetters(newValue, maxLetters: 21)
+                let limited = limitNameToMaxLetters(newValue, maxLetters: 80)
                 if limited != newValue { nombre = limited }
             }
             
@@ -1936,8 +1936,8 @@ fileprivate struct PersonalFormView: View {
             return "El nombre solo debe contener letras, espacios, guion (-) y apóstrofo (')."
         }
         let lettersCount = trimmed.unicodeScalars.filter { CharacterSet.letters.contains($0) }.count
-        if lettersCount > 21 {
-            return "Máximo 21 letras (se ignoran espacios y separadores)."
+        if lettersCount > 80 {
+            return "Máximo 80 letras (se ignoran espacios y separadores)."
         }
         let words = trimmed.split(whereSeparator: { $0.isWhitespace }).map { String($0) }
         if words.isEmpty { return "El nombre no puede estar vacío." }

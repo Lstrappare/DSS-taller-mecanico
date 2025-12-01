@@ -816,16 +816,16 @@ fileprivate struct ProductFormView: View {
                                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                                     )
                                     .onChange(of: nombre) { _, newValue in
-                                        if newValue.count > 21 {
-                                            nombre = String(newValue.prefix(21))
+                                        if newValue.count > 60 {
+                                            nombre = String(newValue.prefix(60))
                                         }
                                     }
-                                    .help("Identificador único del producto (Máx 21 caracteres)")
+                                    .help("Identificador único del producto (Máx 60 caracteres)")
                                 
                                 // Contador manual para Nombre
-                                Text("\(nombre.count)/21")
+                                Text("\(nombre.count)/60")
                                     .font(.caption2)
-                                    .foregroundColor(nombre.count >= 21 ? .red : .gray)
+                                    .foregroundColor(nombre.count >= 60 ? .red : .gray)
                                     .frame(width: 40, alignment: .trailing)
                                 
                                 if productoAEditar != nil {
@@ -905,10 +905,10 @@ fileprivate struct ProductFormView: View {
                         }
                         
                         HStack(spacing: 16) {
-                            FormField(title: "Proveedor", placeholder: "ej. Mobil 1", text: $proveedor, characterLimit: 21, suggestions: uniqueProviders)
+                            FormField(title: "Proveedor", placeholder: "ej. Mobil 1", text: $proveedor, characterLimit: 60, suggestions: uniqueProviders)
                                 .onChange(of: proveedor) { _, newValue in
-                                    if newValue.count > 21 {
-                                        proveedor = String(newValue.prefix(21))
+                                    if newValue.count > 60 {
+                                        proveedor = String(newValue.prefix(60))
                                     }
                                 }
                             FormField(title: "Lote", placeholder: "ej. L-12345", text: $lote, characterLimit: 21)

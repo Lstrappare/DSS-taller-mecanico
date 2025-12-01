@@ -1660,14 +1660,14 @@ fileprivate struct ServicioFormView: View {
                                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                                     )
                                     .onChange(of: nombre) { _, newValue in
-                                        if newValue.count > 21 {
-                                            nombre = String(newValue.prefix(21))
+                                        if newValue.count > 60 {
+                                            nombre = String(newValue.prefix(60))
                                         }
                                     }
-                                    .help("Identificador único del producto (Máx 21 caracteres)")
+                                    .help("Identificador único del producto (Máx 60 caracteres)")
                                 
                                 // Contador manual para Nombre
-                                Text("\(nombre.count)/21")
+                                Text("\(nombre.count)/60")
                                     .font(.caption2)
                                     .foregroundColor(nombre.count >= 21 ? .red : .gray)
                                     .frame(width: 40, alignment: .trailing)
