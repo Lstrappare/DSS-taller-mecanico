@@ -1750,17 +1750,20 @@ fileprivate struct ServicioFormView: View {
                     
                     // Sección 6: Desglose Final
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "Desglose de Precio", subtitle: "Cálculo automático", color: "MercedesPetrolGreen")
-                        
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 8) {
-                            roField("Costos Directos", desglose.costosDirectos)
-                            roField("Ganancia Real", desglose.partesInternas - (Double(gastosAdminString) ?? 0))
-                            roField("Gastos Administrativos", Double(gastosAdminString) ?? 0)
-                            roField("Subtotal (Sin IVA)", desglose.subtotal)
-                            roField("IVA (16%)", desglose.iva)
-                            roField("Precio Final", desglose.precioFinal)
-                            roField("ISR (Gasto Interno)", desglose.isrSobreGanancia)
-                            roField("Ganancia Neta (Post ISR)", desglose.gananciaNeta)
+                        // Contenedor con borde que incluye el Header y el Grid
+                        VStack(alignment: .leading, spacing: 16) {
+                            SectionHeader(title: "Desglose de Precio", subtitle: "Cálculo automático", color: "MercedesPetrolGreen")
+                            
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 8) {
+                                roField("Costos Directos", desglose.costosDirectos)
+                                roField("Ganancia Real", desglose.partesInternas - (Double(gastosAdminString) ?? 0))
+                                roField("Gastos Administrativos", Double(gastosAdminString) ?? 0)
+                                roField("Subtotal (Sin IVA)", desglose.subtotal)
+                                roField("IVA (16%)", desglose.iva)
+                                roField("Precio Final", desglose.precioFinal)
+                                roField("ISR (Gasto Interno)", desglose.isrSobreGanancia)
+                                roField("Ganancia Neta (Post ISR)", desglose.gananciaNeta)
+                            }
                         }
                         .padding(16)
                         .background(Color("MercedesBackground").opacity(0.2))
@@ -1780,12 +1783,25 @@ fileprivate struct ServicioFormView: View {
                                         precioModificadoManualmente = abs(final - desglose.precioFinal) > 0.009
                                     }
                                 if precioModificadoManualmente {
-                                    Text("Modificado manualmente")
+                                    HStack {
+                                        Text("Modificado manualmente")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 8).padding(.vertical, 4)
+                                            .background(Color.yellow.opacity(0.2))
+                                            .foregroundColor(.yellow)
+                                            .cornerRadius(6)
+                                        
+                                        Button {
+                                            precioModificadoManualmente = false
+                                            precioFinalString = String(format: "%.2f", desglose.precioFinal)
+                                        } label: {
+                                            Image(systemName: "arrow.counterclockwise")
+                                            Text("Recalcular")
+                                        }
                                         .font(.caption2)
-                                        .padding(.horizontal, 8).padding(.vertical, 4)
-                                        .background(Color.yellow.opacity(0.2))
-                                        .foregroundColor(.yellow)
-                                        .cornerRadius(6)
+                                        .buttonStyle(.bordered)
+                                        .tint(.blue)
+                                    }
                                 }
                             }
                             Text("El precio calculado se mantiene como referencia si editas el precio final.")
