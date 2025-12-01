@@ -475,6 +475,12 @@ fileprivate struct ClienteConVehiculoFormView: View {
     private var telefonoInvalido: Bool {
         telefono.trimmingCharacters(in: .whitespaces).isEmpty
     }
+    private var clienteConMismoTelefono: Cliente? {
+        let telLimpio = telefono.trimmingCharacters(in: .whitespaces)
+        if telLimpio.isEmpty { return nil }
+        return allClientes.first { $0.telefono == telLimpio }
+    }
+    
     private var placasInvalidas: Bool {
         placas.trimmingCharacters(in: .whitespaces).isEmpty
     }
@@ -552,6 +558,9 @@ fileprivate struct ClienteConVehiculoFormView: View {
                         HStack(spacing: 16) {
                             FormField(title: "• Teléfono", placeholder: "10 dígitos", text: $telefono)
                                 .validationHint(isInvalid: telefonoInvalido, message: "Requerido.")
+                                .validationHint(isInvalid: !telefonoInvalido && clienteConMismoTelefono != nil, 
+                                                message: "Registrado en: \(clienteConMismoTelefono?.nombre ?? "")",
+                                                color: .yellow)
                             FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $email)
                         }
                     }
@@ -715,6 +724,14 @@ fileprivate struct ClienteFormView: View {
         return parts.count < 2 || nombreDuplicado
     }
     
+    private var clienteConMismoTelefono: Cliente? {
+        let telLimpio = cliente.telefono.trimmingCharacters(in: .whitespaces)
+        if telLimpio.isEmpty { return nil }
+        return allClientes.first { 
+            $0.telefono == telLimpio && $0.persistentModelID != cliente.persistentModelID 
+        }
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             // Título y guía
@@ -846,6 +863,9 @@ fileprivate struct ClienteFormView: View {
                                 .foregroundColor(isTelefonoUnlocked ? .green : .red)
                             }
                             .validationHint(isInvalid: cliente.telefono.isEmpty, message: "El teléfono no puede estar vacío.")
+                            .validationHint(isInvalid: !cliente.telefono.isEmpty && clienteConMismoTelefono != nil, 
+                                            message: "Registrado en: \(clienteConMismoTelefono?.nombre ?? "")",
+                                            color: .yellow)
                         }
                         
                         FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $cliente.email)
@@ -1421,13 +1441,13 @@ fileprivate struct FormField: View {
 }
 
 fileprivate extension View {
-    func validationHint(isInvalid: Bool, message: String) -> some View {
+    func validationHint(isInvalid: Bool, message: String, color: Color = .red.opacity(0.9)) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             self
             if isInvalid {
                 Text(message)
                     .font(.caption2)
-                    .foregroundColor(.red.opacity(0.9))
+                    .foregroundColor(color)
             }
         }
     }
