@@ -1081,9 +1081,6 @@ fileprivate struct ProductFormView: View {
                                     .cornerRadius(6)
                             }
                         }
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 8) {
-                            roField("Variación vs sugerido", ProductPricingHelpers.variacionPrecio(final: precioFinalEditable, sugerido: precioSugerido))
-                        }
                     }
                     
                     // Zona de Peligro

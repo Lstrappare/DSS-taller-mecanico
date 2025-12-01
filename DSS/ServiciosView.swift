@@ -1290,26 +1290,26 @@ fileprivate struct ServicioFormView: View {
     @State private var descripcion = ""
     @State private var especialidadRequerida = ""
     @State private var rolRequerido: Rol = .ayudante
-    @State private var duracionString = "1.0"
+    @State private var duracionString = ""
     
     // Ingredientes
     @State private var cantidadesProductos: [String: Double] = [:]
     @State private var especialidadesDisponibles: [String] = []
 
     // Costos y configuración (Montos Fijos)
-    @State private var costoManoDeObraString = "0.0"
-    @State private var gananciaDeseadaString = "0.0"
-    @State private var gastosAdminString = "0.0"
+    @State private var costoManoDeObraString = ""
+    @State private var gananciaDeseadaString = ""
+    @State private var gastosAdminString = ""
     
     @State private var requiereRefacciones = false
-    @State private var costoRefaccionesString = "0.0"
+    @State private var costoRefaccionesString = ""
     
     @State private var aplicarIVA = false
     @State private var aplicarISR = false
-    @State private var porcentajeISRString = "10.0" // configurable
+    @State private var porcentajeISRString = "" // configurable
 
     // Precio final editable
-    @State private var precioFinalString = "0.0"
+    @State private var precioFinalString = ""
     @State private var precioModificadoManualmente = false
     
     // Seguridad para editar nombre en modo edición
@@ -1462,11 +1462,11 @@ fileprivate struct ServicioFormView: View {
             _precioModificadoManualmente = State(initialValue: servicio.precioModificadoManualmente)
         } else {
             // defaults para alta
-            _costoManoDeObraString = State(initialValue: "0.0")
-            _gananciaDeseadaString = State(initialValue: "0.0")
-            _gastosAdminString = State(initialValue: "0.0")
-            _porcentajeISRString = State(initialValue: "10.0")
-            _precioFinalString = State(initialValue: "0.0")
+            _costoManoDeObraString = State(initialValue: "")
+            _gananciaDeseadaString = State(initialValue: "")
+            _gastosAdminString = State(initialValue: "")
+            _porcentajeISRString = State(initialValue: "")
+            _precioFinalString = State(initialValue: "")
         }
     }
     
@@ -1612,10 +1612,10 @@ fileprivate struct ServicioFormView: View {
                                     .font(.caption2)
                                     .foregroundColor(.gray)
                                 
-                                FormField(title: "Costo Refacciones ($)", placeholder: "ej. 300.00", text: $costoRefaccionesString, isNumeric: true)
-                                    .validationHint(isInvalid: costoRefInvalido, message: "Número válido ≥ 0")
-                                    .disabled(!requiereRefacciones)
-                                    .opacity(requiereRefacciones ? 1 : 0.5)
+                                if requiereRefacciones {
+                                    FormField(title: "Costo Refacciones ($)", placeholder: "ej. 300.00", text: $costoRefaccionesString, isNumeric: true)
+                                        .validationHint(isInvalid: costoRefInvalido, message: "Número válido ≥ 0")
+                                }
                             }
                         }
                         
@@ -1732,11 +1732,11 @@ fileprivate struct ServicioFormView: View {
                             HStack(spacing: 8) {
                                 Toggle("Aplicar ISR", isOn: $aplicarISR)
                                     .toggleStyle(.switch)
-                                FormField(title: "% ISR", placeholder: "ej. 10", text: $porcentajeISRString, isNumeric: true)
-                                    .frame(width: 80)
-                                    .validationHint(isInvalid: pISRInvalido, message: "0-100")
-                                    .disabled(!aplicarISR)
-                                    .opacity(aplicarISR ? 1 : 0.5)
+                                if aplicarISR {
+                                    FormField(title: "% ISR", placeholder: "ej. 10", text: $porcentajeISRString, isNumeric: true)
+                                        .frame(width: 80)
+                                        .validationHint(isInvalid: pISRInvalido, message: "0-100")
+                                }
                             }
                         }
                         Text("El ISR se calcula solo sobre la ganancia deseada y NO se suma al precio final (es gasto interno).")
