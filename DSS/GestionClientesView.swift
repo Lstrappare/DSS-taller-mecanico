@@ -470,68 +470,101 @@ fileprivate struct ClienteConVehiculoFormView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 2) {
-                Text("Añadir Cliente y Vehículo").font(.title2).fontWeight(.bold)
+            // Título y guía
+            VStack(spacing: 4) {
+                Text("Añadir Cliente y Vehículo").font(.title).fontWeight(.bold)
                 Text("Completa los datos. Los campos marcados con • son obligatorios.")
-                    .font(.caption).foregroundColor(.gray)
+                    .font(.footnote).foregroundColor(.gray)
             }
-            .padding(.top, 10).padding(.bottom, 6)
+            .padding(16)
             
-            Form {
-                Section {
-                    SectionHeader(title: "Datos del Cliente", subtitle: nil)
-                    FormField(title: "• Nombre Completo", placeholder: "ej. José Cisneros Torres", text: $nombre)
-                        .validationHint(isInvalid: nombreInvalido, message: "Escribe nombre y apellido.")
-                    HStack(spacing: 12) {
-                        FormField(title: "• Teléfono (ID Único)", placeholder: "10 dígitos", text: $telefono)
-                            .validationHint(isInvalid: telefonoInvalido, message: "El teléfono es obligatorio.")
-                        FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $email)
+            ScrollView {
+                VStack(spacing: 24) {
+                    
+                    // Sección 1: Datos del Cliente
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "1. Datos del Cliente", subtitle: "Información personal")
+                        
+                        FormField(title: "• Nombre Completo", placeholder: "ej. José Cisneros Torres", text: $nombre)
+                            .validationHint(isInvalid: nombreInvalido, message: "Escribe nombre y apellido.")
+                        
+                        HStack(spacing: 16) {
+                            FormField(title: "• Teléfono (ID Único)", placeholder: "10 dígitos", text: $telefono)
+                                .validationHint(isInvalid: telefonoInvalido, message: "Requerido.")
+                            FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $email)
+                        }
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+                    
+                    // Sección 2: Datos del Vehículo
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "2. Datos del Primer Vehículo", subtitle: "Información del auto")
+                        
+                        HStack(spacing: 16) {
+                            FormField(title: "• Placas (ID Único)", placeholder: "ej. ABC-123", text: $placas)
+                                .validationHint(isInvalid: placasInvalidas, message: "Requerido.")
+                            FormField(title: "• Año", placeholder: "ej. 2020", text: $anioString)
+                                .validationHint(isInvalid: anioInvalido, message: "Numérico.")
+                        }
+                        HStack(spacing: 16) {
+                            FormField(title: "• Marca", placeholder: "ej. Nissan", text: $marca)
+                            FormField(title: "• Modelo", placeholder: "ej. Versa", text: $modelo)
+                        }
                     }
                 }
-                
-                Section {
-                    SectionHeader(title: "Datos del Primer Vehículo", subtitle: nil)
-                    HStack(spacing: 12) {
-                        FormField(title: "• Placas (ID Único)", placeholder: "ej. ABC-123", text: $placas)
-                            .validationHint(isInvalid: placasInvalidas, message: "Las placas son obligatorias.")
-                        FormField(title: "• Año", placeholder: "ej. 2020", text: $anioString)
-                            .validationHint(isInvalid: anioInvalido, message: "Debe ser un número.")
-                    }
-                    HStack(spacing: 12) {
-                        FormField(title: "• Marca", placeholder: "ej. Nissan", text: $marca)
-                        FormField(title: "• Modelo", placeholder: "ej. Versa", text: $modelo)
-                    }
-                }
+                .padding(24)
             }
-            .textFieldStyle(PlainTextFieldStyle())
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
             
+            // Mensaje de Error
             if let errorMsg {
                 Text(errorMsg)
-                    .font(.caption2).foregroundColor(.red).padding(.vertical, 4)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .padding(.vertical, 6)
             }
 
             // Botones
-            HStack {
-                Button("Cancelar") { dismiss() }
-                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.gray)
-                Spacer()
-                Button("Guardar y Añadir") {
-                    guardarCambios()
+            HStack(spacing: 12) {
+                Button { dismiss() } label: {
+                    Text("Cancelar")
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .background(Color("MercedesBackground"))
+                        .foregroundColor(.gray)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
                 }
-                .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 10)
-                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(6)
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                Button {
+                    guardarCambios()
+                } label: {
+                    Text("Guardar y Añadir")
+                        .fontWeight(.semibold)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 24)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                        .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(.plain)
                 .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido)
                 .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido) ? 0.6 : 1.0)
             }
-            .padding(.horizontal).padding(.bottom, 6)
+            .padding(20)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 760, minHeight: 520, maxHeight: 580)
-        .cornerRadius(12)
+        .frame(minWidth: 760, minHeight: 550, maxHeight: 600)
+        .cornerRadius(15)
     }
     
     func guardarCambios() {
@@ -606,95 +639,160 @@ fileprivate struct ClienteFormView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 2) {
-                Text("Editar Cliente").font(.title2).fontWeight(.bold)
+            // Título y guía
+            VStack(spacing: 4) {
+                Text("Editar Cliente").font(.title).fontWeight(.bold)
                 Text("Autoriza para editar el teléfono si es necesario.")
-                    .font(.caption).foregroundColor(.gray)
+                    .font(.footnote).foregroundColor(.gray)
             }
-            .padding(.top, 10).padding(.bottom, 6)
+            .padding(16)
             
-            Form {
-                Section {
-                    SectionHeader(title: "Datos del Cliente", subtitle: nil)
-                    FormField(title: "• Nombre Completo", placeholder: "ej. José Cisneros", text: $cliente.nombre)
-                        .validationHint(isInvalid: nombreInvalido, message: "Escribe nombre y apellido.")
+            ScrollView {
+                VStack(spacing: 24) {
                     
-                    // Teléfono con Candado
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text("• Teléfono (ID Único)").font(.caption2).foregroundColor(.gray)
-                            Image(systemName: isTelefonoUnlocked ? "lock.open.fill" : "lock.fill")
-                                .foregroundColor(isTelefonoUnlocked ? .green : .red)
-                                .font(.caption2)
-                        }
-                        HStack(spacing: 8) {
-                            ZStack(alignment: .leading) {
-                                TextField("", text: $cliente.telefono)
-                                    .disabled(!isTelefonoUnlocked)
-                                    .padding(6).background(Color("MercedesBackground").opacity(0.9)).cornerRadius(6)
-                                if cliente.telefono.isEmpty {
-                                    Text("10 dígitos")
-                                        .foregroundColor(Color.white.opacity(0.35))
-                                        .padding(.horizontal, 10).allowsHitTesting(false)
-                                }
-                            }
-                            Button {
-                                if isTelefonoUnlocked { isTelefonoUnlocked = false }
-                                else {
-                                    authReason = .unlockTelefono
-                                    showingAuthModal = true
-                                }
-                            } label: {
-                                Text(isTelefonoUnlocked ? "Bloquear" : "Desbloquear")
+                    // Sección 1: Datos del Cliente
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "Datos del Cliente", subtitle: "Información personal")
+                        
+                        FormField(title: "• Nombre Completo", placeholder: "ej. José Cisneros", text: $cliente.nombre)
+                            .validationHint(isInvalid: nombreInvalido, message: "Escribe nombre y apellido.")
+                        
+                        // Teléfono con Candado
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text("• Teléfono (ID Único)").font(.caption2).foregroundColor(.gray)
+                                Image(systemName: isTelefonoUnlocked ? "lock.open.fill" : "lock.fill")
+                                    .foregroundColor(isTelefonoUnlocked ? .green : .red)
                                     .font(.caption2)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundColor(isTelefonoUnlocked ? .green : .red)
+                            HStack(spacing: 6) {
+                                TextField("", text: $cliente.telefono)
+                                    .disabled(!isTelefonoUnlocked)
+                                    .textFieldStyle(.plain)
+                                    .padding(10)
+                                    .background(Color("MercedesBackground"))
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .overlay(
+                                        HStack {
+                                            Spacer()
+                                            if cliente.telefono.isEmpty {
+                                                Text("10 dígitos")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.gray.opacity(0.5))
+                                                    .padding(.trailing, 8)
+                                                    .allowsHitTesting(false)
+                                            }
+                                        }
+                                    )
+                                
+                                Button {
+                                    if isTelefonoUnlocked { isTelefonoUnlocked = false }
+                                    else {
+                                        authReason = .unlockTelefono
+                                        showingAuthModal = true
+                                    }
+                                } label: {
+                                    Text(isTelefonoUnlocked ? "Bloquear" : "Desbloquear")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(isTelefonoUnlocked ? .green : .red)
+                            }
+                            .validationHint(isInvalid: cliente.telefono.isEmpty, message: "El teléfono no puede estar vacío.")
                         }
-                        .validationHint(isInvalid: cliente.telefono.isEmpty, message: "El teléfono no puede estar vacío.")
+                        
+                        FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $cliente.email)
                     }
                     
-                    FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $cliente.email)
+                    Divider().background(Color.red.opacity(0.3))
+                    
+                    // Zona de Peligro
+                    VStack(spacing: 12) {
+                        Text("Esta acción no se puede deshacer y eliminará al cliente y sus vehículos.")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                        
+                        Button(role: .destructive) {
+                            authReason = .deleteCliente
+                            showingAuthModal = true
+                        } label: {
+                            Label("Eliminar cliente permanentemente", systemImage: "trash.fill")
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 24)
+                                .background(Color.red.opacity(0.15))
+                                .foregroundColor(.red)
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.red.opacity(0.5), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 8)
                 }
-            }
-            .textFieldStyle(PlainTextFieldStyle())
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
-
-            if let errorMsg {
-                Text(errorMsg)
-                    .font(.caption2).foregroundColor(.red).padding(.vertical, 4)
+                .padding(24)
             }
             
-            HStack {
-                Button("Cancelar") { dismiss() }
-                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.gray)
-                Button("Eliminar", role: .destructive) {
-                    authReason = .deleteCliente
-                    showingAuthModal = true
+            // Mensaje de Error
+            if let errorMsg {
+                Text(errorMsg)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .padding(.vertical, 6)
+            }
+            
+            // Botones
+            HStack(spacing: 12) {
+                Button { dismiss() } label: {
+                    Text("Cancelar")
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .background(Color("MercedesBackground"))
+                        .foregroundColor(.gray)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
                 }
-                .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.red)
+                .buttonStyle(.plain)
+                
                 Spacer()
-                Button("Guardar Cambios") {
+                
+                Button {
                     let nameParts = cliente.nombre.trimmingCharacters(in: .whitespaces).split(separator: " ")
                     if nameParts.count >= 2 {
                         dismiss()
                     } else {
                         errorMsg = "El Nombre Completo debe tener al menos 2 palabras."
                     }
+                } label: {
+                    Text("Guardar Cambios")
+                        .fontWeight(.semibold)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 24)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                        .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
-                .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 10)
-                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(6)
+                .buttonStyle(.plain)
                 .disabled(nombreInvalido)
                 .opacity(nombreInvalido ? 0.6 : 1.0)
             }
-            .padding(.horizontal).padding(.bottom, 6)
+            .padding(20)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 760, minHeight: 480, maxHeight: 560)
-        .cornerRadius(12)
+        .frame(minWidth: 760, minHeight: 500, maxHeight: 600)
+        .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
         }
@@ -825,96 +923,163 @@ fileprivate struct VehiculoFormView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 2) {
-                Text(formTitle).font(.title2).fontWeight(.bold)
+            // Título y guía
+            VStack(spacing: 4) {
+                Text(formTitle).font(.title).fontWeight(.bold)
                 Text("Cliente: \(clientePadre?.nombre ?? "Error")")
-                    .font(.caption).foregroundColor(.gray)
+                    .font(.footnote).foregroundColor(.gray)
             }
-            .padding(.top, 10).padding(.bottom, 6)
+            .padding(16)
             
-            Form {
-                Section {
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text("• Placas (ID Único)").font(.caption2).foregroundColor(.gray)
-                            if esModoEdicion {
-                                Image(systemName: isPlacasUnlocked ? "lock.open.fill" : "lock.fill")
-                                    .foregroundColor(isPlacasUnlocked ? .green : .red)
-                                    .font(.caption2)
-                            }
-                        }
-                        HStack(spacing: 8) {
-                            ZStack(alignment: .leading) {
-                                TextField("", text: $vehiculo.placas)
-                                    .disabled(esModoEdicion && !isPlacasUnlocked)
-                                    .padding(6).background(Color("MercedesBackground").opacity(0.9)).cornerRadius(6)
-                                if vehiculo.placas.isEmpty {
-                                    Text("ej. ABC-123-D")
-                                        .foregroundColor(Color.white.opacity(0.35))
-                                        .padding(.horizontal, 10).allowsHitTesting(false)
-                                }
-                            }
-                            if esModoEdicion {
-                                Button {
-                                    if isPlacasUnlocked { isPlacasUnlocked = false }
-                                    else {
-                                        authReason = .unlockPlacas
-                                        showingAuthModal = true
-                                    }
-                                } label: {
-                                    Text(isPlacasUnlocked ? "Bloquear" : "Desbloquear")
+            ScrollView {
+                VStack(spacing: 24) {
+                    
+                    // Sección 1: Datos del Vehículo
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "Datos del Vehículo", subtitle: "Información del auto")
+                        
+                        // Placas con Candado (solo si es edición)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text("• Placas (ID Único)").font(.caption2).foregroundColor(.gray)
+                                if esModoEdicion {
+                                    Image(systemName: isPlacasUnlocked ? "lock.open.fill" : "lock.fill")
+                                        .foregroundColor(isPlacasUnlocked ? .green : .red)
                                         .font(.caption2)
                                 }
-                                .buttonStyle(.plain)
-                                .foregroundColor(isPlacasUnlocked ? .green : .red)
                             }
+                            HStack(spacing: 6) {
+                                TextField("", text: $vehiculo.placas)
+                                    .disabled(esModoEdicion && !isPlacasUnlocked)
+                                    .textFieldStyle(.plain)
+                                    .padding(10)
+                                    .background(Color("MercedesBackground"))
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .overlay(
+                                        HStack {
+                                            Spacer()
+                                            if vehiculo.placas.isEmpty {
+                                                Text("ej. ABC-123-D")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.gray.opacity(0.5))
+                                                    .padding(.trailing, 8)
+                                                    .allowsHitTesting(false)
+                                            }
+                                        }
+                                    )
+                                
+                                if esModoEdicion {
+                                    Button {
+                                        if isPlacasUnlocked { isPlacasUnlocked = false }
+                                        else {
+                                            authReason = .unlockPlacas
+                                            showingAuthModal = true
+                                        }
+                                    } label: {
+                                        Text(isPlacasUnlocked ? "Bloquear" : "Desbloquear")
+                                            .font(.caption)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundColor(isPlacasUnlocked ? .green : .red)
+                                }
+                            }
+                            .validationHint(isInvalid: placasInvalida, message: "Las placas son obligatorias.")
                         }
-                        .validationHint(isInvalid: placasInvalida, message: "Las placas son obligatorias.")
+                        
+                        HStack(spacing: 16) {
+                            FormField(title: "• Marca", placeholder: "ej. Nissan", text: $vehiculo.marca)
+                            FormField(title: "• Modelo", placeholder: "ej. Versa", text: $vehiculo.modelo)
+                            FormField(title: "• Año", placeholder: "ej. 2020", text: anioString)
+                                .validationHint(isInvalid: anioInvalido, message: "Año no válido.")
+                        }
                     }
-                
-                    HStack(spacing: 12) {
-                        FormField(title: "• Marca", placeholder: "ej. Nissan", text: $vehiculo.marca)
-                        FormField(title: "• Modelo", placeholder: "ej. Versa", text: $vehiculo.modelo)
-                        FormField(title: "• Año", placeholder: "ej. 2020", text: anioString)
-                            .validationHint(isInvalid: anioInvalido, message: "Año no válido.")
+                    
+                    if esModoEdicion {
+                        Divider().background(Color.red.opacity(0.3))
+                        
+                        // Zona de Peligro
+                        VStack(spacing: 12) {
+                            Text("Esta acción no se puede deshacer y eliminará el vehículo permanentemente.")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .multilineTextAlignment(.center)
+                            
+                            Button(role: .destructive) {
+                                authReason = .deleteVehiculo
+                                showingAuthModal = true
+                            } label: {
+                                Label("Eliminar vehículo permanentemente", systemImage: "trash.fill")
+                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 24)
+                                    .background(Color.red.opacity(0.15))
+                                    .foregroundColor(.red)
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.red.opacity(0.5), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.top, 8)
                     }
                 }
+                .padding(24)
             }
-            .textFieldStyle(PlainTextFieldStyle())
-            .formStyle(.grouped)
-            .scrollContentBackground(.hidden)
             
+            // Mensaje de Error
             if let errorMsg {
                 Text(errorMsg)
-                    .font(.caption2).foregroundColor(.red).padding(.vertical, 4)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .padding(.vertical, 6)
             }
             
-            HStack {
-                Button("Cancelar") { dismiss() }
-                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.gray)
-                if esModoEdicion {
-                    Button("Eliminar", role: .destructive) {
-                        authReason = .deleteVehiculo
-                        showingAuthModal = true
-                    }
-                    .buttonStyle(.plain).padding(.vertical, 4).padding(.horizontal, 6).foregroundColor(.red)
+            // Botones
+            HStack(spacing: 12) {
+                Button { dismiss() } label: {
+                    Text("Cancelar")
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 16)
+                        .background(Color("MercedesBackground"))
+                        .foregroundColor(.gray)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
                 }
+                .buttonStyle(.plain)
+                
                 Spacer()
-                Button(esModoEdicion ? "Guardar Cambios" : "Añadir Vehículo") {
+                
+                Button {
                     guardarCambios()
+                } label: {
+                    Text(esModoEdicion ? "Guardar Cambios" : "Añadir Vehículo")
+                        .fontWeight(.semibold)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 24)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                        .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
-                .buttonStyle(.plain).padding(.vertical, 6).padding(.horizontal, 10)
-                .foregroundColor(Color("MercedesPetrolGreen")).cornerRadius(6)
+                .buttonStyle(.plain)
                 .disabled(placasInvalida || anioInvalido || vehiculo.marca.isEmpty || vehiculo.modelo.isEmpty)
                 .opacity((placasInvalida || anioInvalido || vehiculo.marca.isEmpty || vehiculo.modelo.isEmpty) ? 0.6 : 1.0)
             }
-            .padding(.horizontal).padding(.bottom, 6)
+            .padding(20)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 760, minHeight: 480, maxHeight: 560)
-        .cornerRadius(12)
+        .frame(minWidth: 760, minHeight: 500, maxHeight: 600)
+        .cornerRadius(15)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
         }
@@ -1022,12 +1187,14 @@ fileprivate struct VehiculoFormView: View {
 
 
 // --- VISTAS HELPER REUTILIZABLES (alineadas a InventarioView) ---
+
 fileprivate struct SectionHeader: View {
     var title: String
     var subtitle: String?
+    var color: String? = nil
     var body: some View {
         HStack {
-            Text(title).font(.headline).foregroundColor(.white)
+            Text(title).font(.headline).foregroundColor(color != nil ? Color(color!) : .white)
             Spacer()
             if let subtitle, !subtitle.isEmpty {
                 Text(subtitle).font(.caption2).foregroundColor(.gray)
@@ -1041,25 +1208,56 @@ fileprivate struct FormField: View {
     var title: String
     var placeholder: String
     @Binding var text: String
+    var characterLimit: Int? = nil
+    var suggestions: [String] = []
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption2)
-                .foregroundColor(.gray)
-            
-            ZStack(alignment: .leading) {
-                TextField("", text: $text)
-                    .padding(6)
-                    .background(Color("MercedesBackground").opacity(0.9))
-                    .cornerRadius(6)
-                
-                if text.isEmpty && !placeholder.isEmpty {
-                    Text(placeholder)
-                        .foregroundColor(Color.white.opacity(0.35))
-                        .padding(.horizontal, 10)
-                        .allowsHitTesting(false)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                Spacer()
+                if let limit = characterLimit {
+                    Text("\(text.count)/\(limit)")
+                        .font(.caption2)
+                        .foregroundColor(text.count >= limit ? .red : .gray)
                 }
+            }
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .padding(10)
+                .frame(maxWidth: .infinity)
+                .background(Color("MercedesBackground"))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
+                .overlay(
+                    HStack {
+                        Spacer()
+                        if !suggestions.isEmpty {
+                            Menu {
+                                ForEach(suggestions, id: \.self) { suggestion in
+                                    Button(suggestion) {
+                                        text = suggestion
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "chevron.down.circle.fill")
+                                    .foregroundColor(.gray)
+                                    .padding(.trailing, 8)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                )
+            if !placeholder.isEmpty {
+                Text(placeholder)
+                    .font(.caption2)
+                    .foregroundColor(.gray.opacity(0.7))
+                    .padding(.leading, 4)
             }
         }
     }
