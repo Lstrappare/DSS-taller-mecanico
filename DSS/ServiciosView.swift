@@ -1075,7 +1075,7 @@ fileprivate struct ProgramarServicioModal: View {
                 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Fecha y hora de inicio").font(.headline)
-                    DatePicker("Inicio", selection: $fechaInicio, displayedComponents: [.date, .hourAndMinute])
+                    DatePicker("Inicio", selection: $fechaInicio, in: Calendar.current.startOfDay(for: Date())..., displayedComponents: [.date, .hourAndMinute])
                         .datePickerStyle(.graphical)
                         .onChange(of: fechaInicio) { _, _ in recalcularCandidato() }
                     Text("Fin estimado: \(fechaInicio.addingTimeInterval(servicio.duracionHoras * 3600).formatted(date: .abbreviated, time: .shortened))")
@@ -1113,6 +1113,12 @@ fileprivate struct ProgramarServicioModal: View {
                         .font(.caption)
                         .foregroundColor(.orange)
                 }
+                
+                if fechaInicio < Date() {
+                    Label("La fecha de inicio no puede ser en el pasado.", systemImage: "xmark.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
             }
             .padding()
             .background(Color("MercedesCard"))
@@ -1137,8 +1143,8 @@ fileprivate struct ProgramarServicioModal: View {
                         .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
-                .disabled(vehiculoSeleccionadoID == nil || candidato == nil)
-                .opacity((vehiculoSeleccionadoID == nil || candidato == nil) ? 0.6 : 1.0)
+                .disabled(vehiculoSeleccionadoID == nil || candidato == nil || fechaInicio < Date())
+                .opacity((vehiculoSeleccionadoID == nil || candidato == nil || fechaInicio < Date()) ? 0.6 : 1.0)
             }
         }
         .padding(24)
