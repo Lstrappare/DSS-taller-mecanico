@@ -361,16 +361,6 @@ fileprivate struct ServicioCard: View {
                     .buttonStyle(.plain)
                     .foregroundColor(.white)
                     
-                    Button {
-                        onSchedule()
-                    } label: {
-                        Label("Programar", systemImage: "calendar.badge.plus")
-                            .font(.caption)
-                            .padding(.horizontal, 8).padding(.vertical, 5)
-                            .background(Color.blue.opacity(0.25))
-                            .cornerRadius(6)
-                    }
-                    .buttonStyle(.plain)
                     .foregroundColor(.white)
                 }
             }
@@ -422,17 +412,32 @@ fileprivate struct ServicioCard: View {
                     .foregroundColor(estado.asignable ? .green : .red)
                     .cornerRadius(6)
                 Spacer()
-                Button {
-                    onAssign()
-                } label: {
-                    Label("Asignar", systemImage: "arrow.right.circle.fill")
-                        .font(.subheadline)
-                        .padding(.vertical, 6).padding(.horizontal, 10)
-                        .background(Color("MercedesPetrolGreen"))
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
+                
+                HStack(spacing: 12) {
+                    Button {
+                        onSchedule()
+                    } label: {
+                        Label("Programar", systemImage: "calendar.badge.plus")
+                            .font(.subheadline)
+                            .padding(.vertical, 6).padding(.horizontal, 10)
+                            .background(Color.blue.opacity(0.25))
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        onAssign()
+                    } label: {
+                        Label("Asignar Ahora", systemImage: "arrow.right.circle.fill")
+                            .font(.subheadline)
+                            .padding(.vertical, 6).padding(.horizontal, 10)
+                            .background(Color("MercedesPetrolGreen"))
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
         }
         .padding(12)
