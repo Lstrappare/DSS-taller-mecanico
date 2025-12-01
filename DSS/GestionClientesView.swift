@@ -12,8 +12,8 @@ fileprivate enum ModalMode: Identifiable {
     var id: String {
         switch self {
         case .addClienteConVehiculo: return "addClienteConVehiculo"
-        case .editCliente(let cliente): return cliente.telefono
-        case .addVehiculo(let cliente): return "addVehiculoA-\(cliente.telefono)"
+        case .editCliente(let cliente): return cliente.nombre
+        case .addVehiculo(let cliente): return "addVehiculoA-\(cliente.nombre)"
         case .editVehiculo(let vehiculo): return vehiculo.placas
         }
     }
@@ -501,7 +501,7 @@ fileprivate struct ClienteConVehiculoFormView: View {
                         
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
-                                Text("• Nombre Completo").font(.caption2).foregroundColor(.gray)
+                                Text("• Nombre Completo (ID Único)").font(.caption2).foregroundColor(.gray)
                             }
                             HStack(spacing: 6) {
                                 TextField("ej. José Cisneros Torres", text: $nombre)
@@ -550,7 +550,7 @@ fileprivate struct ClienteConVehiculoFormView: View {
                         }
                         
                         HStack(spacing: 16) {
-                            FormField(title: "• Teléfono (ID Único)", placeholder: "10 dígitos", text: $telefono)
+                            FormField(title: "• Teléfono", placeholder: "10 dígitos", text: $telefono)
                                 .validationHint(isInvalid: telefonoInvalido, message: "Requerido.")
                             FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $email)
                         }
@@ -735,7 +735,7 @@ fileprivate struct ClienteFormView: View {
                         // Nombre con candado en edición y validación
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
-                                Text("• Nombre Completo").font(.caption2).foregroundColor(.gray)
+                                Text("• Nombre Completo (ID Único)").font(.caption2).foregroundColor(.gray)
                                 Image(systemName: isNombreUnlocked ? "lock.open.fill" : "lock.fill")
                                     .foregroundColor(isNombreUnlocked ? .green : .red)
                                     .font(.caption2)
@@ -803,7 +803,7 @@ fileprivate struct ClienteFormView: View {
                         // Teléfono con Candado
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
-                                Text("• Teléfono (ID Único)").font(.caption2).foregroundColor(.gray)
+                                Text("• Teléfono").font(.caption2).foregroundColor(.gray)
                                 Image(systemName: isTelefonoUnlocked ? "lock.open.fill" : "lock.fill")
                                     .foregroundColor(isTelefonoUnlocked ? .green : .red)
                                     .font(.caption2)

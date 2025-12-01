@@ -868,8 +868,8 @@ class Vehiculo {
 
 @Model
 class Cliente {
-    @Attribute(.unique) var telefono: String
-    var nombre: String
+    var telefono: String
+    @Attribute(.unique) var nombre: String
     var email: String
 
     @Relationship(deleteRule: .cascade)
