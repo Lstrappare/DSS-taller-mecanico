@@ -242,6 +242,66 @@ class Personal {
         
         return cursor
     }
+    
+    /// Verifica si una fecha específica cae dentro del horario laboral del empleado
+    func estaEnHorarioLaboral(_ fecha: Date) -> Bool {
+        let calendario = Calendar.current
+        let diaSemana = calendario.component(.weekday, from: fecha)
+        
+        // 1. Verificar día laboral
+        if !diasLaborales.contains(diaSemana) { return false }
+        
+        // 2. Verificar hora
+        let hora = calendario.component(.hour, from: fecha)
+        
+        if horaEntrada < horaSalida {
+            // Turno normal
+            return hora >= horaEntrada && hora < horaSalida
+        } else if horaEntrada > horaSalida {
+            // Turno nocturno
+            return hora >= horaEntrada || hora < horaSalida
+        } else {
+            return false
+        }
+    }
+    
+    /// Calcula cuántos segundos laborales hay desde AHORA hasta 'hasta'.
+    /// Útil para mostrar el tiempo restante real en el contador.
+    func calcularTiempoRestanteLaboral(hasta: Date) -> TimeInterval {
+        let ahora = Date()
+        if hasta <= ahora { return 0 }
+        
+        let calendario = Calendar.current
+        var cursor = ahora
+        var tiempoAcumulado: TimeInterval = 0
+        
+        // Iterar por horas o bloques hasta llegar a 'hasta'
+        // Para eficiencia, avanzamos día a día si es posible, o hora a hora
+        
+        // Límite de seguridad
+        let limiteSeguridad = calendario.date(byAdding: .day, value: 30, to: ahora)!
+        if hasta > limiteSeguridad { return 0 } // Algo anda mal o es muy lejos
+        
+        while cursor < hasta {
+            // Determinar fin del bloque actual (siguiente hora en punto)
+            guard let siguienteHora = calendario.date(byAdding: .hour, value: 1, to: cursor),
+                  let finBloqueMin = calendario.date(bySetting: .minute, value: 0, of: siguienteHora),
+                  let finBloque = calendario.date(bySetting: .second, value: 0, of: finBloqueMin) else {
+                break
+            }
+            
+            let finIteracion = min(finBloque, hasta)
+            
+            // Verificar si el cursor está en horario laboral
+            if estaEnHorarioLaboral(cursor) {
+                tiempoAcumulado += finIteracion.timeIntervalSince(cursor)
+            }
+            
+            cursor = finIteracion
+        }
+        
+        return tiempoAcumulado
+    }
 
     var isAsignable: Bool {
         return activo && estaEnHorario && (estado == .disponible)

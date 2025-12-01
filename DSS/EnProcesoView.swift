@@ -416,7 +416,8 @@ struct EnProcesoView: View {
         ticket.rfcMecanicoAsignado = mecanico.rfc
         ticket.nombreMecanicoAsignado = mecanico.nombre
         ticket.horaInicio = ahora
-        ticket.horaFinEstimada = fin
+        // Usar la lógica de horario laboral para calcular el fin estimado real
+        ticket.horaFinEstimada = mecanico.calcularFechaFin(inicio: ahora, duracionHoras: ticket.duracionHoras)
         
         let registro = DecisionRecord(
             fecha: Date(),
@@ -477,7 +478,8 @@ struct EnProcesoView: View {
         ticket.rfcMecanicoAsignado = mecanico.rfc
         ticket.nombreMecanicoAsignado = mecanico.nombre
         ticket.horaInicio = ahora
-        ticket.horaFinEstimada = fin
+        // Usar la lógica de horario laboral para calcular el fin estimado real
+        ticket.horaFinEstimada = mecanico.calcularFechaFin(inicio: ahora, duracionHoras: ticket.duracionHoras)
         
         let registro = DecisionRecord(
             fecha: Date(),
@@ -854,24 +856,36 @@ struct ServicioEnProcesoCard: View {
     let servicio: ServicioEnProceso
     var onTerminar: () -> Void
     
+    @Query private var personal: [Personal]
+    
     @State private var segundosRestantes: Double
     @State private var confirmando = false
+    @State private var estaPausado = false
     
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     init(servicio: ServicioEnProceso, onTerminar: @escaping () -> Void) {
         self.servicio = servicio
         self.onTerminar = onTerminar
+        // Inicialización temporal, se ajusta en onAppear
         _segundosRestantes = State(initialValue: servicio.tiempoRestanteSegundos)
     }
     
+    private var mecanicoAsignado: Personal? {
+        personal.first(where: { $0.rfc == servicio.rfcMecanicoAsignado })
+    }
+    
     private var progreso: Double {
-        let total = max(1, servicio.horaFinEstimada.timeIntervalSince(servicio.horaInicio))
-        let restante = max(0, servicio.horaFinEstimada.timeIntervalSinceNow)
-        return max(0, min(1, restante / total))
+        // El progreso visual es relativo al tiempo total estimado vs el restante laboral
+        // Si está pausado, no avanza.
+        // Calculamos un total teórico basado en duración horas (que son horas laborales)
+        let totalSegundosLaborales = servicio.duracionHoras * 3600
+        let restante = segundosRestantes
+        return max(0, min(1, restante / totalSegundosLaborales))
     }
     
     private var colorUrgencia: Color {
+        if estaPausado { return .gray }
         if segundosRestantes == 0 { return .red }
         if segundosRestantes <= 1800 { return .yellow }
         return Color("MercedesPetrolGreen")
@@ -901,7 +915,7 @@ struct ServicioEnProcesoCard: View {
                     Label(servicio.nombreMecanicoAsignado, systemImage: "person.fill")
                         .font(.subheadline)
                         .foregroundColor(Color("MercedesPetrolGreen"))
-                    Label("Fin: \(servicio.horaFinEstimada.formatted(date: .omitted, time: .shortened))", systemImage: "clock")
+                    Label("Fin: \(servicio.horaFinEstimada.formatted(date: .abbreviated, time: .shortened))", systemImage: "clock")
                         .font(.caption2).foregroundColor(.gray)
                 }
             }
@@ -909,9 +923,19 @@ struct ServicioEnProcesoCard: View {
             // Contador
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Tiempo restante")
+                    Text("Tiempo restante (Laboral)")
                         .font(.caption).foregroundColor(.gray)
                     Spacer()
+                    
+                    if estaPausado {
+                        Text("PAUSADO (Fuera de horario)")
+                            .font(.caption2)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(Color.orange.opacity(0.2))
+                            .foregroundColor(.orange)
+                            .cornerRadius(6)
+                    }
+                    
                     Text(segundosRestantes == 0 ? "Vencido" : estadoUrgenciaTexto())
                         .font(.caption2)
                         .padding(.horizontal, 8).padding(.vertical, 4)
@@ -922,7 +946,7 @@ struct ServicioEnProcesoCard: View {
                 HStack(alignment: .lastTextBaseline) {
                     Text(formatearTiempo(segundos: segundosRestantes))
                         .font(.system(size: 32, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
+                        .foregroundColor(estaPausado ? .gray : .white)
                     Spacer()
                     ProgressView(value: 1 - progreso)
                         .progressViewStyle(.linear)
@@ -986,13 +1010,35 @@ struct ServicioEnProcesoCard: View {
         )
         .cornerRadius(10)
         .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
-        .onReceive(timer) { _ in
-            if segundosRestantes > 0 {
-                segundosRestantes -= 1
-            } else {
-                timer.upstream.connect().cancel()
-            }
+        .onAppear {
+            actualizarTiempo()
         }
+        .onReceive(timer) { _ in
+            actualizarTiempo()
+        }
+    }
+    
+    private func actualizarTiempo() {
+        guard let mec = mecanicoAsignado else {
+            // Fallback si no hay mecánico (raro)
+            segundosRestantes = max(0, servicio.horaFinEstimada.timeIntervalSinceNow)
+            estaPausado = false
+            return
+        }
+        
+        // 1. Verificar si estamos en horario laboral AHORA
+        let ahora = Date()
+        estaPausado = !mec.estaEnHorarioLaboral(ahora)
+        
+        // 2. Calcular tiempo restante laboral REAL
+        // Esto recalcula siempre basado en la fecha fin estimada, que ya tiene en cuenta los huecos.
+        // Si estamos en pausa, el tiempo restante laboral no debería cambiar (porque 'ahora' avanza pero no consume laboral)
+        // PERO, calcularTiempoRestanteLaboral(hasta: fin) desde 'ahora' ya maneja eso:
+        // si 'ahora' está en hueco, no suma tiempo hasta que empieza el turno.
+        // El problema es que si 'ahora' avanza en hueco, la distancia a 'fin' se mantiene igual en términos laborales.
+        // Así que simplemente llamamos a la función.
+        
+        segundosRestantes = mec.calcularTiempoRestanteLaboral(hasta: servicio.horaFinEstimada)
     }
     
     private func estadoUrgenciaTexto() -> String {
