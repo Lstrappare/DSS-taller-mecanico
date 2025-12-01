@@ -1519,7 +1519,12 @@ fileprivate struct ServicioFormView: View {
         }
         return !costoRefaccionesString.isEmpty && (Double(costoRefaccionesString) == nil || (Double(costoRefaccionesString) ?? -1) < 0)
     }
-    private var pISRInvalido: Bool { porcentajeInvalido(porcentajeISRString) }
+    private var pISRInvalido: Bool {
+        if aplicarISR {
+            return porcentajeInvalido(porcentajeISRString)
+        }
+        return !porcentajeISRString.isEmpty && porcentajeInvalido(porcentajeISRString)
+    }
     
     private func porcentajeInvalido(_ s: String) -> Bool {
         guard let v = Double(s.replacingOccurrences(of: ",", with: ".")) else { return true }
@@ -2188,9 +2193,23 @@ fileprivate struct ServicioFormView: View {
                  costoRef = val
             }
         }
-        guard let pISR = Double(porcentajeISRString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(pISR) else {
-            errorMsg = "% ISR inválido."
-            return
+        let pISR: Double
+        if aplicarISR {
+            guard let val = Double(porcentajeISRString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(val) else {
+                errorMsg = "% ISR inválido."
+                return
+            }
+            pISR = val
+        } else {
+            if porcentajeISRString.isEmpty {
+                pISR = 0.0
+            } else {
+                guard let val = Double(porcentajeISRString.replacingOccurrences(of: ",", with: ".")), (0...100).contains(val) else {
+                    errorMsg = "% ISR inválido."
+                    return
+                }
+                pISR = val
+            }
         }
         // NEW: ensure rolRequerido is selected for both edit/add
         guard let rol = rolRequerido else {
