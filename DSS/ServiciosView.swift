@@ -485,6 +485,7 @@ fileprivate struct AsignarServicioModal: View {
     @State private var candidato: Personal?
     @State private var costoEstimado: Double = 0
     @State private var hayStockInsuficiente: Bool = false
+    @State private var fechaFinEstimada: Date?
     
     var vehiculosFiltrados: [Vehiculo] {
         if searchVehiculo.trimmingCharacters(in: .whitespaces).isEmpty { return vehiculos }
@@ -731,6 +732,16 @@ fileprivate struct AsignarServicioModal: View {
                     }
                     .font(.subheadline)
                     .foregroundColor(.gray)
+                    
+                    if let fin = fechaFinEstimada, !Calendar.current.isDate(fin, inSameDayAs: Date()) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.calendar")
+                            Text("Finaliza el \(fin.formatted(date: .abbreviated, time: .shortened))")
+                        }
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                        .padding(.top, 2)
+                    }
                 }
                 Spacer()
                 Button {
@@ -790,6 +801,12 @@ fileprivate struct AsignarServicioModal: View {
         }
         costoEstimado = costo
         hayStockInsuficiente = !stockOK
+        
+        if let c = candidato {
+            fechaFinEstimada = c.calcularFechaFin(inicio: ahora, duracionHoras: servicio.duracionHoras)
+        } else {
+            fechaFinEstimada = nil
+        }
     }
     
     // Chips helpers
