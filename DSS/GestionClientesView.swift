@@ -121,10 +121,10 @@ struct GestionClientesView: View {
             // Pasa el environment a TODOS los modales
             switch mode {
             case .addClienteConVehiculo:
-                ClienteConVehiculoFormView()
+                ClienteConVehiculoFormView(modalMode: $modalMode)
                     .environment(\.modelContext, modelContext)
             case .editCliente(let cliente):
-                ClienteFormView(cliente: cliente)
+                ClienteFormView(cliente: cliente, modalMode: $modalMode)
                     .environment(\.modelContext, modelContext)
             case .addVehiculo(let cliente):
                 VehiculoFormView(cliente: cliente)
@@ -443,6 +443,9 @@ fileprivate struct ClienteCard: View {
 fileprivate struct ClienteConVehiculoFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    
+    @Binding var modalMode: ModalMode?
+    @Query private var allClientes: [Cliente]
 
     // States
     @State private var nombre = ""
@@ -455,8 +458,19 @@ fileprivate struct ClienteConVehiculoFormView: View {
     @State private var errorMsg: String?
     
     // Bools de Validación
+    private var clienteExistente: Cliente? {
+        let nombreLimpio = nombre.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if nombreLimpio.isEmpty { return nil }
+        return allClientes.first { $0.nombre.lowercased() == nombreLimpio }
+    }
+    
+    private var nombreDuplicado: Bool {
+        clienteExistente != nil
+    }
+    
     private var nombreInvalido: Bool {
-        nombre.trimmingCharacters(in: .whitespaces).split(separator: " ").count < 2
+        let parts = nombre.trimmingCharacters(in: .whitespaces).split(separator: " ")
+        return parts.count < 2 || nombreDuplicado
     }
     private var telefonoInvalido: Bool {
         telefono.trimmingCharacters(in: .whitespaces).isEmpty
@@ -485,8 +499,55 @@ fileprivate struct ClienteConVehiculoFormView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "1. Datos del Cliente", subtitle: "Información personal")
                         
-                        FormField(title: "• Nombre Completo", placeholder: "ej. José Cisneros Torres", text: $nombre)
-                            .validationHint(isInvalid: nombreInvalido, message: "Escribe nombre y apellido.")
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text("• Nombre Completo").font(.caption2).foregroundColor(.gray)
+                            }
+                            HStack(spacing: 6) {
+                                TextField("ej. José Cisneros Torres", text: $nombre)
+                                    .textFieldStyle(.plain)
+                                    .padding(10)
+                                    .background(Color("MercedesBackground"))
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .onChange(of: nombre) { _, newValue in
+                                        if newValue.count > 21 {
+                                            nombre = String(newValue.prefix(21))
+                                        }
+                                    }
+                                
+                                // Contador manual
+                                Text("\(nombre.count)/21")
+                                    .font(.caption2)
+                                    .foregroundColor(nombre.count >= 21 ? .red : .gray)
+                                    .frame(width: 40, alignment: .trailing)
+                            }
+                            .validationHint(isInvalid: nombreInvalido, message: nombreDuplicado ? "Este nombre ya está en uso." : "Escribe nombre y apellido.")
+                            
+                            // Botón para editar el existente si hay duplicado
+                            if let existente = clienteExistente {
+                                Button {
+                                    // Cambiar a modo edición del cliente existente
+                                    modalMode = .editCliente(existente)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "pencil.circle.fill")
+                                        Text("Editar '\(existente.nombre)' existente")
+                                    }
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.blue.opacity(0.2))
+                                    .foregroundColor(.blue)
+                                    .cornerRadius(6)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, 2)
+                            }
+                        }
                         
                         HStack(spacing: 16) {
                             FormField(title: "• Teléfono (ID Único)", placeholder: "10 dígitos", text: $telefono)
@@ -620,21 +681,38 @@ fileprivate struct ClienteFormView: View {
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
 
     @Bindable var cliente: Cliente
+    @Binding var modalMode: ModalMode?
+    @Query private var allClientes: [Cliente]
 
     // States para Seguridad y Errores
     @State private var isTelefonoUnlocked = false
+    @State private var isNombreUnlocked = false // Nuevo lock para nombre
     @State private var showingAuthModal = false
     @State private var authError = ""
     @State private var passwordAttempt = ""
     @State private var errorMsg: String?
     
     private enum AuthReason {
-        case unlockTelefono, deleteCliente
+        case unlockTelefono, unlockNombre, deleteCliente
     }
     @State private var authReason: AuthReason = .unlockTelefono
     
+    private var clienteExistenteConMismoNombre: Cliente? {
+        let nombreLimpio = cliente.nombre.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if nombreLimpio.isEmpty { return nil }
+        // Buscar otro cliente con el mismo nombre (excluyendo al actual por ID persistente o referencia)
+        return allClientes.first {
+            $0.nombre.lowercased() == nombreLimpio && $0.persistentModelID != cliente.persistentModelID
+        }
+    }
+    
+    private var nombreDuplicado: Bool {
+        clienteExistenteConMismoNombre != nil
+    }
+    
     private var nombreInvalido: Bool {
-        cliente.nombre.trimmingCharacters(in: .whitespaces).split(separator: " ").count < 2
+        let parts = cliente.nombre.trimmingCharacters(in: .whitespaces).split(separator: " ")
+        return parts.count < 2 || nombreDuplicado
     }
     
     var body: some View {
@@ -654,8 +732,73 @@ fileprivate struct ClienteFormView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "Datos del Cliente", subtitle: "Información personal")
                         
-                        FormField(title: "• Nombre Completo", placeholder: "ej. José Cisneros", text: $cliente.nombre)
-                            .validationHint(isInvalid: nombreInvalido, message: "Escribe nombre y apellido.")
+                        // Nombre con candado en edición y validación
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 6) {
+                                Text("• Nombre Completo").font(.caption2).foregroundColor(.gray)
+                                Image(systemName: isNombreUnlocked ? "lock.open.fill" : "lock.fill")
+                                    .foregroundColor(isNombreUnlocked ? .green : .red)
+                                    .font(.caption2)
+                            }
+                            HStack(spacing: 6) {
+                                TextField("", text: $cliente.nombre)
+                                    .disabled(!isNombreUnlocked)
+                                    .textFieldStyle(.plain)
+                                    .padding(10)
+                                    .background(Color("MercedesBackground"))
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .onChange(of: cliente.nombre) { _, newValue in
+                                        if newValue.count > 21 {
+                                            cliente.nombre = String(newValue.prefix(21))
+                                        }
+                                    }
+                                
+                                // Contador manual para Nombre
+                                Text("\(cliente.nombre.count)/21")
+                                    .font(.caption2)
+                                    .foregroundColor(cliente.nombre.count >= 21 ? .red : .gray)
+                                    .frame(width: 40, alignment: .trailing)
+                                
+                                Button {
+                                    if isNombreUnlocked { isNombreUnlocked = false }
+                                    else {
+                                        authReason = .unlockNombre
+                                        showingAuthModal = true
+                                    }
+                                } label: {
+                                    Text(isNombreUnlocked ? "Bloquear" : "Desbloquear")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(isNombreUnlocked ? .green : .red)
+                            }
+                            .validationHint(isInvalid: nombreInvalido, message: nombreDuplicado ? "Este nombre ya está en uso." : "Escribe nombre y apellido.")
+                            
+                            // Botón para editar el existente si hay duplicado
+                            if let existente = clienteExistenteConMismoNombre {
+                                Button {
+                                    // Cambiar a modo edición del otro cliente
+                                    modalMode = .editCliente(existente)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "pencil.circle.fill")
+                                        Text("Editar '\(existente.nombre)' existente")
+                                    }
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.blue.opacity(0.2))
+                                    .foregroundColor(.blue)
+                                    .cornerRadius(6)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, 2)
+                            }
+                        }
                         
                         // Teléfono con Candado
                         VStack(alignment: .leading, spacing: 4) {
@@ -801,8 +944,14 @@ fileprivate struct ClienteFormView: View {
     // Modal de Autenticación (alineado a ProductFormView)
     @ViewBuilder
     func authModalView() -> some View {
-        let prompt = (authReason == .unlockTelefono) ? "Autoriza para editar el Teléfono." : "¡Acción irreversible! Autoriza para ELIMINAR a este cliente."
-        ZStack {
+        let prompt: String
+        switch authReason {
+        case .unlockTelefono: prompt = "Autoriza para editar el Teléfono."
+        case .unlockNombre: prompt = "Autoriza para editar el Nombre."
+        case .deleteCliente: prompt = "¡Acción irreversible! Autoriza para ELIMINAR a este cliente."
+        }
+        
+        return ZStack {
             Color("MercedesBackground").ignoresSafeArea()
             VStack(spacing: 12) {
                 Text("Autorización Requerida").font(.title2).fontWeight(.bold)
@@ -838,7 +987,13 @@ fileprivate struct ClienteFormView: View {
     // Lógica de Autenticación
     func authenticateWithTouchID() async {
         let context = LAContext()
-        let reason = (authReason == .unlockTelefono) ? "Autoriza la edición del Teléfono." : "Autoriza la ELIMINACIÓN del cliente."
+        let reason: String
+        switch authReason {
+        case .unlockTelefono: reason = "Autoriza la edición del Teléfono."
+        case .unlockNombre: reason = "Autoriza la edición del Nombre."
+        case .deleteCliente: reason = "Autoriza la ELIMINACIÓN del cliente."
+        }
+        
         do {
             if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
                 let success = try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
@@ -856,6 +1011,8 @@ fileprivate struct ClienteFormView: View {
         switch authReason {
         case .unlockTelefono:
             isTelefonoUnlocked = true
+        case .unlockNombre:
+            isNombreUnlocked = true
         case .deleteCliente:
             modelContext.delete(cliente)
             dismiss()
