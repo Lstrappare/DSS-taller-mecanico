@@ -751,6 +751,9 @@ fileprivate struct PersonalFormView: View {
         if mecanicoAEditar != nil { return false }
         return tipoSalarioSeleccion == nil
     }
+    private var especialidadesInvalidas: Bool {
+        especialidadesString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     
     // Helpers de asistencia/estado del día
     private var hoy: Date { Calendar.current.startOfDay(for: Date()) }
@@ -950,8 +953,9 @@ fileprivate struct PersonalFormView: View {
                                     .cornerRadius(8)
                                 }
                             }
-                            FormField(title: "Especialidades (coma separadas)", placeholder: "Motor, Frenos...", text: $especialidadesString)
+                            FormField(title: "• Especialidades (coma separadas)", placeholder: "Motor, Frenos...", text: $especialidadesString)
                                 .help("Ejemplo: Motor, Frenos. Se guardarán con mayúscula inicial.")
+                                .validationHint(isInvalid: especialidadesInvalidas, message: "Debes ingresar al menos una especialidad.")
                         }
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 2) {
@@ -1421,7 +1425,8 @@ fileprivate struct PersonalFormView: View {
                     rolNoSeleccionado ||
                     tipoContratoNoSeleccionado ||
                     frecuenciaPagoNoSeleccionada ||
-                    tipoSalarioNoSeleccionado
+                    tipoSalarioNoSeleccionado ||
+                    especialidadesInvalidas
                 )
                 .opacity(
                     (nombreInvalido ||
@@ -1438,7 +1443,8 @@ fileprivate struct PersonalFormView: View {
                      rolNoSeleccionado ||
                      tipoContratoNoSeleccionado ||
                      frecuenciaPagoNoSeleccionada ||
-                     tipoSalarioNoSeleccionado) ? 0.6 : 1.0
+                     tipoSalarioNoSeleccionado ||
+                     especialidadesInvalidas) ? 0.6 : 1.0
                 )
             }
             .padding(20)
