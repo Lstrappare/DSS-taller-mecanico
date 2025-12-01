@@ -325,31 +325,8 @@ fileprivate struct ClienteCard: View {
         VStack(alignment: .leading, spacing: 10) {
             // Header con nombre y acción editar
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(cliente.nombre)
-                        .font(.headline).fontWeight(.semibold)
-                    // Chips de contacto
-                    HStack(spacing: 6) {
-                        if let telURL = URL(string: "tel:\(cliente.telefono)") {
-                            Link(destination: telURL) {
-                                chip(text: cliente.telefono, systemImage: "phone.fill")
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            chip(text: cliente.telefono, systemImage: "phone.fill")
-                        }
-                        if cliente.email.isEmpty {
-                            chip(text: "Sin email", systemImage: "envelope.fill", muted: true)
-                        } else if let mailURL = URL(string: "mailto:\(cliente.email)") {
-                            Link(destination: mailURL) {
-                                chip(text: cliente.email, systemImage: "envelope.fill")
-                            }
-                            .buttonStyle(.plain)
-                        } else {
-                            chip(text: cliente.email, systemImage: "envelope.fill")
-                        }
-                    }
-                }
+                Text(cliente.nombre)
+                    .font(.headline).fontWeight(.semibold)
                 Spacer()
                 Button {
                     onEditCliente()
@@ -362,6 +339,34 @@ fileprivate struct ClienteCard: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.white)
+            }
+            
+            // Contacto (Estilo PersonalView)
+            HStack(spacing: 12) {
+                if cliente.email.isEmpty {
+                    Label("Email: N/A", systemImage: "envelope.fill")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                } else {
+                    Link(destination: URL(string: "mailto:\(cliente.email)")!) {
+                        Label(cliente.email, systemImage: "envelope.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption2)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                }
+                
+                if !cliente.telefono.isEmpty {
+                    Link(destination: URL(string: "tel:\(cliente.telefono)")!) {
+                        Label(cliente.telefono, systemImage: "phone.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption2)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                } else {
+                    Label("Tel: N/A", systemImage: "phone.fill")
+                        .font(.caption2).foregroundColor(.gray)
+                }
             }
             
             Divider().opacity(0.5)
@@ -388,7 +393,7 @@ fileprivate struct ClienteCard: View {
                         HStack(spacing: 10) {
                             Text("[\(vehiculo.placas)]")
                                 .font(.system(.body, design: .monospaced))
-                                .foregroundColor(Color("MercedesPetrolGreen"))
+                                .foregroundColor(.white)
                             Text("\(vehiculo.marca) \(vehiculo.modelo) (\(String(vehiculo.anio)))")
                                 .font(.subheadline)
                             Spacer()
@@ -396,10 +401,10 @@ fileprivate struct ClienteCard: View {
                                 onEditVehiculo(vehiculo)
                             } label: {
                                 Label("Editar Auto", systemImage: "pencil.circle")
-                                    .font(.caption)
-                                    .padding(.horizontal, 8).padding(.vertical, 5)
-                                    .background(Color("MercedesBackground"))
-                                    .cornerRadius(6)
+                                .font(.caption)
+                                .padding(.horizontal, 8).padding(.vertical, 5)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(6)
                             }
                             .buttonStyle(.plain)
                             .foregroundColor(.white)
@@ -442,20 +447,6 @@ fileprivate struct ClienteCard: View {
         )
         .cornerRadius(10)
         .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
-    }
-    
-    private func chip(text: String, systemImage: String, muted: Bool = false) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-            Text(text)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .font(.caption2)
-        .padding(.horizontal, 8).padding(.vertical, 4)
-        .background(Color("MercedesBackground"))
-        .cornerRadius(6)
-        .foregroundColor(muted ? .gray : .white)
     }
 }
 
