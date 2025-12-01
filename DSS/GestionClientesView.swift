@@ -476,6 +476,12 @@ fileprivate struct ClienteConVehiculoFormView: View {
         let t = telefono.trimmingCharacters(in: .whitespaces)
         return t.isEmpty || t.count != 10
     }
+    private var emailInvalido: Bool {
+        let e = email.trimmingCharacters(in: .whitespaces)
+        if e.isEmpty { return false } // Opcional
+        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+        return !NSPredicate(format: "SELF MATCHES %@", emailRegex).evaluate(with: e)
+    }
     private var clienteConMismoTelefono: Cliente? {
         let telLimpio = telefono.trimmingCharacters(in: .whitespaces)
         if telLimpio.isEmpty { return nil }
@@ -508,7 +514,7 @@ fileprivate struct ClienteConVehiculoFormView: View {
                         
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
-                                Text("• Nombre Completo (ID Único)").font(.caption2).foregroundColor(.gray)
+                                Text("• Nombre Completo").font(.caption2).foregroundColor(.gray)
                             }
                             HStack(spacing: 6) {
                                 TextField("ej. José Cisneros Torres", text: $nombre)
@@ -571,7 +577,13 @@ fileprivate struct ClienteConVehiculoFormView: View {
                                 .validationHint(isInvalid: !telefonoInvalido && clienteConMismoTelefono != nil, 
                                                 message: "Registrado en: \(clienteConMismoTelefono?.nombre ?? "")",
                                                 color: .yellow)
-                            FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $email)
+                            FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $email, characterLimit: 60)
+                                .onChange(of: email) { _, newValue in
+                                    if newValue.count > 60 {
+                                        email = String(newValue.prefix(60))
+                                    }
+                                }
+                                .validationHint(isInvalid: emailInvalido, message: "Formato inválido.")
                         }
                     }
                     
@@ -582,7 +594,7 @@ fileprivate struct ClienteConVehiculoFormView: View {
                         SectionHeader(title: "2. Datos del Primer Vehículo", subtitle: "Información del auto")
                         
                         HStack(spacing: 16) {
-                            FormField(title: "• Placas (ID Único)", placeholder: "ej. ABC-123", text: $placas)
+                            FormField(title: "• Placas", placeholder: "ej. ABC-123", text: $placas)
                                 .validationHint(isInvalid: placasInvalidas, message: "Requerido.")
                             FormField(title: "• Año", placeholder: "ej. 2020", text: $anioString)
                                 .validationHint(isInvalid: anioInvalido, message: "Numérico.")
@@ -635,8 +647,8 @@ fileprivate struct ClienteConVehiculoFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido)
-                .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido) ? 0.6 : 1.0)
+                .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido)
+                .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
@@ -658,6 +670,10 @@ fileprivate struct ClienteConVehiculoFormView: View {
         // Validación
         guard nombreTrimmed.split(separator: " ").count >= 2 else {
             errorMsg = "El Nombre Completo debe tener al menos 2 palabras."
+            return
+        }
+        if emailInvalido {
+            errorMsg = "El formato del Email es inválido."
             return
         }
         guard !telefonoTrimmed.isEmpty, telefonoTrimmed.count == 10 else {
@@ -740,6 +756,13 @@ fileprivate struct ClienteFormView: View {
         return allClientes.first { 
             $0.telefono == telLimpio && $0.persistentModelID != cliente.persistentModelID 
         }
+    }
+    
+    private var emailInvalido: Bool {
+        let e = cliente.email.trimmingCharacters(in: .whitespaces)
+        if e.isEmpty { return false }
+        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+        return !NSPredicate(format: "SELF MATCHES %@", emailRegex).evaluate(with: e)
     }
     
     var body: some View {
@@ -890,7 +913,13 @@ fileprivate struct ClienteFormView: View {
                                             color: .yellow)
                         }
                         
-                        FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $cliente.email)
+                        FormField(title: "Email (Opcional)", placeholder: "ej. jose@cliente.com", text: $cliente.email, characterLimit: 60)
+                            .onChange(of: cliente.email) { _, newValue in
+                                if newValue.count > 60 {
+                                    cliente.email = String(newValue.prefix(60))
+                                }
+                            }
+                            .validationHint(isInvalid: emailInvalido, message: "Formato inválido.")
                     }
                     
                     Divider().background(Color.red.opacity(0.3))
@@ -968,8 +997,8 @@ fileprivate struct ClienteFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(nombreInvalido || (cliente.telefono.count != 10))
-                .opacity((nombreInvalido || (cliente.telefono.count != 10)) ? 0.6 : 1.0)
+                .disabled(nombreInvalido || (cliente.telefono.count != 10) || emailInvalido)
+                .opacity((nombreInvalido || (cliente.telefono.count != 10) || emailInvalido) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
