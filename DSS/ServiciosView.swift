@@ -1017,8 +1017,13 @@ fileprivate struct ProgramarServicioModal: View {
     }
     
     var isHoraValida: Bool {
-        let hora = Calendar.current.component(.hour, from: fechaInicio)
-        return hora >= 6 && hora <= 20
+        let cal = Calendar.current
+        let hora = cal.component(.hour, from: fechaInicio)
+        let minuto = cal.component(.minute, from: fechaInicio)
+        if hora < 6 { return false }
+        if hora > 20 { return false }
+        if hora == 20 && minuto > 0 { return false }
+        return true
     }
     
     var body: some View {
@@ -1216,9 +1221,15 @@ fileprivate struct ProgramarServicioModal: View {
             HStack {
                 Button("Cancelar") { dismiss() }
                     .buttonStyle(.plain)
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 8)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
                     .foregroundColor(.gray)
+                    .background(Color("MercedesBackground"))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
                 Spacer()
                 Button {
                     guardarProgramacion()
