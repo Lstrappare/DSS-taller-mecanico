@@ -637,6 +637,9 @@ fileprivate struct PersonalFormView: View {
     }
     
     // Validaciones
+    private var nombreLettersCount: Int {
+        nombre.unicodeScalars.filter { CharacterSet.letters.contains($0) }.count
+    }
     private var nombreValidationMessage: String? {
         validateNombreCompleto(nombre)
     }
@@ -755,7 +758,7 @@ fileprivate struct PersonalFormView: View {
                     // 1. Identificación y Contacto
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "1. Identificación y Contacto", subtitle: "Datos básicos")
-                        FormField(title: "• Nombre completo", placeholder: "ej. José Cisneros Torres", text: $nombre)
+                        FormField(title: "• Nombre completo", placeholder: "ej. José Cisneros Torres", text: $nombre, characterLimit: 21, customCount: nombreLettersCount)
                             .validationHint(isInvalid: nombreInvalido, message: nombreValidationMessage ?? "")
                         HStack(spacing: 16) {
                             FormField(title: "• Correo electrónico", placeholder: "ej. jose@taller.com", text: $email)
@@ -1990,12 +1993,23 @@ fileprivate struct FormField: View {
     var title: String
     var placeholder: String
     @Binding var text: String
+    var characterLimit: Int? = nil
+    var customCount: Int? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption2)
-                .foregroundColor(.gray)
+            HStack {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+                Spacer()
+                if let limit = characterLimit {
+                    let current = customCount ?? text.count
+                    Text("\(current)/\(limit)")
+                        .font(.caption2)
+                        .foregroundColor(current > limit ? .red : .gray)
+                }
+            }
             TextField("", text: $text)
                 .textFieldStyle(.plain)
                 .padding(10)
