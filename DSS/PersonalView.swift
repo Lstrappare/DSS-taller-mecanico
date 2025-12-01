@@ -607,6 +607,22 @@ fileprivate struct PersonalFormView: View {
         return nil
     }
     
+    // Lógica para detectar duplicado por RFC
+    private var personalExistenteConMismoRFC: Personal? {
+        let rfcLimpio = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if rfcLimpio.isEmpty { return nil }
+        
+        // Buscar coincidencia exacta
+        if let encontrado = allPersonal.first(where: { $0.rfc.uppercased() == rfcLimpio }) {
+            // Si estamos editando, ignorar si es el mismo que estamos editando
+            if let actual = mecanicoAEditar, actual.id == encontrado.id {
+                return nil
+            }
+            return encontrado
+        }
+        return nil
+    }
+    
     init(mode: ModalMode, parentMode: Binding<ModalMode?>) {
         self.mode = mode
         self._parentMode = parentMode
@@ -873,6 +889,29 @@ fileprivate struct PersonalFormView: View {
                                 }
                             }
                             .validationHint(isInvalid: rfcInvalido, message: "RFC inválido. Verifica estructura y homoclave.")
+                            
+                            // Botón para editar el existente si hay duplicado por RFC
+                            if let existenteRFC = personalExistenteConMismoRFC {
+                                Button {
+                                    parentMode = .edit(existenteRFC)
+                                } label: {
+                                    Text("Este RFC ya se ha registrado.")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                    HStack {
+                                        Image(systemName: "pencil.circle.fill")
+                                        Text("Editar '\(existenteRFC.nombre)' (RFC existente)")
+                                    }
+                                    .font(.caption)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.blue.opacity(0.2))
+                                    .foregroundColor(.blue)
+                                    .cornerRadius(6)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, 2)
+                            }
                         }
                         FormField(title: "CURP (opcional)", placeholder: "18 caracteres", text: $curp)
                             .validationHint(isInvalid: curpInvalido, message: "CURP inválida. Verifica formato y dígito verificador.")
