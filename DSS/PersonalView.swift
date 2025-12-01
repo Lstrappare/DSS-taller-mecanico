@@ -716,8 +716,8 @@ fileprivate struct PersonalFormView: View {
         Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) == nil || (Double(factorIntegracionString.replacingOccurrences(of: ",", with: ".")) ?? 0) <= 0
     }
     private var sinDiasLaborales: Bool { diasLaborales.isEmpty }
-    // NUEVO: Máximo 6 días laborables
-    private var diasExcedenLimite: Bool { diasLaborales.count > 6 }
+    // NUEVO: Mínimo 6 días laborables
+    private var diasInsuficientes: Bool { diasLaborales.count < 6 }
     private var telefonoInvalido: Bool {
         if !telefonoActivo { return false }
         let trimmed = telefono.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1007,10 +1007,8 @@ fileprivate struct PersonalFormView: View {
                                 .background(Color("MercedesBackground"))
                                 .cornerRadius(8)
                                 .validationHint(
-                                    isInvalid: sinDiasLaborales || diasExcedenLimite,
-                                    message: sinDiasLaborales
-                                    ? "Selecciona al menos un día."
-                                    : "Por ley, solo se permiten hasta 6 días laborables por semana."
+                                    isInvalid: diasInsuficientes,
+                                    message: "Debes seleccionar al menos 6 días laborables."
                                 )
                         }
                         HStack(spacing: 16) {
@@ -1416,8 +1414,8 @@ fileprivate struct PersonalFormView: View {
                     rfcInvalido ||
                     horasInvalidas ||
                     salarioMinimoInvalido ||
-                    sinDiasLaborales ||
-                    diasExcedenLimite ||
+                    salarioMinimoInvalido ||
+                    diasInsuficientes ||
                     comisionesInvalidas ||
                     factorIntegracionInvalido ||
                     telefonoInvalido ||
@@ -1434,8 +1432,8 @@ fileprivate struct PersonalFormView: View {
                      rfcInvalido ||
                      horasInvalidas ||
                      salarioMinimoInvalido ||
-                     sinDiasLaborales ||
-                     diasExcedenLimite ||
+                     salarioMinimoInvalido ||
+                     diasInsuficientes ||
                      comisionesInvalidas ||
                      factorIntegracionInvalido ||
                      telefonoInvalido ||
@@ -1639,8 +1637,8 @@ fileprivate struct PersonalFormView: View {
         }
         let nombreNormalizado = titleCasedName(nombre)
         
-        if diasLaborales.count > 6 {
-            errorMsg = "Por ley, solo se permiten hasta 6 días laborables por semana."
+        if diasLaborales.count < 6 {
+            errorMsg = "Debes seleccionar al menos 6 días laborables."
             return
         }
         
