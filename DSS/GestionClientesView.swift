@@ -492,7 +492,9 @@ fileprivate struct ClienteConVehiculoFormView: View {
         placas.trimmingCharacters(in: .whitespaces).isEmpty
     }
     private var anioInvalido: Bool {
-        Int(anioString) == nil
+        guard let anio = Int(anioString) else { return true }
+        let currentYear = Calendar.current.component(.year, from: Date())
+        return anio < 1900 || anio > (currentYear + 1)
     }
 
     var body: some View {
@@ -594,10 +596,28 @@ fileprivate struct ClienteConVehiculoFormView: View {
                         SectionHeader(title: "2. Datos del Primer Vehículo", subtitle: "Información del auto")
                         
                         HStack(spacing: 16) {
-                            FormField(title: "• Placas", placeholder: "ej. ABC-123", text: $placas)
+                            FormField(title: "• Placas", placeholder: "ej. ABC-123", text: $placas, characterLimit: 7)
+                                .onChange(of: placas) { _, newValue in
+                                    let filtered = newValue.uppercased().filter { $0.isLetter || $0.isNumber }
+                                    if filtered != newValue {
+                                        placas = filtered
+                                    }
+                                    if placas.count > 7 {
+                                        placas = String(placas.prefix(7))
+                                    }
+                                }
                                 .validationHint(isInvalid: placasInvalidas, message: "Requerido.")
-                            FormField(title: "• Año", placeholder: "ej. 2020", text: $anioString)
-                                .validationHint(isInvalid: anioInvalido, message: "Numérico.")
+                            FormField(title: "• Año", placeholder: "ej. 2020", text: $anioString, characterLimit: 4)
+                                .onChange(of: anioString) { _, newValue in
+                                    let filtered = newValue.filter { $0.isNumber }
+                                    if filtered != newValue {
+                                        anioString = filtered
+                                    }
+                                    if anioString.count > 4 {
+                                        anioString = String(anioString.prefix(4))
+                                    }
+                                }
+                                .validationHint(isInvalid: anioInvalido, message: "Año inválido (1900-\(Calendar.current.component(.year, from: Date()) + 1)).")
                         }
                         HStack(spacing: 16) {
                             FormField(title: "• Marca", placeholder: "ej. Nissan", text: $marca)
@@ -1126,7 +1146,8 @@ fileprivate struct VehiculoFormView: View {
         vehiculo.placas.trimmingCharacters(in: .whitespaces).isEmpty
     }
     private var anioInvalido: Bool {
-        vehiculo.anio <= 1900
+        let currentYear = Calendar.current.component(.year, from: Date())
+        return vehiculo.anio < 1900 || vehiculo.anio > (currentYear + 1)
     }
     
     init(cliente: Cliente) {
@@ -1187,15 +1208,29 @@ fileprivate struct VehiculoFormView: View {
                                         RoundedRectangle(cornerRadius: 8)
                                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                                     )
+                                    .onChange(of: vehiculo.placas) { _, newValue in
+                                        let filtered = newValue.uppercased().filter { $0.isLetter || $0.isNumber }
+                                        if filtered != newValue {
+                                            vehiculo.placas = filtered
+                                        }
+                                        if vehiculo.placas.count > 7 {
+                                            vehiculo.placas = String(vehiculo.placas.prefix(7))
+                                        }
+                                    }
                                     .overlay(
                                         HStack {
                                             Spacer()
                                             if vehiculo.placas.isEmpty {
-                                                Text("ej. ABC-123-D")
+                                                Text("ej. ABC123D")
                                                     .font(.caption2)
                                                     .foregroundColor(.gray.opacity(0.5))
                                                     .padding(.trailing, 8)
                                                     .allowsHitTesting(false)
+                                            } else {
+                                                Text("\(vehiculo.placas.count)/7")
+                                                    .font(.caption2)
+                                                    .foregroundColor(vehiculo.placas.count == 7 ? .green : .gray)
+                                                    .padding(.trailing, 8)
                                             }
                                         }
                                     )
@@ -1221,8 +1256,17 @@ fileprivate struct VehiculoFormView: View {
                         HStack(spacing: 16) {
                             FormField(title: "• Marca", placeholder: "ej. Nissan", text: $vehiculo.marca)
                             FormField(title: "• Modelo", placeholder: "ej. Versa", text: $vehiculo.modelo)
-                            FormField(title: "• Año", placeholder: "ej. 2020", text: anioString)
-                                .validationHint(isInvalid: anioInvalido, message: "Año no válido.")
+                            FormField(title: "• Año", placeholder: "ej. 2020", text: anioString, characterLimit: 4)
+                                .onChange(of: anioString.wrappedValue) { _, newValue in
+                                    let filtered = newValue.filter { $0.isNumber }
+                                    if filtered != newValue {
+                                        anioString.wrappedValue = filtered
+                                    }
+                                    if anioString.wrappedValue.count > 4 {
+                                        anioString.wrappedValue = String(anioString.wrappedValue.prefix(4))
+                                    }
+                                }
+                                .validationHint(isInvalid: anioInvalido, message: "Año inválido.")
                         }
                     }
                     
