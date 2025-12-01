@@ -113,8 +113,9 @@ struct PersonalView: View {
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         )
         .sheet(item: $modalMode) { incomingMode in
-            PersonalFormView(mode: incomingMode)
+            PersonalFormView(mode: incomingMode, parentMode: $modalMode)
                 .environment(\.modelContext, modelContext)
+                .id(incomingMode.id)
         }
     }
     
@@ -501,11 +502,13 @@ fileprivate struct PersonalCard: View {
 fileprivate struct PersonalFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Query private var allPersonal: [Personal]
     
     @AppStorage("user_password") private var userPassword = ""
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
 
     let mode: ModalMode
+    @Binding var parentMode: ModalMode?
     
     // Datos personales
     @State private var nombre = ""
@@ -588,8 +591,25 @@ fileprivate struct PersonalFormView: View {
     private var mecanicoAEditar: Personal?
     var formTitle: String { (mode == .add) ? "Añadir Personal" : "Editar Personal" }
     
-    init(mode: ModalMode) {
+    // Lógica para detectar duplicado por nombre
+    private var productoExistenteConMismoNombre: Personal? {
+        let nombreLimpio = nombre.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if nombreLimpio.isEmpty { return nil }
+        
+        // Buscar coincidencia exacta insensible a mayúsculas
+        if let encontrado = allPersonal.first(where: { $0.nombre.lowercased() == nombreLimpio }) {
+            // Si estamos editando, ignorar si es el mismo que estamos editando
+            if let actual = mecanicoAEditar, actual.id == encontrado.id {
+                return nil
+            }
+            return encontrado
+        }
+        return nil
+    }
+    
+    init(mode: ModalMode, parentMode: Binding<ModalMode?>) {
         self.mode = mode
+        self._parentMode = parentMode
         if case .edit(let personal) = mode {
             self.mecanicoAEditar = personal
             _nombre = State(initialValue: personal.nombre)
@@ -760,6 +780,28 @@ fileprivate struct PersonalFormView: View {
                         SectionHeader(title: "1. Identificación y Contacto", subtitle: "Datos básicos")
                         FormField(title: "• Nombre completo", placeholder: "ej. José Cisneros Torres", text: $nombre, characterLimit: 21, customCount: nombreLettersCount)
                             .validationHint(isInvalid: nombreInvalido, message: nombreValidationMessage ?? "")
+                        
+                        // Botón para editar el existente si hay duplicado
+                        if let existente = productoExistenteConMismoNombre {
+                            Button {
+                                // Cambiar a modo edición del producto existente
+                                // Esto cerrará el sheet actual y abrirá uno nuevo debido al cambio de ID
+                                parentMode = .edit(existente)
+                            } label: {
+                                HStack {
+                                    Image(systemName: "pencil.circle.fill")
+                                    Text("Editar '\(existente.nombre)' existente")
+                                }
+                                .font(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.blue.opacity(0.2))
+                                .foregroundColor(.blue)
+                                .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 2)
+                        }
                         HStack(spacing: 16) {
                             FormField(title: "• Correo electrónico", placeholder: "ej. jose@taller.com", text: $email)
                                 .validationHint(isInvalid: emailInvalido, message: "Ingresa un correo válido.")
