@@ -1318,6 +1318,7 @@ fileprivate struct ServicioFormView: View {
     @State private var authError = ""
     @State private var passwordAttempt = ""
     @State private var errorMsg: String?
+    @State private var searchTextProductos: String = ""
     
     private enum AuthReason {
         case unlockNombre, deleteServicio
@@ -1335,6 +1336,20 @@ fileprivate struct ServicioFormView: View {
     }
     
 
+    
+
+    
+    private var productosFiltrados: [Producto] {
+        if searchTextProductos.isEmpty {
+            return productos
+        }
+        return productos.filter { p in
+            p.nombre.localizedCaseInsensitiveContains(searchTextProductos) ||
+            p.categoria.localizedCaseInsensitiveContains(searchTextProductos) ||
+            p.proveedor.localizedCaseInsensitiveContains(searchTextProductos) ||
+            p.lote.localizedCaseInsensitiveContains(searchTextProductos)
+        }
+    }
     
     // Validaciones
     private var productoExistenteConMismoNombre: Servicio? {
@@ -1608,50 +1623,81 @@ fileprivate struct ServicioFormView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("• Productos del Inventario").font(.caption2).foregroundColor(.gray)
                             
-                            VStack(spacing: 8) {
-                                ForEach(productos) { producto in
-                                    HStack {
-                                        Text("\(producto.nombre) (\(producto.unidadDeMedida))")
-                                            .font(.subheadline)
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                        HStack(spacing: 6) {
-                                            TextField("0.0", text: Binding(
-                                                get: {
-                                                    cantidadesProductos[producto.nombre].map { String(format: "%.2f", $0) } ?? ""
-                                                },
-                                                set: {
-                                                    cantidadesProductos[producto.nombre] = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0
+                            // Buscador
+                            HStack {
+                                Image(systemName: "magnifyingglass").foregroundColor(.gray)
+                                TextField("Buscar por nombre, categoría, proveedor o lote...", text: $searchTextProductos)
+                                    .textFieldStyle(.plain)
+                            }
+                            .padding(8)
+                            .background(Color("MercedesBackground"))
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                            
+                            ScrollView {
+                                VStack(spacing: 8) {
+                                    ForEach(productosFiltrados) { producto in
+                                        HStack {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(producto.nombre)
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.white)
+                                                Text("\(producto.categoria) • \(producto.proveedor) • Lote: \(producto.lote)")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.gray)
+                                            }
+                                            Spacer()
+                                            HStack(spacing: 6) {
+                                                Text(producto.unidadDeMedida)
+                                                    .font(.caption2)
+                                                    .foregroundColor(.gray)
+                                                
+                                                TextField("0.0", text: Binding(
+                                                    get: {
+                                                        if let val = cantidadesProductos[producto.nombre], val > 0 {
+                                                            return String(format: "%.2f", val)
+                                                        }
+                                                        return ""
+                                                    },
+                                                    set: {
+                                                        let val = Double($0.replacingOccurrences(of: ",", with: ".")) ?? 0
+                                                        cantidadesProductos[producto.nombre] = val
+                                                    }
+                                                ))
+                                                .multilineTextAlignment(.trailing)
+                                                .frame(width: 80)
+                                                .textFieldStyle(.plain)
+                                                .padding(6)
+                                                .background(Color("MercedesBackground"))
+                                                .cornerRadius(6)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                                )
+                                                
+                                                if (cantidadesProductos[producto.nombre] ?? 0) > 0 {
+                                                    Button {
+                                                        cantidadesProductos[producto.nombre] = 0
+                                                    } label: {
+                                                        Image(systemName: "xmark.circle.fill")
+                                                            .foregroundColor(.gray)
+                                                    }
+                                                    .buttonStyle(.plain)
                                                 }
-                                            ))
-                                            .multilineTextAlignment(.trailing)
-                                            .frame(width: 80)
-                                            .textFieldStyle(.plain)
-                                            .padding(6)
-                                            .background(Color("MercedesBackground"))
-                                            .cornerRadius(6)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 6)
-                                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                                            )
-                                            
-                                            if (cantidadesProductos[producto.nombre] ?? 0) > 0 {
-                                                Button {
-                                                    cantidadesProductos[producto.nombre] = 0
-                                                } label: {
-                                                    Image(systemName: "xmark.circle.fill")
-                                                        .foregroundColor(.gray)
-                                                }
-                                                .buttonStyle(.plain)
                                             }
                                         }
+                                        .padding(8)
+                                        .background(Color("MercedesBackground").opacity(0.3))
+                                        .cornerRadius(8)
                                     }
-                                    .padding(8)
-                                    .background(Color("MercedesBackground").opacity(0.3))
-                                    .cornerRadius(8)
                                 }
                             }
                             .frame(maxHeight: 250)
+                            .background(Color("MercedesBackground").opacity(0.2))
+                            .cornerRadius(8)
                         }
 
                         HStack {

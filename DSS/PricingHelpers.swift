@@ -48,7 +48,9 @@ enum PricingHelpers {
             if let p = productos.first(where: { $0.nombre == ing.nombreProducto }) {
                 let contenido = max(p.contenidoNeto, 1.0)
                 let unidades = ing.cantidadUsada / contenido
-                return acc + (p.precioVenta * unidades)
+                // Usar precio SIN IVA para el costo interno
+                let precioSinIVA = p.precioVenta / (1.0 + p.tipoFiscal.tasa)
+                return acc + (precioSinIVA * unidades)
             }
             return acc
         }
