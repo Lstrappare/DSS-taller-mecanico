@@ -995,6 +995,11 @@ fileprivate struct ProgramarServicioModal: View {
         }
     }
     
+    var isHoraValida: Bool {
+        let hora = Calendar.current.component(.hour, from: fechaInicio)
+        return hora >= 6 && hora <= 20
+    }
+    
     var body: some View {
         VStack(spacing: 16) {
             Text("Programar Servicio")
@@ -1126,6 +1131,12 @@ fileprivate struct ProgramarServicioModal: View {
                         .font(.caption)
                         .foregroundColor(.red)
                 }
+                
+                if !isHoraValida {
+                    Label("El horario de programación debe ser entre 06:00 AM y 08:00 PM.", systemImage: "clock.badge.exclamationmark.fill")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
             }
             .padding()
             .background(Color("MercedesCard"))
@@ -1150,8 +1161,8 @@ fileprivate struct ProgramarServicioModal: View {
                         .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
-                .disabled(vehiculoSeleccionadoID == nil || candidato == nil || fechaInicio < Date())
-                .opacity((vehiculoSeleccionadoID == nil || candidato == nil || fechaInicio < Date()) ? 0.6 : 1.0)
+                .disabled(vehiculoSeleccionadoID == nil || candidato == nil || fechaInicio < Date() || !isHoraValida)
+                .opacity((vehiculoSeleccionadoID == nil || candidato == nil || fechaInicio < Date() || !isHoraValida) ? 0.6 : 1.0)
             }
         }
         .padding(24)
