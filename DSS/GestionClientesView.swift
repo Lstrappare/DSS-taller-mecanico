@@ -473,7 +473,8 @@ fileprivate struct ClienteConVehiculoFormView: View {
         return parts.count < 2 || nombreDuplicado
     }
     private var telefonoInvalido: Bool {
-        telefono.trimmingCharacters(in: .whitespaces).isEmpty
+        let t = telefono.trimmingCharacters(in: .whitespaces)
+        return t.isEmpty || t.count != 10
     }
     private var clienteConMismoTelefono: Cliente? {
         let telLimpio = telefono.trimmingCharacters(in: .whitespaces)
@@ -556,8 +557,17 @@ fileprivate struct ClienteConVehiculoFormView: View {
                         }
                         
                         HStack(spacing: 16) {
-                            FormField(title: "• Teléfono", placeholder: "10 dígitos", text: $telefono)
-                                .validationHint(isInvalid: telefonoInvalido, message: "Requerido.")
+                            FormField(title: "• Teléfono", placeholder: "10 dígitos", text: $telefono, characterLimit: 10)
+                                .onChange(of: telefono) { _, newValue in
+                                    let filtered = newValue.filter { $0.isNumber }
+                                    if filtered != newValue {
+                                        telefono = filtered
+                                    }
+                                    if telefono.count > 10 {
+                                        telefono = String(telefono.prefix(10))
+                                    }
+                                }
+                                .validationHint(isInvalid: telefonoInvalido, message: telefono.isEmpty ? "Requerido." : "Debe tener 10 dígitos.")
                                 .validationHint(isInvalid: !telefonoInvalido && clienteConMismoTelefono != nil, 
                                                 message: "Registrado en: \(clienteConMismoTelefono?.nombre ?? "")",
                                                 color: .yellow)
@@ -650,8 +660,8 @@ fileprivate struct ClienteConVehiculoFormView: View {
             errorMsg = "El Nombre Completo debe tener al menos 2 palabras."
             return
         }
-        guard !telefonoTrimmed.isEmpty else {
-            errorMsg = "El Teléfono no puede estar vacío."
+        guard !telefonoTrimmed.isEmpty, telefonoTrimmed.count == 10 else {
+            errorMsg = "El Teléfono debe tener 10 dígitos."
             return
         }
         guard !placasTrimmed.isEmpty else {
@@ -836,18 +846,29 @@ fileprivate struct ClienteFormView: View {
                                         RoundedRectangle(cornerRadius: 8)
                                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                                     )
-                                    .overlay(
-                                        HStack {
-                                            Spacer()
-                                            if cliente.telefono.isEmpty {
-                                                Text("10 dígitos")
-                                                    .font(.caption2)
-                                                    .foregroundColor(.gray.opacity(0.5))
-                                                    .padding(.trailing, 8)
-                                                    .allowsHitTesting(false)
-                                            }
+                                    .onChange(of: cliente.telefono) { _, newValue in
+                                        let filtered = newValue.filter { $0.isNumber }
+                                        if filtered != newValue {
+                                            cliente.telefono = filtered
                                         }
-                                    )
+                                        if cliente.telefono.count > 10 {
+                                            cliente.telefono = String(cliente.telefono.prefix(10))
+                                        }
+                                    }
+                                    .overlay(alignment: .trailing) {
+                                        if cliente.telefono.isEmpty {
+                                            Text("10 dígitos")
+                                                .font(.caption2)
+                                                .foregroundColor(.gray.opacity(0.5))
+                                                .padding(.trailing, 8)
+                                                .allowsHitTesting(false)
+                                        } else {
+                                            Text("\(cliente.telefono.count)/10")
+                                                .font(.caption2)
+                                                .foregroundColor(cliente.telefono.count == 10 ? .green : .gray)
+                                                .padding(.trailing, 8)
+                                        }
+                                    }
                                 
                                 Button {
                                     if isTelefonoUnlocked { isTelefonoUnlocked = false }
@@ -862,7 +883,8 @@ fileprivate struct ClienteFormView: View {
                                 .buttonStyle(.plain)
                                 .foregroundColor(isTelefonoUnlocked ? .green : .red)
                             }
-                            .validationHint(isInvalid: cliente.telefono.isEmpty, message: "El teléfono no puede estar vacío.")
+                            .validationHint(isInvalid: cliente.telefono.isEmpty || cliente.telefono.count != 10, 
+                                            message: cliente.telefono.isEmpty ? "El teléfono no puede estar vacío." : "Debe tener 10 dígitos.")
                             .validationHint(isInvalid: !cliente.telefono.isEmpty && clienteConMismoTelefono != nil, 
                                             message: "Registrado en: \(clienteConMismoTelefono?.nombre ?? "")",
                                             color: .yellow)
@@ -946,8 +968,8 @@ fileprivate struct ClienteFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(nombreInvalido)
-                .opacity(nombreInvalido ? 0.6 : 1.0)
+                .disabled(nombreInvalido || (cliente.telefono.count != 10))
+                .opacity((nombreInvalido || (cliente.telefono.count != 10)) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
