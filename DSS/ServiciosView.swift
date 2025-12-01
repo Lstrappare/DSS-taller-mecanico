@@ -1078,8 +1078,15 @@ fileprivate struct ProgramarServicioModal: View {
                     DatePicker("Inicio", selection: $fechaInicio, in: Calendar.current.startOfDay(for: Date())..., displayedComponents: [.date, .hourAndMinute])
                         .datePickerStyle(.graphical)
                         .onChange(of: fechaInicio) { _, _ in recalcularCandidato() }
-                    Text("Fin estimado: \(fechaInicio.addingTimeInterval(servicio.duracionHoras * 3600).formatted(date: .abbreviated, time: .shortened))")
-                        .font(.caption).foregroundColor(.gray)
+                    
+                    if let c = candidato {
+                        let finReal = c.calcularFechaFin(inicio: fechaInicio, duracionHoras: servicio.duracionHoras)
+                        Text("Fin estimado: \(finReal.formatted(date: .abbreviated, time: .shortened))")
+                            .font(.caption).foregroundColor(.gray)
+                    } else {
+                        Text("Fin estimado: Pendiente de candidato")
+                            .font(.caption).foregroundColor(.gray)
+                    }
                 }
                 .frame(maxWidth: 320)
             }
