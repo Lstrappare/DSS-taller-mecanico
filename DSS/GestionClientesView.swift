@@ -26,6 +26,27 @@ fileprivate enum SortOption: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+// Helper de validación de nombre de cliente
+fileprivate func isNombreClienteValido(_ raw: String) -> Bool {
+    // Reglas:
+    // - Al menos 3 palabras
+    // - Cada palabra solo letras (incluye acentos y ñ), min 3 letras
+    // - No se aceptan números
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    let words = trimmed.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+    guard words.count >= 3 else { return false }
+    // Regex: solo letras unicode (Letter) mínimo 3
+    // Usamos \p{L} para cualquier letra en Unicode
+    let pattern = #"^\p{L}{3,}$"#
+    let predicate = NSPredicate(format: "SELF MATCHES %@", pattern)
+    for w in words {
+        if !predicate.evaluate(with: w) { return false }
+    }
+    // Además, que el nombre completo no contenga dígitos (redundante pero explícito)
+    if raw.rangeOfCharacter(from: .decimalDigits) != nil { return false }
+    return true
+}
+
 // --- VISTA PRINCIPAL (alineada a InventarioView) ---
 struct GestionClientesView: View {
     @Environment(\.modelContext) private var modelContext
@@ -469,8 +490,8 @@ fileprivate struct ClienteConVehiculoFormView: View {
     }
     
     private var nombreInvalido: Bool {
-        let parts = nombre.trimmingCharacters(in: .whitespaces).split(separator: " ")
-        return parts.count < 2 || nombreDuplicado
+        // Aplica nueva regla y además revisa duplicado
+        return !isNombreClienteValido(nombre) || nombreDuplicado
     }
     private var telefonoInvalido: Bool {
         let t = telefono.trimmingCharacters(in: .whitespaces)
@@ -548,7 +569,12 @@ fileprivate struct ClienteConVehiculoFormView: View {
                                     .foregroundColor(nombre.count >= 21 ? .red : .gray)
                                     .frame(width: 40, alignment: .trailing)
                             }
-                            .validationHint(isInvalid: nombreInvalido, message: nombreDuplicado ? "Este nombre ya está en uso." : "Escribe nombre y apellido.")
+                            .validationHint(
+                                isInvalid: nombreInvalido,
+                                message: nombreDuplicado
+                                    ? "Este nombre ya está en uso."
+                                    : "Nombre inválido. Debe tener al menos 3 palabras, cada una con 3 letras y sin números."
+                            )
                             
                             // Botón para editar el existente si hay duplicado
                             if let existente = clienteExistente {
@@ -703,9 +729,9 @@ fileprivate struct ClienteConVehiculoFormView: View {
         let marcaTrimmed = marca.trimmingCharacters(in: .whitespaces)
         let modeloTrimmed = modelo.trimmingCharacters(in: .whitespaces)
 
-        // Validación
-        guard nombreTrimmed.split(separator: " ").count >= 2 else {
-            errorMsg = "El Nombre Completo debe tener al menos 2 palabras."
+        // Validación nueva de nombre
+        guard isNombreClienteValido(nombreTrimmed) else {
+            errorMsg = "Nombre inválido. Debe tener al menos 3 palabras, cada una con 3 letras y sin números."
             return
         }
         if emailInvalido {
@@ -782,8 +808,8 @@ fileprivate struct ClienteFormView: View {
     }
     
     private var nombreInvalido: Bool {
-        let parts = cliente.nombre.trimmingCharacters(in: .whitespaces).split(separator: " ")
-        return parts.count < 2 || nombreDuplicado
+        // Nueva regla + duplicado
+        return !isNombreClienteValido(cliente.nombre) || nombreDuplicado
     }
     
     private var clienteConMismoTelefono: Cliente? {
@@ -862,7 +888,12 @@ fileprivate struct ClienteFormView: View {
                                 .buttonStyle(.plain)
                                 .foregroundColor(isNombreUnlocked ? .green : .red)
                             }
-                            .validationHint(isInvalid: nombreInvalido, message: nombreDuplicado ? "Este nombre ya está en uso." : "Escribe nombre y apellido.")
+                            .validationHint(
+                                isInvalid: nombreInvalido,
+                                message: nombreDuplicado
+                                    ? "Este nombre ya está en uso."
+                                    : "Nombre inválido. Debe tener al menos 3 palabras, cada una con 3 letras y sin números."
+                            )
                             
                             // Botón para editar el existente si hay duplicado
                             if let existente = clienteExistenteConMismoNombre {
@@ -1016,11 +1047,10 @@ fileprivate struct ClienteFormView: View {
                 Spacer()
                 
                 Button {
-                    let nameParts = cliente.nombre.trimmingCharacters(in: .whitespaces).split(separator: " ")
-                    if nameParts.count >= 2 {
+                    if isNombreClienteValido(cliente.nombre) {
                         dismiss()
                     } else {
-                        errorMsg = "El Nombre Completo debe tener al menos 2 palabras."
+                        errorMsg = "Nombre inválido. Debe tener al menos 3 palabras, cada una con 3 letras y sin números."
                     }
                 } label: {
                     Text("Guardar Cambios")
