@@ -496,6 +496,14 @@ fileprivate struct ClienteConVehiculoFormView: View {
         let currentYear = Calendar.current.component(.year, from: Date())
         return anio < 1900 || anio > (currentYear + 1)
     }
+    private var marcaInvalida: Bool {
+        let m = marca.trimmingCharacters(in: .whitespaces)
+        return m.count < 2
+    }
+    private var modeloInvalido: Bool {
+        let m = modelo.trimmingCharacters(in: .whitespaces)
+        return m.count < 2
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -620,8 +628,16 @@ fileprivate struct ClienteConVehiculoFormView: View {
                                 .validationHint(isInvalid: anioInvalido, message: "Año inválido (1900-\(Calendar.current.component(.year, from: Date()) + 1)).")
                         }
                         HStack(spacing: 16) {
-                            FormField(title: "• Marca", placeholder: "ej. Nissan", text: $marca)
-                            FormField(title: "• Modelo", placeholder: "ej. Versa", text: $modelo)
+                            FormField(title: "• Marca", placeholder: "ej. Nissan", text: $marca, characterLimit: 30)
+                                .onChange(of: marca) { _, newValue in
+                                    if newValue.count > 30 { marca = String(newValue.prefix(30)) }
+                                }
+                                .validationHint(isInvalid: marcaInvalida, message: "Mínimo 2 caracteres.")
+                            FormField(title: "• Modelo", placeholder: "ej. Versa", text: $modelo, characterLimit: 40)
+                                .onChange(of: modelo) { _, newValue in
+                                    if newValue.count > 40 { modelo = String(newValue.prefix(40)) }
+                                }
+                                .validationHint(isInvalid: modeloInvalido, message: "Mínimo 2 caracteres.")
                         }
                     }
                 }
@@ -667,8 +683,8 @@ fileprivate struct ClienteConVehiculoFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido)
-                .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido) ? 0.6 : 1.0)
+                .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido)
+                .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
@@ -704,8 +720,8 @@ fileprivate struct ClienteConVehiculoFormView: View {
             errorMsg = "Las Placas no pueden estar vacías."
             return
         }
-        guard !marcaTrimmed.isEmpty, !modeloTrimmed.isEmpty else {
-            errorMsg = "La Marca y el Modelo son obligatorios."
+        guard marcaTrimmed.count >= 2, modeloTrimmed.count >= 2 else {
+            errorMsg = "La Marca y el Modelo deben tener al menos 2 caracteres."
             return
         }
         guard let anio = Int(anioString) else {
@@ -1149,6 +1165,12 @@ fileprivate struct VehiculoFormView: View {
         let currentYear = Calendar.current.component(.year, from: Date())
         return vehiculo.anio < 1900 || vehiculo.anio > (currentYear + 1)
     }
+    private var marcaInvalida: Bool {
+        vehiculo.marca.trimmingCharacters(in: .whitespaces).count < 2
+    }
+    private var modeloInvalido: Bool {
+        vehiculo.modelo.trimmingCharacters(in: .whitespaces).count < 2
+    }
     
     init(cliente: Cliente) {
         self.clientePadre = cliente
@@ -1254,8 +1276,16 @@ fileprivate struct VehiculoFormView: View {
                         }
                         
                         HStack(spacing: 16) {
-                            FormField(title: "• Marca", placeholder: "ej. Nissan", text: $vehiculo.marca)
-                            FormField(title: "• Modelo", placeholder: "ej. Versa", text: $vehiculo.modelo)
+                            FormField(title: "• Marca", placeholder: "ej. Nissan", text: $vehiculo.marca, characterLimit: 30)
+                                .onChange(of: vehiculo.marca) { _, newValue in
+                                    if newValue.count > 30 { vehiculo.marca = String(newValue.prefix(30)) }
+                                }
+                                .validationHint(isInvalid: marcaInvalida, message: "Mínimo 2 caracteres.")
+                            FormField(title: "• Modelo", placeholder: "ej. Versa", text: $vehiculo.modelo, characterLimit: 40)
+                                .onChange(of: vehiculo.modelo) { _, newValue in
+                                    if newValue.count > 40 { vehiculo.modelo = String(newValue.prefix(40)) }
+                                }
+                                .validationHint(isInvalid: modeloInvalido, message: "Mínimo 2 caracteres.")
                             FormField(title: "• Año", placeholder: "ej. 2020", text: anioString, characterLimit: 4)
                                 .onChange(of: anioString.wrappedValue) { _, newValue in
                                     let filtered = newValue.filter { $0.isNumber }
@@ -1342,8 +1372,8 @@ fileprivate struct VehiculoFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(placasInvalida || anioInvalido || vehiculo.marca.isEmpty || vehiculo.modelo.isEmpty)
-                .opacity((placasInvalida || anioInvalido || vehiculo.marca.isEmpty || vehiculo.modelo.isEmpty) ? 0.6 : 1.0)
+                .disabled(placasInvalida || anioInvalido || marcaInvalida || modeloInvalido)
+                .opacity((placasInvalida || anioInvalido || marcaInvalida || modeloInvalido) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
@@ -1406,8 +1436,12 @@ fileprivate struct VehiculoFormView: View {
             errorMsg = "Las placas no pueden estar vacías."
             return
         }
-        guard !marcaTrimmed.isEmpty, !modeloTrimmed.isEmpty else {
-            errorMsg = "La Marca y el Modelo son obligatorios."
+        guard !placasTrimmed.isEmpty else {
+            errorMsg = "Las placas no pueden estar vacías."
+            return
+        }
+        guard marcaTrimmed.count >= 2, modeloTrimmed.count >= 2 else {
+            errorMsg = "La Marca y el Modelo deben tener al menos 2 caracteres."
             return
         }
         guard vehiculo.anio > 1900 && vehiculo.anio <= (Calendar.current.component(.year, from: Date()) + 1) else {
