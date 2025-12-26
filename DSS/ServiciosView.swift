@@ -358,6 +358,19 @@ fileprivate struct ServicioCard: View {
                 }
             }
             
+            // Banner de Inactivo
+            if !servicio.activo {
+                HStack(spacing: 6) {
+                    Image(systemName: "eye.slash.fill")
+                    Text("Servicio inactivo (Baja temporal)")
+                }
+                .font(.caption2)
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(Color.gray.opacity(0.18))
+                .cornerRadius(6)
+                .foregroundColor(.gray)
+            }
+            
             // Chips de requerimientos
             HStack(spacing: 6) {
                 chip(text: servicio.rolRequerido.rawValue, systemImage: "person.badge.shield.checkmark.fill")
@@ -988,6 +1001,10 @@ fileprivate struct ServicioFormView: View {
     @State private var errorMsg: String?
     @State private var searchTextProductos: String = ""
     
+    // Estado de actividad
+    @State private var activo = true
+    @State private var showingStatusAlert = false
+    
     private enum AuthReason {
         case unlockNombre, deleteServicio
     }
@@ -1108,7 +1125,8 @@ fileprivate struct ServicioFormView: View {
             aplicarISR: aplicarISR,
             isrPorcentajeEstimado: Double(porcentajeISRString) ?? 0,
             precioFinalAlCliente: Double(precioFinalString) ?? 0,
-            precioModificadoManualmente: precioModificadoManualmente
+            precioModificadoManualmente: precioModificadoManualmente,
+            activo: activo
         )
         return dummy
     }
@@ -1140,6 +1158,7 @@ fileprivate struct ServicioFormView: View {
             _porcentajeISRString = State(initialValue: String(format: "%.2f", servicio.isrPorcentajeEstimado))
             _precioFinalString = State(initialValue: String(format: "%.2f", servicio.precioFinalAlCliente))
             _precioModificadoManualmente = State(initialValue: servicio.precioModificadoManualmente)
+            _activo = State(initialValue: servicio.activo)
         } else {
             // defaults para alta
             _costoManoDeObraString = State(initialValue: "")
@@ -1162,11 +1181,10 @@ fileprivate struct ServicioFormView: View {
 
             ScrollView {
                 VStack(spacing: 24) {
-                    
                     // Sección 1: Datos del Servicio
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "1. Datos del Servicio", subtitle: "Información básica")
-                        
+
                         // Nombre con candado en edición y validación de duplicados
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
@@ -1177,7 +1195,7 @@ fileprivate struct ServicioFormView: View {
                                         .font(.caption2)
                                 }
                             }
-                            
+
                             HStack(spacing: 6) {
                                 TextField("", text: $nombre)
                                     .disabled(servicioAEditar != nil && !isNombreUnlocked)
@@ -1195,13 +1213,13 @@ fileprivate struct ServicioFormView: View {
                                         }
                                     }
                                     .help("Identificador único del producto (Máx 60 caracteres)")
-                                
+
                                 // Contador manual para Nombre
                                 Text("\(nombre.count)/60")
                                     .font(.caption2)
                                     .foregroundColor(nombre.count >= 21 ? .red : .gray)
                                     .frame(width: 40, alignment: .trailing)
-                                
+
                                 if servicioAEditar != nil {
                                     Button {
                                         if isNombreUnlocked { isNombreUnlocked = false }
@@ -1219,7 +1237,7 @@ fileprivate struct ServicioFormView: View {
                                 }
                             }
                             .validationHint(isInvalid: nombreInvalido, message: nombreDuplicado ? "Este nombre ya está en uso." : "El nombre debe tener al menos 3 caracteres.")
-                            
+
                             // Botón para editar el existente si hay duplicado
                             if let existente = productoExistenteConMismoNombre {
                                 Button {
@@ -1241,14 +1259,14 @@ fileprivate struct ServicioFormView: View {
                                 .padding(.top, 2)
                             }
                         }
-                        
+
                         FormField(title: "Descripción", placeholder: "ej. Reemplazo de balatas y rectificación de discos", text: $descripcion, characterLimit: 231, isMultiline: true)
-                        
+
                         HStack(spacing: 16) {
                             VStack(alignment: .leading, spacing: 4) {
                                 FormField(title: "• Duración Estimada (Horas)", placeholder: "ej. 2.5", text: $duracionString, isNumeric: true)
                                     .validationHint(isInvalid: duracionInvalida, message: "Debe ser > 0.")
-                                
+
                                 if let d = Double(duracionString), d > 8 {
                                     HStack(alignment: .top, spacing: 6) {
                                         Image(systemName: "exclamationmark.triangle.fill")
@@ -1263,7 +1281,7 @@ fileprivate struct ServicioFormView: View {
                                     .cornerRadius(8)
                                 }
                             }
-                            
+
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("• Especialidad Requerida").font(.caption2).foregroundColor(.gray)
                                 Picker("", selection: $especialidadRequerida) {
@@ -1277,7 +1295,7 @@ fileprivate struct ServicioFormView: View {
                                 .cornerRadius(8)
                                 .validationHint(isInvalid: especialidadRequerida.isEmpty, message: "Requerido")
                             }
-                            
+
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("• Rol Requerido").font(.caption2).foregroundColor(.gray)
                                 Picker("", selection: $rolRequerido) {
@@ -1295,33 +1313,33 @@ fileprivate struct ServicioFormView: View {
                             }
                         }
                     }
-                    
+
                     Divider().background(Color.gray.opacity(0.3))
-                    
+
                     // Sección 2: Costos Directos
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "2. Costos Directos", subtitle: "Mano de obra, refacciones e inventario")
                         HStack(spacing: 16) {
                             FormField(title: "• Costo Mano de Obra ($)", placeholder: "ej. 500.00", text: $costoManoDeObraString, isNumeric: true)
                                 .validationHint(isInvalid: costoMOInvalido, message: "Número válido ≥ 0")
-                            
+
                             VStack(alignment: .leading, spacing: 4) {
                                 Toggle("¿Refacciones?", isOn: $requiereRefacciones)
                                     .toggleStyle(.switch)
                                     .font(.caption2)
                                     .foregroundColor(.gray)
-                                
+
                                 if requiereRefacciones {
                                     FormField(title: "Costo Refacciones ($)", placeholder: "ej. 300.00", text: $costoRefaccionesString, isNumeric: true)
                                         .validationHint(isInvalid: costoRefInvalido, message: "Número válido ≥ 0")
                                 }
                             }
                         }
-                        
+
                         // Productos del Inventario (Movido aquí)
                         VStack(alignment: .leading, spacing: 8) {
                             Text("• Productos del Inventario").font(.caption2).foregroundColor(.gray)
-                            
+
                             // Buscador
                             HStack {
                                 Image(systemName: "magnifyingglass").foregroundColor(.gray)
@@ -1335,7 +1353,7 @@ fileprivate struct ServicioFormView: View {
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                             )
-                            
+
                             ScrollView {
                                 VStack(spacing: 8) {
                                     ForEach(productosFiltrados) { producto in
@@ -1353,7 +1371,7 @@ fileprivate struct ServicioFormView: View {
                                                 Text(producto.unidadDeMedida)
                                                     .font(.caption2)
                                                     .foregroundColor(.gray)
-                                                
+
                                                 TextField("0.0", text: Binding(
                                                     get: {
                                                         if let val = cantidadesProductos[producto.nombre], val > 0 {
@@ -1376,7 +1394,7 @@ fileprivate struct ServicioFormView: View {
                                                     RoundedRectangle(cornerRadius: 6)
                                                         .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                                                 )
-                                                
+
                                                 if (cantidadesProductos[producto.nombre] ?? 0) > 0 {
                                                     Button {
                                                         cantidadesProductos[producto.nombre] = 0
@@ -1404,30 +1422,30 @@ fileprivate struct ServicioFormView: View {
                             Spacer()
                         }
                     }
-                    
+
                     Divider().background(Color.gray.opacity(0.3))
-                    
+
                     // Sección 3: Partes Internas
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "3. Partes Internas", subtitle: "Ganancia y gastos operativos")
                         HStack(spacing: 16) {
                             FormField(title: "• Ganancia Deseada ($)", placeholder: "ej. 400.00", text: $gananciaDeseadaString, isNumeric: true)
                                 .validationHint(isInvalid: gananciaInvalida, message: "Número válido ≥ 0")
-                            
+
                             FormField(title: "• Gastos Administrativos ($)", placeholder: "ej. 150.00", text: $gastosAdminString, isNumeric: true)
                                 .validationHint(isInvalid: gastosAdminInvalido, message: "Número válido ≥ 0")
                         }
                     }
-                    
+
                     Divider().background(Color.gray.opacity(0.3))
-                    
+
                     // Sección 4: Impuestos
                     VStack(alignment: .leading, spacing: 16) {
                         SectionHeader(title: "4. Impuestos", subtitle: "IVA e ISR")
                         HStack(spacing: 24) {
                             Toggle("Aplicar IVA (16%)", isOn: $aplicarIVA)
                                 .toggleStyle(.switch)
-                            
+
                             HStack(spacing: 8) {
                                 Toggle("Aplicar ISR", isOn: $aplicarISR)
                                     .toggleStyle(.switch)
@@ -1442,17 +1460,15 @@ fileprivate struct ServicioFormView: View {
                             .font(.caption2)
                             .foregroundColor(.yellow)
                     }
-                    
-                    Divider().background(Color.gray.opacity(0.3))
-                    
 
-                    
+                    Divider().background(Color.gray.opacity(0.3))
+
                     // Sección 6: Desglose Final
                     VStack(alignment: .leading, spacing: 16) {
                         // Contenedor con borde que incluye el Header y el Grid
                         VStack(alignment: .leading, spacing: 16) {
                             SectionHeader(title: "Desglose de Precio", subtitle: "Cálculo automático", color: "MercedesPetrolGreen")
-                            
+
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 8) {
                                 roField("Costos Directos", desglose.costosDirectos)
                                 roField("Ganancia Real", desglose.partesInternas - (Double(gastosAdminString) ?? 0))
@@ -1471,7 +1487,7 @@ fileprivate struct ServicioFormView: View {
                             RoundedRectangle(cornerRadius: 12)
                                 .stroke(Color("MercedesPetrolGreen").opacity(0.5), lineWidth: 1)
                         )
-                        
+
                         // Precio final editable
                         VStack(alignment: .leading, spacing: 16) {
                             SectionHeader(title: "Precio Final al Cliente", subtitle: "Ajustable")
@@ -1489,7 +1505,7 @@ fileprivate struct ServicioFormView: View {
                                             .background(Color.yellow.opacity(0.2))
                                             .foregroundColor(.yellow)
                                             .cornerRadius(6)
-                                        
+
                                         Button {
                                             precioModificadoManualmente = false
                                             precioFinalString = String(format: "%.2f", desglose.precioFinal)
@@ -1507,7 +1523,7 @@ fileprivate struct ServicioFormView: View {
                                 .font(.caption2).foregroundColor(.gray)
                         }
                     }
-                    
+
                     // Zona de Peligro
                     if case .edit = mode {
                         Divider().background(Color.red.opacity(0.3))
@@ -1516,7 +1532,7 @@ fileprivate struct ServicioFormView: View {
                                 .font(.caption)
                                 .foregroundColor(.red)
                                 .multilineTextAlignment(.center)
-                            
+
                             Button(role: .destructive) {
                                 authReason = .deleteServicio
                                 showingAuthModal = true
@@ -1542,7 +1558,7 @@ fileprivate struct ServicioFormView: View {
             .onAppear {
                 let todasLasHabilidades = personal.flatMap { $0.especialidades }
                 especialidadesDisponibles = Array(Set(todasLasHabilidades)).sorted()
-                
+
                 if servicioAEditar == nil {
                     // Ya no forzamos valores por defecto aquí
                     precioFinalString = String(format: "%.2f", desglose.precioFinal)
@@ -1557,7 +1573,7 @@ fileprivate struct ServicioFormView: View {
             .onChange(of: aplicarISR) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
             .onChange(of: porcentajeISRString) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
             .onChange(of: cantidadesProductos) { _, _ in syncPrecioFinalConSugeridoSiNoManual() }
-            
+
             // Mensaje de Error
             if let errorMsg {
                 Text(errorMsg)
@@ -1565,7 +1581,7 @@ fileprivate struct ServicioFormView: View {
                     .foregroundColor(.red)
                     .padding(.vertical, 6)
             }
-            
+
             // Barra de Botones
             HStack(spacing: 12) {
                 Button { dismiss() } label: {
@@ -1581,9 +1597,30 @@ fileprivate struct ServicioFormView: View {
                         )
                 }
                 .buttonStyle(.plain)
-                
+
+                // Botón de Activar/Desactivar
+                if servicioAEditar != nil {
+                    Button {
+                        // Mostrar alerta de confirmación en lugar de togglear directo
+                        showingStatusAlert = true
+                    } label: {
+                        Text(activo ? "Quitar temporalmente" : "Devolver al inventario")
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 16)
+                            .background(activo ? Color.orange.opacity(0.15) : Color.green.opacity(0.15))
+                            .foregroundColor(activo ? .orange : .green)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(activo ? Color.orange.opacity(0.3) : Color.green.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .help(activo ? "Ocultar temporalmente (Baja)" : "Reactivar producto")
+                }
+
                 Spacer()
-                
+
                 Button {
                     guardarCambios()
                 } label: {
@@ -1598,18 +1635,31 @@ fileprivate struct ServicioFormView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(nombreInvalido || duracionInvalida || costoMOInvalido || gananciaInvalida || gastosAdminInvalido || costoRefInvalido || pISRInvalido || especialidadRequerida.isEmpty)
-                .opacity((nombreInvalido || duracionInvalida || costoMOInvalido || gananciaInvalida || gastosAdminInvalido || costoRefInvalido || pISRInvalido || especialidadRequerida.isEmpty) ? 0.6 : 1.0)
             }
-            .padding(20)
+            .padding(16)
             .background(Color("MercedesCard"))
         }
         .background(Color("MercedesBackground"))
         .preferredColorScheme(.dark)
-        .frame(minWidth: 800, minHeight: 600, maxHeight: 600)
-        .cornerRadius(15)
+        .frame(minWidth: 800, minHeight: 650, maxHeight: 700)
+        .cornerRadius(12)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
         }
+        // ALERTA: Confirmar activar/desactivar
+        .alert(activo ? "¿Quitar temporalmente?" : "¿Devolver al inventario?", isPresented: $showingStatusAlert) {
+            Button(activo ? "Quitar temporalmente" : "Devolver al inventario", role: .destructive) {
+                activo.toggle()
+            }
+            Button("Cancelar", role: .cancel) { }
+        } message: {
+            Text(
+                activo
+                ? "No se borrarán los datos del servicio; solo quedará inactivo y no aparecerá para asignar. Podrás reactivarlo más adelante."
+                : "El servicio volverá a estar disponible para asignación."
+            )
+        }
+        .opacity((nombreInvalido || duracionInvalida || costoMOInvalido || gananciaInvalida || gastosAdminInvalido || costoRefInvalido || pISRInvalido || especialidadRequerida.isEmpty) ? 0.6 : 1.0)
     }
     
     private func roField(_ title: String, _ value: Double) -> some View {

@@ -680,6 +680,9 @@ class Servicio {
     var isrPorcentajeEstimado: Double
     var precioFinalAlCliente: Double
     var precioModificadoManualmente: Bool
+    
+    // Estado de actividad
+    var activo: Bool
 
     init(nombre: String,
          descripcion: String = "",
@@ -704,7 +707,8 @@ class Servicio {
          aplicarISR: Bool = false,
          isrPorcentajeEstimado: Double = 10.0,
          precioFinalAlCliente: Double? = nil,
-         precioModificadoManualmente: Bool = false)
+         precioModificadoManualmente: Bool = false,
+         activo: Bool = true)
     {
         self.nombre = nombre
         self.descripcion = descripcion
@@ -732,6 +736,7 @@ class Servicio {
         // Si no viene un precio final, usa el precioAlCliente como inicial para compatibilidad
         self.precioFinalAlCliente = precioFinalAlCliente ?? precioAlCliente
         self.precioModificadoManualmente = precioModificadoManualmente
+        self.activo = activo
     }
 }
 
