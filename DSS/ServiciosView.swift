@@ -25,6 +25,7 @@ struct ServiciosView: View {
     
     @State private var modalMode: ServiceModalMode?
     @State private var searchQuery = ""
+    @State private var incluirInactivos = false
     
     // Ordenamiento (patrón InventarioView)
     enum SortOption: String, CaseIterable, Identifiable {
@@ -46,6 +47,12 @@ struct ServiciosView: View {
                 $0.especialidadRequerida.lowercased().contains(query)
             }
         }
+        
+        // Filtro de activos (por defecto solo ver activos)
+        if !incluirInactivos {
+            base = base.filter { $0.activo }
+        }
+        
         // Ordenamiento
         base.sort { a, b in
             switch sortOption {
@@ -212,6 +219,13 @@ struct ServiciosView: View {
                     .buttonStyle(.plain)
                     .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
                 }
+                
+                // Toggle inactivos (alineado a la derecha junto al spacer)
+                Toggle("Ver inactivos", isOn: $incluirInactivos)
+                    .toggleStyle(.switch)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .help("Mostrar servicios dados de baja temporalmente")
                 
                 // Filtros activos + limpiar (si aplica)
                 if !searchQuery.isEmpty || sortOption != .nombre || sortAscending == false {
@@ -1831,6 +1845,7 @@ fileprivate struct ServicioFormView: View {
             return
         }
             servicio.precioModificadoManualmente = precioModificadoManualmente
+            servicio.activo = activo
             
             // Compatibilidad
             servicio.precioAlCliente = final
@@ -1856,7 +1871,8 @@ fileprivate struct ServicioFormView: View {
                 aplicarISR: aplicarISR,
                 isrPorcentajeEstimado: pISR,
                 precioFinalAlCliente: final,
-                precioModificadoManualmente: precioModificadoManualmente
+                precioModificadoManualmente: precioModificadoManualmente,
+                activo: activo
             )
             modelContext.insert(nuevoServicio)
         }
