@@ -6,14 +6,12 @@ import LocalAuthentication
 fileprivate enum ServiceModalMode: Identifiable {
     case add
     case edit(Servicio)
-    case assign(Servicio)
     case schedule(Servicio)
     
     var id: String {
         switch self {
         case .add: return "add"
         case .edit(let servicio): return servicio.nombre
-        case .assign(let servicio): return "assign-\(servicio.nombre)"
         case .schedule(let servicio): return "schedule-\(servicio.nombre)"
         }
     }
@@ -94,7 +92,6 @@ struct ServiciosView: View {
                                 costoEstimado: costoEstimadoProductos(servicio),
                                 productosCount: servicio.ingredientes.count,
                                 onEdit: { modalMode = .edit(servicio) },
-                                onAssign: { modalMode = .assign(servicio) },
                                 onSchedule: { modalMode = .schedule(servicio) }
                             )
                             .transition(.opacity.combined(with: .move(edge: .top)))
@@ -118,9 +115,6 @@ struct ServiciosView: View {
                     .environment(\.modelContext, modelContext)
             case .edit(let servicio):
                 ServicioFormView(mode: .edit(servicio), modalMode: $modalMode)
-                    .environment(\.modelContext, modelContext)
-            case .assign(let servicio):
-                AsignarServicioModal(servicio: servicio, appState: appState)
                     .environment(\.modelContext, modelContext)
             case .schedule(let servicio):
                 ProgramarServicioModal(servicio: servicio, appState: appState)
@@ -308,7 +302,6 @@ fileprivate struct ServicioCard: View {
     let costoEstimado: Double
     let productosCount: Int
     var onEdit: () -> Void
-    var onAssign: () -> Void
     var onSchedule: () -> Void
     
     @Environment(\.modelContext) private var modelContext
@@ -420,18 +413,6 @@ fileprivate struct ServicioCard: View {
                         Label("Programar", systemImage: "calendar.badge.plus")
                             .font(.subheadline)
                             .padding(.vertical, 6).padding(.horizontal, 10)
-                            .background(Color.blue.opacity(0.25))
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Button {
-                        onAssign()
-                    } label: {
-                        Label("Asignar Ahora", systemImage: "arrow.right.circle.fill")
-                            .font(.subheadline)
-                            .padding(.vertical, 6).padding(.horizontal, 10)
                             .background(Color("MercedesPetrolGreen"))
                             .foregroundColor(.white)
                             .cornerRadius(8)
@@ -466,522 +447,7 @@ fileprivate struct ServicioCard: View {
     }
 }
 
-// --- MODAL DE ASIGNACIÓN (UI mejorada, misma lógica) ---
-fileprivate struct AsignarServicioModal: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
-    
-    @Query private var personal: [Personal]
-    @Query private var productos: [Producto]
-    @Query private var vehiculos: [Vehiculo]
-    // Nuevo: tickets para balanceo justo
-    @Query private var tickets: [ServicioEnProceso]
-    
-    var servicio: Servicio
-    @ObservedObject var appState: AppNavigationState
-    
-    // UI State
-    @State private var vehiculoSeleccionadoID: Vehiculo.ID?
-    @State private var searchVehiculo = ""
-    @State private var alertaError: String?
-    @State private var mostrandoAlerta = false
-    
-    // Preview calculada
-    @State private var candidato: Personal?
-    @State private var costoEstimado: Double = 0
-    @State private var hayStockInsuficiente: Bool = false
-    @State private var fechaFinEstimada: Date?
-    
-    var vehiculosFiltrados: [Vehiculo] {
-        if searchVehiculo.trimmingCharacters(in: .whitespaces).isEmpty { return vehiculos }
-        let q = searchVehiculo.lowercased()
-        return vehiculos.filter { v in
-            v.placas.lowercased().contains(q) ||
-            v.marca.lowercased().contains(q) ||
-            v.modelo.lowercased().contains(q) ||
-            (v.cliente?.nombre.lowercased().contains(q) ?? false)
-        }
-    }
-    
-    var candidatoColor: Color {
-        guard let c = candidato else { return .red }
-        switch c.estado {
-        case .disponible: return .green
-        case .ocupado: return .red
-        case .descanso: return .yellow
-        case .ausente: return .gray
-        }
-    }
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("Asignar Servicio")
-                .font(.title2).fontWeight(.bold)
-            
-            // Header con resumen del servicio
-            VStack(alignment: .leading, spacing: 8) {
-                Text(servicio.nombre)
-                    .font(.headline).fontWeight(.semibold)
-                HStack(spacing: 8) {
-                    chip(text: servicio.rolRequerido.rawValue, systemImage: "person.badge.shield.checkmark.fill")
-                    chip(text: servicio.especialidadRequerida, systemImage: "wrench.and.screwdriver.fill")
-                    chip(text: String(format: "%.1f h", servicio.duracionHoras), systemImage: "clock")
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color("MercedesCard"))
-            .cornerRadius(10)
-            
-            // Selector de vehículo con búsqueda
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Selecciona el Vehículo")
-                        .font(.headline)
-                    Spacer()
-                    Button {
-                        appState.seleccion = .gestionClientes
-                        dismiss()
-                    } label: {
-                        Text("Gestionar Clientes y Vehículos")
-                            .underline()
-                            .font(.caption)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(Color("MercedesPetrolGreen"))
-                }
-                
-                HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(Color("MercedesPetrolGreen"))
-                    TextField("Buscar por placas, cliente, marca o modelo...", text: $searchVehiculo)
-                        .textFieldStyle(PlainTextFieldStyle())
-                    if !searchVehiculo.isEmpty {
-                        Button {
-                            searchVehiculo = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.gray)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(10)
-                .background(Color("MercedesBackground"))
-                .cornerRadius(8)
-                
-                // Lista de opciones
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(vehiculosFiltrados) { vehiculo in
-                            let isSelected = vehiculoSeleccionadoID == vehiculo.id
-                            Button {
-                                vehiculoSeleccionadoID = vehiculo.id
-                                recalcularPreview()
-                            } label: {
-                                HStack(alignment: .top, spacing: 10) {
-                                    Text("[\(vehiculo.placas)]")
-                                        .font(.system(.body, design: .monospaced))
-                                        .foregroundColor(Color("MercedesPetrolGreen"))
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("\(vehiculo.marca) \(vehiculo.modelo) (\(vehiculo.anio))")
-                                            .font(.subheadline).fontWeight(.semibold)
-                                        Text("Cliente: \(vehiculo.cliente?.nombre ?? "N/A")")
-                                            .font(.caption2).foregroundColor(.gray)
-                                    }
-                                    Spacer()
-                                    if isSelected {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(Color("MercedesPetrolGreen"))
-                                    }
-                                }
-                                .padding(10)
-                                .background(Color("MercedesCard").opacity(isSelected ? 1.0 : 0.6))
-                                .cornerRadius(8)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        if vehiculosFiltrados.isEmpty {
-                            Text("No se encontraron vehículos para “\(searchVehiculo)”.")
-                                .font(.caption2).foregroundColor(.gray).padding(.top, 6)
-                        }
-                    }
-                }
-                .frame(maxHeight: 180)
-            }
-            .padding()
-            .background(Color("MercedesCard"))
-            .cornerRadius(10)
-            
-            // Candidato y productos
-            HStack(alignment: .top, spacing: 16) {
-                // Candidato
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Candidato Asignado").font(.headline)
-                        Spacer()
-                        Button {
-                            appState.seleccion = .operaciones_personal
-                            dismiss()
-                        } label: {
-                            Text("Gestionar Personal")
-                                .underline()
-                                .font(.caption)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundColor(Color("MercedesPetrolGreen"))
-                    }
-                    
-                    if let c = candidato {
-                        HStack {
-                            Image(systemName: "person.fill")
-                            Text(c.nombre).fontWeight(.semibold)
-                            Spacer()
-                            Text(c.estado.rawValue)
-                                .font(.caption2)
-                                .padding(.horizontal, 8).padding(.vertical, 4)
-                                .background(candidatoColor.opacity(0.2))
-                                .foregroundColor(candidatoColor)
-                                .cornerRadius(6)
-                        }
-                        .font(.subheadline)
-                        Text("Rol: \(c.rol.rawValue)")
-                            .font(.caption2).foregroundColor(.gray)
-                        if !c.especialidades.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 6) {
-                                    ForEach(c.especialidades, id: \.self) { esp in
-                                        chipSmall(text: esp)
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Text("No hay candidatos disponibles que cumplan rol y especialidad.")
-                            .font(.caption2).foregroundColor(.red)
-                    }
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color("MercedesCard"))
-                .cornerRadius(10)
-                
-                // Productos
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Productos a Consumir").font(.headline)
-                        Spacer()
-                        Button {
-                            appState.seleccion = .operaciones_inventario
-                            dismiss()
-                        } label: {
-                            Text("Gestionar Inventario")
-                                .underline()
-                                .font(.caption)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundColor(Color("MercedesPetrolGreen"))
-                    }
-                    
-                    if servicio.ingredientes.isEmpty {
-                        Text("Este servicio no requiere productos.")
-                            .font(.caption2).foregroundColor(.gray)
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 6) {
-                                ForEach(servicio.ingredientes, id: \.self) { ing in
-                                    let prod = productos.first(where: { $0.nombre == ing.nombreProducto })
-                                    let stock = prod?.cantidad ?? 0
-                                    let unidad = prod?.unidadDeMedida ?? ""
-                                    let ok = stock >= ing.cantidadUsada
-                                    HStack(spacing: 10) {
-                                        VStack(alignment: .leading) {
-                                            Text(ing.nombreProducto).fontWeight(.semibold)
-                                            Text("\(ing.cantidadUsada, specifier: "%.2f") \(unidad) requeridos")
-                                                .font(.caption2).foregroundColor(.gray)
-                                        }
-                                        Spacer()
-                                        VStack(alignment: .trailing, spacing: 6) {
-                                            Text("Stock: \(stock, specifier: "%.2f")")
-                                                .font(.caption2)
-                                                .foregroundColor(ok ? .green : .red)
-                                            stockBar(progress: min(1, max(0, stock == 0 ? 0 : (stock / max(ing.cantidadUsada, 0.0001)))), color: ok ? .green : .red)
-                                                .frame(width: 120, height: 6)
-                                        }
-                                        Image(systemName: ok ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                                            .foregroundColor(ok ? .green : .red)
-                                    }
-                                    .padding(8)
-                                    .background(Color("MercedesBackground"))
-                                    .cornerRadius(8)
-                                }
-                            }
-                        }
-                        .frame(maxHeight: 150)
-                    }
-                }
-                .padding()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color("MercedesCard"))
-                .cornerRadius(10)
-            }
-            
-            // Barra inferior
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Resumen")
-                        .font(.headline)
-                    HStack(spacing: 12) {
-                        Label("Costo piezas: $\(costoEstimado, specifier: "%.2f")", systemImage: "creditcard")
-                        Label("Duración: \(servicio.duracionHoras, specifier: "%.1f") h", systemImage: "clock")
-                    }
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-                    
-                    if let fin = fechaFinEstimada, !Calendar.current.isDate(fin, inSameDayAs: Date()) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "exclamationmark.calendar")
-                            Text("Finaliza el \(fin.formatted(date: .abbreviated, time: .shortened))")
-                        }
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                        .padding(.top, 2)
-                    }
-                }
-                Spacer()
-                
-                Button("Cancelar") {
-                    dismiss()
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .foregroundColor(.gray)
-                .background(Color("MercedesBackground"))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                )
-                
-                Button {
-                    ejecutarAsignacion()
-                } label: {
-                    Label("Confirmar y Empezar Trabajo", systemImage: "checkmark.circle.fill")
-                        .font(.headline).padding()
-                        .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
-                }
-                .buttonStyle(.plain)
-                .disabled(vehiculoSeleccionadoID == nil || candidato == nil || hayStockInsuficiente)
-                .opacity((vehiculoSeleccionadoID == nil || candidato == nil || hayStockInsuficiente) ? 0.6 : 1.0)
-                .help(botonHelpMessage)
-            }
-            .padding(.top, 4)
-        }
-        .padding(24)
-        .frame(minWidth: 700, minHeight: 600)
-        .background(Color("MercedesBackground"))
-        .cornerRadius(15)
-        .preferredColorScheme(.dark)
-        .onAppear { recalcularPreview() }
-        .onChange(of: vehiculoSeleccionadoID) { _, _ in recalcularPreview() }
-        .alert("Error de Asignación", isPresented: $mostrandoAlerta, presenting: alertaError) { _ in
-            Button("OK") { }
-        } message: { error in
-            Text(error)
-        }
-    }
-    
-    private var botonHelpMessage: String {
-        if vehiculoSeleccionadoID == nil { return "Selecciona un vehículo para continuar." }
-        if candidato == nil { return "No hay candidatos disponibles que cumplan rol y especialidad." }
-        if hayStockInsuficiente { return "Hay productos con stock insuficiente para este servicio." }
-        return "Listo para confirmar."
-    }
-    
-    // Recalcula candidato, costo y stock para pintar la UI
-    private func recalcularPreview() {
-        // Candidato justo por balance
-        let ahora = Date()
-        let candidatos = personal.filter { mec in
-            mec.isAsignable &&
-            mec.especialidades.contains(servicio.especialidadRequerida) &&
-            mec.rol == servicio.rolRequerido
-        }
-        let ordenados = ordenarCandidatosJusto(candidatos: candidatos, inicio: ahora, duracionHoras: servicio.duracionHoras)
-        candidato = ordenados.first
-        
-        // Costo y stock
-        var costo: Double = 0
-        var stockOK = true
-        for ing in servicio.ingredientes {
-            guard let p = productos.first(where: { $0.nombre == ing.nombreProducto }) else { continue }
-            costo += (p.costo * ing.cantidadUsada)
-            if p.cantidad < ing.cantidadUsada { stockOK = false }
-        }
-        costoEstimado = costo
-        hayStockInsuficiente = !stockOK
-        
-        if let c = candidato {
-            fechaFinEstimada = c.calcularFechaFin(inicio: ahora, duracionHoras: servicio.duracionHoras)
-        } else {
-            fechaFinEstimada = nil
-        }
-    }
-    
-    // Chips helpers
-    private func chip(text: String, systemImage: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemImage)
-            Text(text)
-        }
-        .font(.caption2)
-        .padding(.horizontal, 8).padding(.vertical, 6)
-        .background(Color("MercedesBackground"))
-        .cornerRadius(8)
-    }
-    private func chipSmall(text: String) -> some View {
-        Text(text)
-            .font(.caption2)
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(Color("MercedesBackground"))
-            .cornerRadius(6)
-    }
-    private func stockBar(progress: Double, color: Color) -> some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3).fill(Color.gray.opacity(0.25))
-                RoundedRectangle(cornerRadius: 3).fill(color).frame(width: geo.size.width * progress)
-            }
-        }
-    }
-    
-    // Lógica de asignación con balance justo
-    func ejecutarAsignacion() {
-        guard let vehiculoID = vehiculoSeleccionadoID,
-              let vehiculo = vehiculos.first(where: { $0.id == vehiculoID }) else {
-            alertaError = "No se seleccionó un vehículo."
-            mostrandoAlerta = true
-            return
-        }
-        
-        // Selección justa en el momento de confirmar
-        let ahora = Date()
-        
-        let candidatosElegibles = personal.filter { mec in
-            mec.isAsignable &&
-            mec.especialidades.contains(servicio.especialidadRequerida) &&
-            mec.rol == servicio.rolRequerido
-        }
-        let ordenados = ordenarCandidatosJusto(candidatos: candidatosElegibles, inicio: ahora, duracionHoras: servicio.duracionHoras)
-        guard let mecanico = ordenados.first else {
-            alertaError = "No se encontraron mecánicos disponibles que cumplan los requisitos de ROL y ESPECIALIDAD."
-            mostrandoAlerta = true
-            return
-        }
-        
-        var costoTotalProductos: Double = 0.0
-        for ingrediente in servicio.ingredientes {
-            guard let producto = productos.first(where: { $0.nombre == ingrediente.nombreProducto }) else {
-                alertaError = "Error de Sistema: El producto '\(ingrediente.nombreProducto)' no fue encontrado en el inventario."
-                mostrandoAlerta = true
-                return
-            }
-            guard producto.cantidad >= ingrediente.cantidadUsada else {
-                alertaError = "Stock insuficiente de: \(producto.nombre). Se necesitan \(ingrediente.cantidadUsada) \(producto.unidadDeMedida)(s) pero solo hay \(producto.cantidad)."
-                mostrandoAlerta = true
-                return
-            }
-            costoTotalProductos += (producto.costo * ingrediente.cantidadUsada)
-        }
-        
-        let nuevoServicio = ServicioEnProceso(
-            nombreServicio: servicio.nombre,
-            rfcMecanicoAsignado: mecanico.rfc,
-            nombreMecanicoAsignado: mecanico.nombre,
-            horaInicio: ahora,
-            duracionHoras: servicio.duracionHoras,
-            productosConsumidos: servicio.ingredientes.map { $0.nombreProducto },
-            vehiculo: vehiculo
-        )
-        nuevoServicio.estado = .enProceso
-        // Ajustar fecha fin estimada respetando horario
-        nuevoServicio.horaFinEstimada = mecanico.calcularFechaFin(inicio: ahora, duracionHoras: servicio.duracionHoras)
-        
-        modelContext.insert(nuevoServicio)
-        
-        mecanico.estado = .ocupado
-        
-        for ingrediente in servicio.ingredientes {
-            if let producto = productos.first(where: { $0.nombre == ingrediente.nombreProducto }) {
-                producto.cantidad -= ingrediente.cantidadUsada
-            }
-        }
-        
-        let costoFormateado = String(format: "%.2f", costoTotalProductos)
-        let registro = DecisionRecord(
-            fecha: Date(),
-            titulo: "Iniciando: \(servicio.nombre)",
-            razon: "Asignado (balanceado) a \(mecanico.nombre) para el vehículo [\(vehiculo.placas)]. Costo piezas: $\(costoFormateado)",
-            queryUsuario: "Asignación Automática de Servicio (balance justo)"
-        )
-        modelContext.insert(registro)
-        
-        dismiss()
-        appState.seleccion = .serviciosEnProceso
-    }
-    
-    // MARK: - Helpers de balance justo (Asignar)
-    private func calcularCargaHoras(rfc: String, en inicio: Date, fin: Date) -> Double {
-        var suma: Double = 0
-        for t in tickets {
-            guard (t.estado == .programado || t.estado == .enProceso) else { continue }
-            guard t.rfcMecanicoAsignado == rfc || t.rfcMecanicoSugerido == rfc else { continue }
-            let ti = t.fechaProgramadaInicio ?? t.horaInicio
-            let tf: Date = (t.estado == .programado) ? (ti.addingTimeInterval(t.duracionHoras * 3600)) : t.horaFinEstimada
-            // Si hay solape, sumar la intersección en horas
-            if inicio < tf && fin > ti {
-                let interIni = max(inicio, ti)
-                let interFin = min(fin, tf)
-                let horas = interFin.timeIntervalSince(interIni) / 3600.0
-                suma += max(0, horas)
-            }
-        }
-        return suma
-    }
-    
-    private func ultimaAsignacion(rfc: String) -> Date {
-        var ultimo: Date = .distantPast
-        for t in tickets {
-            guard t.rfcMecanicoAsignado == rfc || t.rfcMecanicoSugerido == rfc else { continue }
-            let fecha = (t.estado == .programado) ? (t.fechaProgramadaInicio ?? t.horaInicio) : t.horaInicio
-            if fecha > ultimo { ultimo = fecha }
-        }
-        return ultimo
-    }
-    
-    private func ordenarCandidatosJusto(candidatos: [Personal], inicio: Date, duracionHoras: Double) -> [Personal] {
-        return candidatos.sorted { a, b in
-            let finA = a.calcularFechaFin(inicio: inicio, duracionHoras: duracionHoras)
-            let finB = b.calcularFechaFin(inicio: inicio, duracionHoras: duracionHoras)
-            
-            let cargaA = calcularCargaHoras(rfc: a.rfc, en: inicio, fin: finA)
-            let cargaB = calcularCargaHoras(rfc: b.rfc, en: inicio, fin: finB)
-            
-            if abs(cargaA - cargaB) > 0.0001 {
-                return cargaA < cargaB
-            }
-            let lastA = ultimaAsignacion(rfc: a.rfc)
-            let lastB = ultimaAsignacion(rfc: b.rfc)
-            if lastA != lastB {
-                return lastA < lastB // el que lleva más tiempo sin asignación primero
-            }
-            return a.nombre < b.nombre
-        }
-    }
-}
-
-// --- MODAL DE PROGRAMACIÓN (nuevo) ---
+// --- MODAL UNIFICADO (PROGRAMAR O ASIGNAR AHORA) ---
 fileprivate struct ProgramarServicioModal: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -997,6 +463,7 @@ fileprivate struct ProgramarServicioModal: View {
     // UI State
     @State private var vehiculoSeleccionadoID: Vehiculo.ID?
     @State private var searchVehiculo = ""
+    @State private var empezarAhora = false // TOGGLE
     @State private var fechaInicio: Date = Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date()
     @State private var horaTexto: String = ""
     
@@ -1004,6 +471,16 @@ fileprivate struct ProgramarServicioModal: View {
     @State private var candidato: Personal?
     @State private var conflictoMensaje: String?
     @State private var stockAdvertencia: String?
+    
+    // Check de stock estricto para "Empezar Ahora"
+    private var stockInsuficienteParaAhora: Bool {
+        guard empezarAhora else { return false }
+        for ing in servicio.ingredientes {
+             guard let p = productos.first(where: { $0.nombre == ing.nombreProducto }) else { return true }
+             if p.cantidad < ing.cantidadUsada { return true }
+        }
+        return false
+    }
     
     var vehiculosFiltrados: [Vehiculo] {
         if searchVehiculo.trimmingCharacters(in: .whitespaces).isEmpty { return vehiculos }
@@ -1017,6 +494,9 @@ fileprivate struct ProgramarServicioModal: View {
     }
     
     var isHoraValida: Bool {
+        // En "Empezar Ahora" ignoramos la hora (es YA)
+        if empezarAhora { return true }
+        
         let cal = Calendar.current
         let hora = cal.component(.hour, from: fechaInicio)
         let minuto = cal.component(.minute, from: fechaInicio)
@@ -1045,6 +525,31 @@ fileprivate struct ProgramarServicioModal: View {
             .padding()
             .background(Color("MercedesCard"))
             .cornerRadius(10)
+            
+            // Toggle de Modo
+            Toggle(isOn: $empezarAhora) {
+                VStack(alignment: .leading) {
+                    Text("Empezar Servicio Ahora")
+                        .font(.headline)
+                        .foregroundColor(empezarAhora ? Color("MercedesPetrolGreen") : .primary)
+                    Text(empezarAhora ? "El servicio iniciará inmediatamente y se descontará stock." : "Se reservará para una fecha futura.")
+                        .font(.caption2).foregroundColor(.gray)
+                }
+            }
+            .toggleStyle(.switch)
+            .padding()
+            .background(Color("MercedesBackground"))
+            .cornerRadius(10)
+            .onChange(of: empezarAhora) { _, now in
+                if now {
+                    // Reset fecha a ahora mismo si se activa
+                    fechaInicio = Date() 
+                } else {
+                    // Reset a +2 hrs si se desactiva
+                    fechaInicio = Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date()
+                }
+                recalcularCandidato()
+            }
             
             // Selección de vehículo y fecha
             HStack(spacing: 16) {
@@ -1106,61 +611,64 @@ fileprivate struct ProgramarServicioModal: View {
                 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Fecha y hora de inicio").font(.headline)
-                    DatePicker("Inicio", selection: $fechaInicio, in: Calendar.current.startOfDay(for: Date())..., displayedComponents: [.date, .hourAndMinute])
-                        .datePickerStyle(.graphical)
-                        .onChange(of: fechaInicio) { _, newValue in
-                            recalcularCandidato()
-                            // Sincronizar texto si la fecha cambió externamente (no por el campo de texto)
-                            let formatter = DateFormatter()
-                            formatter.dateFormat = "HH:mm"
-                            let str = formatter.string(from: newValue)
-                            if horaTexto != str {
-                                horaTexto = str
-                            }
-                        }
                     
-                    // Input manual de hora
-                    HStack {
-                        Image(systemName: "clock").foregroundColor(.gray)
-                        TextField("HH:mm (24h)", text: $horaTexto)
-                            .textFieldStyle(.plain)
-                            .onChange(of: horaTexto) { _, newValue in
-                                // Intentar parsear HH:mm
+                    if empezarAhora {
+                        // Mensaje estático
+                        VStack(spacing: 12) {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(.yellow)
+                            Text("Iniciando Inmediatamente")
+                                .font(.subheadline).fontWeight(.bold)
+                                .foregroundColor(.white)
+                            Text(Date().formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption).foregroundColor(.gray)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color("MercedesBackground").opacity(0.5))
+                        .cornerRadius(8)
+                    } else {
+                        DatePicker("Inicio", selection: $fechaInicio, in: Calendar.current.startOfDay(for: Date())..., displayedComponents: [.date, .hourAndMinute])
+                            .datePickerStyle(.graphical)
+                            .onChange(of: fechaInicio) { _, newValue in
+                                recalcularCandidato()
                                 let formatter = DateFormatter()
                                 formatter.dateFormat = "HH:mm"
-                                if let dateTime = formatter.date(from: newValue) {
-                                    let cal = Calendar.current
-                                    let compTime = cal.dateComponents([.hour, .minute], from: dateTime)
-                                    
-                                    // Combinar con la fecha actual de fechaInicio
-                                    let compDate = cal.dateComponents([.year, .month, .day], from: fechaInicio)
-                                    
-                                    var newComps = DateComponents()
-                                    newComps.year = compDate.year
-                                    newComps.month = compDate.month
-                                    newComps.day = compDate.day
-                                    newComps.hour = compTime.hour
-                                    newComps.minute = compTime.minute
-                                    
-                                    if let newDate = cal.date(from: newComps) {
-                                        // Solo actualizar si es diferente para evitar bucles
-                                        if newDate != fechaInicio {
+                                let str = formatter.string(from: newValue)
+                                if horaTexto != str { horaTexto = str }
+                            }
+                        
+                        // Input manual de hora
+                        HStack {
+                            Image(systemName: "clock").foregroundColor(.gray)
+                            TextField("HH:mm (24h)", text: $horaTexto)
+                                .textFieldStyle(.plain)
+                                .onChange(of: horaTexto) { _, newValue in
+                                    let formatter = DateFormatter()
+                                    formatter.dateFormat = "HH:mm"
+                                    if let dateTime = formatter.date(from: newValue) {
+                                        let cal = Calendar.current
+                                        let compTime = cal.dateComponents([.hour, .minute], from: dateTime)
+                                        let compDate = cal.dateComponents([.year, .month, .day], from: fechaInicio)
+                                        var newComps = DateComponents()
+                                        newComps.year = compDate.year
+                                        newComps.month = compDate.month
+                                        newComps.day = compDate.day
+                                        newComps.hour = compTime.hour
+                                        newComps.minute = compTime.minute
+                                        if let newDate = cal.date(from: newComps), newDate != fechaInicio {
                                             fechaInicio = newDate
                                         }
                                     }
                                 }
-                            }
+                        }
+                        .padding(8)
+                        .background(Color("MercedesBackground"))
+                        .cornerRadius(8)
                     }
-                    .padding(8)
-                    .background(Color("MercedesBackground"))
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                    )
                     
                     if let c = candidato {
-                        let finReal = c.calcularFechaFin(inicio: fechaInicio, duracionHoras: servicio.duracionHoras)
+                        let finReal = c.calcularFechaFin(inicio: (empezarAhora ? Date() : fechaInicio), duracionHoras: servicio.duracionHoras)
                         Text("Fin estimado: \(finReal.formatted(date: .abbreviated, time: .shortened))")
                             .font(.caption).foregroundColor(.gray)
                     } else {
@@ -1195,22 +703,33 @@ fileprivate struct ProgramarServicioModal: View {
                         .font(.caption)
                         .foregroundColor(.yellow)
                 }
-                if let stockAdvertencia {
+                
+                if let stockAdvertencia, !empezarAhora {
+                    // Warning suave solo si es programado
                     Label(stockAdvertencia, systemImage: "shippingbox.fill")
                         .font(.caption)
                         .foregroundColor(.orange)
                 }
                 
-                if fechaInicio < Date() {
-                    Label("La fecha de inicio no puede ser en el pasado.", systemImage: "xmark.circle.fill")
-                        .font(.caption)
+                if stockInsuficienteParaAhora {
+                    // Error crítico si es asignación inmediata
+                    Label("STOCK INSUFICIENTE. No se puede iniciar ahora.", systemImage: "xmark.octagon.fill")
+                        .font(.caption).fontWeight(.bold)
                         .foregroundColor(.red)
                 }
                 
-                if !isHoraValida {
-                    Label("El horario de programación debe ser entre 06:00 AM y 08:00 PM.", systemImage: "clock.badge.exclamationmark.fill")
-                        .font(.caption)
-                        .foregroundColor(.red)
+                if !empezarAhora {
+                    if fechaInicio < Date() {
+                        Label("La fecha de inicio no puede ser en el pasado.", systemImage: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
+                    
+                    if !isHoraValida {
+                        Label("El horario de programación debe ser entre 06:00 AM y 08:00 PM.", systemImage: "clock.badge.exclamationmark.fill")
+                            .font(.caption)
+                            .foregroundColor(.red)
+                    }
                 }
             }
             .padding()
@@ -1234,7 +753,7 @@ fileprivate struct ProgramarServicioModal: View {
                 Button {
                     guardarProgramacion()
                 } label: {
-                    Label("Guardar Programación", systemImage: "calendar.badge.checkmark")
+                    Label(empezarAhora ? "Confirmar y Empezar" : "Guardar Programación", systemImage: empezarAhora ? "play.fill" : "calendar.badge.checkmark")
                         .font(.headline)
                         .padding()
                         .background(Color("MercedesPetrolGreen"))
@@ -1242,12 +761,22 @@ fileprivate struct ProgramarServicioModal: View {
                         .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
-                .disabled(vehiculoSeleccionadoID == nil || candidato == nil || fechaInicio < Date() || !isHoraValida)
-                .opacity((vehiculoSeleccionadoID == nil || candidato == nil || fechaInicio < Date() || !isHoraValida) ? 0.6 : 1.0)
+                .disabled(
+                    vehiculoSeleccionadoID == nil || 
+                    candidato == nil || 
+                    (!empezarAhora && (fechaInicio < Date() || !isHoraValida)) ||
+                    (empezarAhora && stockInsuficienteParaAhora)
+                )
+                .opacity(
+                    (vehiculoSeleccionadoID == nil || 
+                     candidato == nil || 
+                     (!empezarAhora && (fechaInicio < Date() || !isHoraValida)) ||
+                     (empezarAhora && stockInsuficienteParaAhora)) ? 0.6 : 1.0
+                )
             }
         }
         .padding(24)
-        .frame(minWidth: 760, minHeight: 600)
+        .frame(minWidth: 760, minHeight: 650)
         .background(Color("MercedesBackground"))
         .cornerRadius(12)
         .preferredColorScheme(.dark)
@@ -1270,42 +799,46 @@ fileprivate struct ProgramarServicioModal: View {
         .cornerRadius(8)
     }
     
-    // Selección automática del mejor candidato sin solapes con balance justo
+    // Selección automática del mejor candidato
     private func recalcularCandidato() {
         conflictoMensaje = nil
         stockAdvertencia = nil
         
-        // 1) Posibles candidatos por rol/especialidad y disponibilidad laboral (día/horas)
-        let cal = Calendar.current
-        let weekday = cal.component(.weekday, from: fechaInicio)
-        let startHour = cal.component(.hour, from: fechaInicio)
+        let targetDate = empezarAhora ? Date() : fechaInicio
         
-        // Filtramos solo por inicio dentro del horario (o cerca), pero NO exigimos que termine hoy.
+        // 1) Disponibilidad laboral
+        let cal = Calendar.current
+        let weekday = cal.component(.weekday, from: targetDate)
+        let startHour = cal.component(.hour, from: targetDate)
+        
+        // Si es "ahora", somos más flexibles con la hora de entrada si ya está trabajando
         let candidatosBase = personal.filter { mec in
             mec.rol == servicio.rolRequerido &&
             mec.especialidades.contains(servicio.especialidadRequerida) &&
             mec.diasLaborales.contains(weekday) &&
-            (mec.horaEntrada <= startHour) // Debe haber empezado su turno (o estar en él)
+            (empezarAhora || mec.horaEntrada <= startHour)
         }
         
         // 2) Evitar solapes
-        // Para verificar solapes, necesitamos calcular el fin REAL para cada candidato
         let candidatosSinSolape = candidatosBase.filter { mec in
-            let finEstimado = mec.calcularFechaFin(inicio: fechaInicio, duracionHoras: servicio.duracionHoras)
-            return !ServicioEnProceso.existeSolape(paraRFC: mec.rfc, inicio: fechaInicio, fin: finEstimado, tickets: tickets)
+            // Si empieza ahora, verificamos si está ocupado
+            if empezarAhora && mec.estado == .ocupado { return false }
+            
+            let finEstimado = mec.calcularFechaFin(inicio: targetDate, duracionHoras: servicio.duracionHoras)
+            return !ServicioEnProceso.existeSolape(paraRFC: mec.rfc, inicio: targetDate, fin: finEstimado, tickets: tickets)
         }
         
-        // 3) Balance justo: carga + última asignación + nombre
-        let ordenados = ordenarCandidatosJusto(candidatos: candidatosSinSolape, inicio: fechaInicio, duracionHoras: servicio.duracionHoras)
+        // 3) Balance justo
+        let ordenados = ordenarCandidatosJusto(candidatos: candidatosSinSolape, inicio: targetDate, duracionHoras: servicio.duracionHoras)
         candidato = ordenados.first
         
         if candidato == nil && !candidatosBase.isEmpty {
-            conflictoMensaje = "Todos los candidatos tienen solapes en ese horario."
+            conflictoMensaje = "Todos los candidatos están ocupados o tienen solapes."
         } else if candidatosBase.isEmpty {
             conflictoMensaje = "No hay candidatos con el rol/especialidad y turno adecuado."
         }
         
-        // 4) Advertencia de stock (no reservamos)
+        // 4) Check stock (informativo)
         var faltantes: [String] = []
         for ing in servicio.ingredientes {
             if let p = productos.first(where: { $0.nombre == ing.nombreProducto }), p.cantidad < ing.cantidadUsada {
@@ -1313,7 +846,7 @@ fileprivate struct ProgramarServicioModal: View {
             }
         }
         if !faltantes.isEmpty {
-            stockAdvertencia = "Stock insuficiente hoy para: \(faltantes.joined(separator: ", ")). No se reserva; se validará al iniciar."
+            stockAdvertencia = "Stock insuficiente hoy para: \(faltantes.joined(separator: ", "))."
         }
     }
     
@@ -1322,33 +855,53 @@ fileprivate struct ProgramarServicioModal: View {
               let vehiculo = vehiculos.first(where: { $0.id == vehiculoID }),
               let candidato else { return }
         
-        // Creamos un ticket programado
-        let placeholderInicio = Date()
+        // Validación final
+        if empezarAhora {
+             if stockInsuficienteParaAhora { return }
+             // Consumir stock
+             for ing in servicio.ingredientes {
+                 if let p = productos.first(where: { $0.nombre == ing.nombreProducto }) {
+                     p.cantidad -= ing.cantidadUsada
+                 }
+             }
+             // Ocupar mecánico
+             candidato.estado = .ocupado
+        }
+        
+        let fechaReal = empezarAhora ? Date() : fechaInicio
         let ticket = ServicioEnProceso(
             nombreServicio: servicio.nombre,
             rfcMecanicoAsignado: candidato.rfc,
             nombreMecanicoAsignado: candidato.nombre,
-            horaInicio: placeholderInicio,
+            horaInicio: fechaReal, // Se usa si es enProceso
             duracionHoras: servicio.duracionHoras,
             productosConsumidos: servicio.ingredientes.map { $0.nombreProducto },
             vehiculo: vehiculo
         )
-        ticket.estado = .programado
-        ticket.fechaProgramadaInicio = fechaInicio
-        ticket.duracionHoras = servicio.duracionHoras
-        ticket.rfcMecanicoSugerido = candidato.rfc
-        ticket.nombreMecanicoSugerido = candidato.nombre
+        
+        if empezarAhora {
+            ticket.estado = .enProceso
+            ticket.horaInicio = Date()
+        } else {
+            ticket.estado = .programado
+            ticket.fechaProgramadaInicio = fechaInicio
+        }
         
         // Ajustar fin estimado real
-        ticket.horaFinEstimada = candidato.calcularFechaFin(inicio: fechaInicio, duracionHoras: servicio.duracionHoras)
+        ticket.horaFinEstimada = candidato.calcularFechaFin(inicio: fechaReal, duracionHoras: servicio.duracionHoras)
+        // Guardar sugerido también
+        ticket.rfcMecanicoSugerido = candidato.rfc
+        ticket.nombreMecanicoSugerido = candidato.nombre
+        ticket.duracionHoras = servicio.duracionHoras
         
         modelContext.insert(ticket)
         
+        let accion = empezarAhora ? "Iniciado (Inmediato)" : "Programado"
         let registro = DecisionRecord(
             fecha: Date(),
-            titulo: "Programado: \(servicio.nombre)",
-            razon: "Sugerido (balanceado) para \(candidato.nombre) el \(fechaInicio.formatted(date: .abbreviated, time: .shortened)) para vehículo [\(vehiculo.placas)].",
-            queryUsuario: "Programación Automática de Servicio (balance justo)"
+            titulo: "\(accion): \(servicio.nombre)",
+            razon: "Asignado a \(candidato.nombre) para vehículo [\(vehiculo.placas)].",
+            queryUsuario: "Programación/Asignación desde Modal Unificado"
         )
         modelContext.insert(registro)
         
@@ -1468,10 +1021,12 @@ fileprivate struct ServicioFormView: View {
     private var servicioAEditar: Servicio?
     var formTitle: String {
         switch mode {
-        case .add: return "Añadir Nuevo Servicio"
-        case .edit: return "Editar Servicio"
-        case .assign: return "Editar Servicio"
-        case .schedule: return "Editar Servicio"
+        case .add:
+            return "Añadir Nuevo Servicio"
+        case .edit(_):
+            return "Editar Servicio"
+        case .schedule(_):
+            return "Editar Servicio"
         }
     }
     
