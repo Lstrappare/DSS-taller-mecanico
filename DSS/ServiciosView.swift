@@ -526,31 +526,6 @@ fileprivate struct ProgramarServicioModal: View {
             .background(Color("MercedesCard"))
             .cornerRadius(10)
             
-            // Toggle de Modo
-            Toggle(isOn: $empezarAhora) {
-                VStack(alignment: .leading) {
-                    Text("Empezar Servicio Ahora")
-                        .font(.headline)
-                        .foregroundColor(empezarAhora ? Color("MercedesPetrolGreen") : .primary)
-                    Text(empezarAhora ? "El servicio iniciará inmediatamente y se descontará stock." : "Se reservará para una fecha futura.")
-                        .font(.caption2).foregroundColor(.gray)
-                }
-            }
-            .toggleStyle(.switch)
-            .padding()
-            .background(Color("MercedesBackground"))
-            .cornerRadius(10)
-            .onChange(of: empezarAhora) { _, now in
-                if now {
-                    // Reset fecha a ahora mismo si se activa
-                    fechaInicio = Date() 
-                } else {
-                    // Reset a +2 hrs si se desactiva
-                    fechaInicio = Calendar.current.date(byAdding: .hour, value: 2, to: Date()) ?? Date()
-                }
-                recalcularCandidato()
-            }
-            
             // Selección de vehículo y fecha
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -628,7 +603,7 @@ fileprivate struct ProgramarServicioModal: View {
                         .background(Color("MercedesBackground").opacity(0.5))
                         .cornerRadius(8)
                     } else {
-                        DatePicker("Inicio", selection: $fechaInicio, in: Calendar.current.startOfDay(for: Date())..., displayedComponents: [.date, .hourAndMinute])
+                        DatePicker("", selection: $fechaInicio, in: Calendar.current.startOfDay(for: Date())..., displayedComponents: [.date, .hourAndMinute])
                             .datePickerStyle(.graphical)
                             .onChange(of: fechaInicio) { _, newValue in
                                 recalcularCandidato()

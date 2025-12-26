@@ -707,7 +707,7 @@ fileprivate struct ProgramarTicketModal: View {
             // Fecha
             VStack(alignment: .leading, spacing: 8) {
                 Text("Fecha y hora de inicio").font(.headline)
-                DatePicker("Inicio", selection: $fechaInicio, displayedComponents: [.date, .hourAndMinute])
+                DatePicker("", selection: $fechaInicio, displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(.graphical)
                     .onChange(of: fechaInicio) { _, _ in recalcularCandidato() }
                 Text("Fin estimado: \(fechaInicio.addingTimeInterval(ticket.duracionHoras * 3600).formatted(date: .abbreviated, time: .shortened))")
