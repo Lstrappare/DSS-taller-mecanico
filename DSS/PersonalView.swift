@@ -519,7 +519,7 @@ fileprivate struct PersonalFormView: View {
     // Trabajo (UI opcional en "add" para forzar selección)
     @State private var rol: Rol = .ayudante
     @State private var rolSeleccion: Rol? = nil
-    @State private var especialidadesString = ""
+    @State private var especialidadesList: [String] = []
     @State private var fechaIngreso = Date()
     @State private var tipoContrato: TipoContrato = .indefinido
     @State private var tipoContratoSeleccion: TipoContrato? = nil
@@ -634,7 +634,7 @@ fileprivate struct PersonalFormView: View {
             _curp = State(initialValue: personal.curp ?? "")
             _rol = State(initialValue: personal.rol)
             _estado = State(initialValue: personal.estado)
-            _especialidadesString = State(initialValue: personal.especialidades.joined(separator: ", "))
+            _especialidadesList = State(initialValue: personal.especialidades)
             _fechaIngreso = State(initialValue: personal.fechaIngreso)
             _tipoContrato = State(initialValue: personal.tipoContrato)
             _horaEntradaString = State(initialValue: "\(personal.horaEntrada)")
@@ -750,7 +750,7 @@ fileprivate struct PersonalFormView: View {
         return tipoSalarioSeleccion == nil
     }
     private var especialidadesInvalidas: Bool {
-        especialidadesString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        especialidadesList.isEmpty
     }
     
     // Helpers de asistencia/estado del día
@@ -923,75 +923,128 @@ fileprivate struct PersonalFormView: View {
                     Divider().background(Color.gray.opacity(0.3))
                     
                     // 3. Puesto
-                    VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "3. Puesto", subtitle: "Rol y fecha de ingreso")
-                        HStack(spacing: 16) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("• Rol").font(.caption2).foregroundColor(.gray)
-                                if mecanicoAEditar == nil {
-                                    Picker("", selection: Binding(
-                                        get: { rolSeleccion as Rol? },
-                                        set: { rolSeleccion = $0 }
-                                    )) {
-                                        Text("Selecciona un rol…").tag(Rol?.none)
-                                        ForEach(Rol.allCases, id: \.self) { Text($0.rawValue).tag(Rol?.some($0)) }
-                                    }
-                                    .pickerStyle(.menu)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(4)
-                                    .background(Color("MercedesBackground").opacity(0.9))
-                                    .cornerRadius(8)
-                                    .validationHint(isInvalid: rolNoSeleccionado, message: "Debes seleccionar un rol.")
-                                } else {
-                                    Picker("", selection: $rol) {
-                                        ForEach(Rol.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                                    }
-                                    .pickerStyle(.menu)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(4)
-                                    .background(Color("MercedesBackground").opacity(0.9))
-                                    .cornerRadius(8)
+                    VStack(alignment: .leading, spacing: 20) {
+                        SectionHeader(title: "3. Puesto", subtitle: "Definición de rol y perfil profesional")
+                        
+                        // Selector de Rol (Grid Visual)
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("• Selecciona el Rol")
+                                .font(.caption).foregroundColor(rolNoSeleccionado ? .red : .gray)
+                            
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), spacing: 12)], spacing: 12) {
+                                ForEach(Rol.allCases, id: \.self) { roleItem in
+                                    RoleSelectionCard(
+                                        rol: roleItem,
+                                        isSelected: (mecanicoAEditar == nil ? (rolSeleccion == roleItem) : (rol == roleItem)),
+                                        action: {
+                                            if mecanicoAEditar == nil {
+                                                rolSeleccion = roleItem
+                                            } else {
+                                                rol = roleItem
+                                            }
+                                        }
+                                    )
                                 }
                             }
-                            FormField(title: "• Especialidades (coma separadas)", placeholder: "Motor, Frenos...", text: $especialidadesString)
-                                .help("Ejemplo: Motor, Frenos. Se guardarán con mayúscula inicial.")
-                                .validationHint(isInvalid: especialidadesInvalidas, message: "Debes ingresar al menos una especialidad.")
+                            if rolNoSeleccionado {
+                                Text("Debes seleccionar un rol para continuar.")
+                                    .font(.caption2).foregroundColor(.red)
+                            }
                         }
-                        HStack(spacing: 16) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("• Fecha de ingreso").font(.caption2).foregroundColor(.gray)
-                                DatePicker("", selection: $fechaIngreso, displayedComponents: .date)
-                                    .datePickerStyle(.compact)
-                                    .labelsHidden()
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        Divider().background(Color.gray.opacity(0.2))
+                        
+                        // Especialidades (Tags interactivas)
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("• Especialidades")
+                                .font(.caption).foregroundColor(especialidadesInvalidas ? .red : .gray)
+                            
+                            TagInputView(
+                                tags: $especialidadesList,
+                                placeholder: "Escribe una especialidad y presiona Enter...",
+                                error: especialidadesInvalidas
+                            )
+                            
+                            if especialidadesInvalidas {
+                                Text("Añade al menos una especialidad (ej. 'Frenos', 'Motor').")
+                                    .font(.caption2).foregroundColor(.red)
                             }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("• Tipo de contrato").font(.caption2).foregroundColor(.gray)
-                                if mecanicoAEditar == nil {
-                                    Picker("", selection: Binding(
-                                        get: { tipoContratoSeleccion as TipoContrato? },
-                                        set: { tipoContratoSeleccion = $0 }
-                                    )) {
-                                        Text("Selecciona un contrato…").tag(TipoContrato?.none)
-                                        ForEach(TipoContrato.allCases, id: \.self) { Text($0.rawValue).tag(TipoContrato?.some($0)) }
+                        }
+                        
+                        Divider().background(Color.gray.opacity(0.2))
+                        
+                        // Fecha de Ingreso y Contrato (Layout mejorado)
+                        HStack(alignment: .top, spacing: 24) {
+                            // Fecha de Ingreso
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("• Fecha de Ingreso")
+                                    .font(.caption).foregroundColor(.gray)
+                                HStack {
+                                    Image(systemName: "calendar")
+                                        .foregroundColor(Color("MercedesPetrolGreen"))
+                                    DatePicker("", selection: $fechaIngreso, displayedComponents: .date)
+                                        .padding(2)
+                                        .datePickerStyle(.compact)
+                                        .labelsHidden()
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .padding(10)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+                            }
+                            .frame(maxWidth: .infinity)
+                            
+                            // Tipo de Contrato
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("• Tipo de Contrato")
+                                    .font(.caption).foregroundColor(tipoContratoNoSeleccionado ? .red : .gray)
+                                
+                                Menu {
+                                    ForEach(TipoContrato.allCases, id: \.self) { tc in
+                                        Button {
+                                            if mecanicoAEditar == nil {
+                                                tipoContratoSeleccion = tc
+                                            } else {
+                                                tipoContrato = tc
+                                            }
+                                        } label: {
+                                            if (mecanicoAEditar == nil ? tipoContratoSeleccion : tipoContrato) == tc {
+                                                Label(tc.rawValue, systemImage: "checkmark")
+                                            } else {
+                                                Text(tc.rawValue)
+                                            }
+                                        }
                                     }
-                                    .pickerStyle(.menu)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(4)
-                                    .background(Color("MercedesBackground").opacity(0.9))
-                                    .cornerRadius(8)
-                                    .validationHint(isInvalid: tipoContratoNoSeleccionado, message: "Debes seleccionar un tipo de contrato.")
-                                } else {
-                                    Picker("", selection: $tipoContrato) {
-                                        ForEach(TipoContrato.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                                } label: {
+                                    HStack {
+                                        Text((mecanicoAEditar == nil ? tipoContratoSeleccion?.rawValue : tipoContrato.rawValue) ?? "Seleccionar...")
+                                            .foregroundColor((mecanicoAEditar == nil && tipoContratoSeleccion == nil) ? .gray : .primary)
+                                        Spacer()
+                                        Image(systemName: "chevron.up.chevron.down")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
                                     }
-                                    .pickerStyle(.menu)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(4)
-                                    .background(Color("MercedesBackground").opacity(0.9))
+                                    .padding(12)
+                                    .background(Color("MercedesBackground"))
                                     .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(tipoContratoNoSeleccionado ? Color.red.opacity(0.5) : Color.gray.opacity(0.3), lineWidth: 1)
+                                    )
+
+                                }
+                                .buttonStyle(.plain)
+                                
+                                if tipoContratoNoSeleccionado {
+                                    Text("Requerido.")
+                                        .font(.caption2).foregroundColor(.red)
                                 }
                             }
+                            .frame(maxWidth: .infinity)
                         }
                     }
                     
@@ -1721,10 +1774,7 @@ fileprivate struct PersonalFormView: View {
             return
         }
         
-        let especialidadesArray = especialidadesString
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces).capitalized }
-            .filter { !$0.isEmpty }
+        let especialidadesArray = especialidadesList
         
         if especialidadesArray.isEmpty {
             errorMsg = "Debes ingresar al menos una especialidad."
@@ -2413,3 +2463,137 @@ fileprivate struct AssistToolbar: View {
     }
 }
 
+
+// MARK: - Helper Views for New UX
+
+struct RoleSelectionCard: View {
+    let rol: Rol
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var iconName: String {
+        switch rol {
+        case .jefeDeTaller: return "person.3.fill"
+        case .atencionCliente: return "headset"
+        case .mecanicoFrenos: return "wrench.adjustable.fill"
+        case .ayudante: return "hammer.fill"
+        }
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? Color("MercedesPetrolGreen") : Color.gray.opacity(0.2))
+                        .frame(width: 50, height: 50)
+                    Image(systemName: iconName)
+                        .font(.title2)
+                        .foregroundColor(isSelected ? .white : .gray)
+                }
+                
+                Text(rol.rawValue)
+                    .font(.footnote)
+                    .fontWeight(isSelected ? .semibold : .regular)
+                    .foregroundColor(isSelected ? .white : .gray)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .padding(.horizontal, 8)
+            .background(isSelected ? Color("MercedesPetrolGreen").opacity(0.15) : Color("MercedesBackground"))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color("MercedesPetrolGreen") : Color.gray.opacity(0.2), lineWidth: 1.5)
+            )
+            .shadow(color: isSelected ? Color("MercedesPetrolGreen").opacity(0.2) : .clear, radius: 4, x: 0, y: 2)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct TagInputView: View {
+    @Binding var tags: [String]
+    var placeholder: String
+    var error: Bool
+    
+    @State private var newTag = ""
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Área de Chips
+            if !tags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(tags, id: \.self) { tag in
+                            HStack(spacing: 6) {
+                                Text(tag)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                Button {
+                                    withAnimation {
+                                        tags.removeAll { $0 == tag }
+                                    }
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color("MercedesPetrolGreen").opacity(0.2))
+                            .foregroundColor(Color("MercedesPetrolGreen"))
+                            .cornerRadius(20)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            
+            // Input Field
+            HStack {
+                Image(systemName: "tag.fill")
+                    .foregroundColor(.gray)
+                TextField(placeholder, text: $newTag)
+                    .textFieldStyle(.plain)
+                    .onSubmit {
+                        addTag()
+                    }
+                Button {
+                    addTag()
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundColor(newTag.isEmpty ? .gray : Color("MercedesPetrolGreen"))
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+                .disabled(newTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(12)
+            .background(Color("MercedesBackground"))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(error ? Color.red.opacity(0.5) : Color.gray.opacity(0.3), lineWidth: 1)
+            )
+        }
+    }
+    
+    private func addTag() {
+        let trimmed = newTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            // Capitalizar primera letra
+            let formatted = trimmed.prefix(1).uppercased() + trimmed.dropFirst()
+            if !tags.contains(formatted) {
+                withAnimation {
+                    tags.append(formatted)
+                    newTag = ""
+                }
+            } else {
+                newTag = "" // Ya existe
+            }
+        }
+    }
+}
