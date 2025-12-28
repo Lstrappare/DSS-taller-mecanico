@@ -501,6 +501,7 @@ fileprivate struct PersonalFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query private var allPersonal: [Personal]
+    @Query private var serviciosEnProceso: [ServicioEnProceso]
     
     @AppStorage("user_password") private var userPassword = ""
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
@@ -586,6 +587,11 @@ fileprivate struct PersonalFormView: View {
     @State private var pendingApplyAllFactor: Double?
     @State private var showingApplyAllAlert: Bool = false
     @State private var postApplyAllAction: (() -> Void)? = nil
+
+    // Alerta genérica de validación
+    @State private var showingValidationAlert = false
+    @State private var alertTitle = ""
+    @State private var alertMessage = ""
     
     private var mecanicoAEditar: Personal?
     var formTitle: String { (mode == .add) ? "Añadir Personal" : "Editar Personal" }
@@ -1283,8 +1289,14 @@ fileprivate struct PersonalFormView: View {
                                 estado: $estado,
                                 asistenciaBloqueada: $asistenciaBloqueada,
                                 onMarcarAusencia: {
-                                    authReason = .markAbsence
-                                    showingAuthModal = true
+                                    if let errorAusencia = validarAusencia() {
+                                        alertTitle = "No se puede marcar ausencia"
+                                        alertMessage = errorAusencia
+                                        showingValidationAlert = true
+                                    } else {
+                                        authReason = .markAbsence
+                                        showingAuthModal = true
+                                    }
                                 }
                             )
                             .opacity(puedeMarcarAusencia ? 1.0 : 0.5)
@@ -1352,8 +1364,14 @@ fileprivate struct PersonalFormView: View {
                                 .multilineTextAlignment(.center)
                             
                             Button(role: .destructive) {
-                                authReason = .deleteEmployee
-                                showingAuthModal = true
+                                if let errorEliminar = validarEliminacion() {
+                                    alertTitle = "No se puede eliminar"
+                                    alertMessage = errorEliminar
+                                    showingValidationAlert = true
+                                } else {
+                                    authReason = .deleteEmployee
+                                    showingAuthModal = true
+                                }
                             } label: {
                                 Label("Eliminar empleado permanentemente", systemImage: "trash.fill")
                                     .padding(.vertical, 10)
@@ -1422,11 +1440,22 @@ fileprivate struct PersonalFormView: View {
                 }
                 .buttonStyle(.plain)
                 
-                if mecanicoAEditar != nil {
-                    Button {
-                        showingStatusAlert = true
-                    } label: {
-                        Text(activo ? "Dar de baja" : "Reactivar")
+                    if mecanicoAEditar != nil {
+                        Button {
+                            // Validar antes de togglear
+                            if activo {
+                                // Intenta dar de baja
+                                if let errorBaja = validarBaja() {
+                                    alertTitle = "No se puede dar de baja"
+                                    alertMessage = errorBaja
+                                    showingValidationAlert = true
+                                    return
+                                }
+                            }
+                            // Si pasa, mostrar confirmación
+                            showingStatusAlert = true
+                        } label: {
+                            Text(activo ? "Dar de baja" : "Reactivar")
                             .padding(.vertical, 8)
                             .padding(.horizontal, 16)
                             .background(activo ? Color.orange.opacity(0.15) : Color.green.opacity(0.15))
@@ -1541,6 +1570,11 @@ fileprivate struct PersonalFormView: View {
                 facTxt != nil ? "Factor de integración: \(facTxt!)" : nil
             ].compactMap { $0 }
             Text("Detectamos cambios en:\n\(parts.joined(separator: "\n"))\n¿Quieres aplicar estos valores a todos los empleados?")
+        }
+        .alert(alertTitle, isPresented: $showingValidationAlert) {
+            Button("Entendido", role: .cancel) { }
+        } message: {
+            Text(alertMessage)
         }
     }
     
@@ -2129,6 +2163,59 @@ fileprivate struct PersonalFormView: View {
             }
         }
         return result
+    }
+
+    // MARK: - Validation Check (Baja / Eliminación / Ausencia)
+    
+    private func validarBaja() -> String? {
+        guard let rfcMec = mecanicoAEditar?.rfc else { return nil }
+        // 1. Servicios en curso
+        if tieneServiciosActivos(rfc: rfcMec) {
+            return "El empleado tiene servicios en curso (En Proceso). Debes completarlos o reasignarlos antes de darlo de baja."
+        }
+        // 2. Servicios programados futuros
+        if tieneServiciosProgramados(rfc: rfcMec) {
+            return "El empleado tiene servicios programados a futuro. Debes cancelarlos o reasignarlos."
+        }
+        return nil
+    }
+    
+    private func validarEliminacion() -> String? {
+        guard let rfcMec = mecanicoAEditar?.rfc else { return nil }
+        // Misma lógica que baja, no queremos eliminar historial activo
+        if tieneServiciosActivos(rfc: rfcMec) {
+            return "No se puede eliminar porque está asignado a servicios en curso."
+        }
+        if tieneServiciosProgramados(rfc: rfcMec) {
+            return "No se puede eliminar porque tiene servicios programados a futuro."
+        }
+        return nil
+    }
+    
+    private func validarAusencia() -> String? {
+        // Si está trabajando ahora mismo, no puede estar ausente
+        guard let rfcMec = mecanicoAEditar?.rfc else { return nil }
+        if tieneServiciosActivos(rfc: rfcMec) {
+            return "El empleado tiene un servicio EN PROCESO ahora mismo. No puedes marcarlo como ausente si está trabajando."
+        }
+        // Nota: Si tiene programados a futuro hoy, tal vez sí faltó y no llegó. 
+        // La restricción crítica es si el sistema dice que YA está trabajando en uno.
+        return nil
+    }
+    
+    private func tieneServiciosActivos(rfc: String) -> Bool {
+        return serviciosEnProceso.contains { s in
+            s.rfcMecanicoAsignado == rfc && s.estado == .enProceso
+        }
+    }
+    
+    private func tieneServiciosProgramados(rfc: String) -> Bool {
+        return serviciosEnProceso.contains { s in
+            s.rfcMecanicoAsignado == rfc && (
+                s.estado == .programado ||
+                (s.fechaProgramadaInicio ?? Date.distantPast) > Date()
+            )
+        }
     }
 }
 
