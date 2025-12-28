@@ -2193,13 +2193,18 @@ fileprivate struct PersonalFormView: View {
     }
     
     private func validarAusencia() -> String? {
-        // Si está trabajando ahora mismo, no puede estar ausente
-        guard let rfcMec = mecanicoAEditar?.rfc else { return nil }
-        if tieneServiciosActivos(rfc: rfcMec) {
+        guard let mec = mecanicoAEditar else { return nil }
+        
+        // 1. Servicio activo
+        if tieneServiciosActivos(rfc: mec.rfc) {
             return "El empleado tiene un servicio EN PROCESO ahora mismo. No puedes marcarlo como ausente si está trabajando."
         }
-        // Nota: Si tiene programados a futuro hoy, tal vez sí faltó y no llegó. 
-        // La restricción crítica es si el sistema dice que YA está trabajando en uno.
+        
+        // 2. Fuera de turno
+        if !mec.estaEnHorario {
+            return "El empleado está FUERA DE TURNO. No se puede marcar inasistencia."
+        }
+
         return nil
     }
     

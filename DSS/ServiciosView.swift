@@ -821,8 +821,18 @@ fileprivate struct ProgramarServicioModal: View {
             (empezarAhora || mec.horaEntrada <= startHour)
         }
         
+        // 1.5) REGLA SALARIO MÍNIMO
+        // Si el servicio cobra mano de obra (> 0), los de salario mínimo NO participan.
+        // Solo participan si la mano de obra es 0 (servicios gratuitos o incluidos).
+        let candidatosFiltradosSalario = candidatosBase.filter { mec in
+            if mec.tipoSalario == .minimo {
+                return servicio.costoManoDeObra == 0
+            }
+            return true
+        }
+        
         // 2) Evitar solapes
-        let candidatosSinSolape = candidatosBase.filter { mec in
+        let candidatosSinSolape = candidatosFiltradosSalario.filter { mec in
             // Si empieza ahora, verificamos si está ocupado
             if empezarAhora && mec.estado == .ocupado { return false }
             
