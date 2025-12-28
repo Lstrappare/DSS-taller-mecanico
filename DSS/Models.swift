@@ -111,6 +111,7 @@ class Personal {
     var ineAdjuntoPath: String?
     var comprobanteDomicilioPath: String?
     var comprobanteEstudiosPath: String?
+    var contratoAdjuntoPath: String?
 
     // Antigüedad / Asistencia
     var antiguedadDias: Int
@@ -350,6 +351,7 @@ class Personal {
         ineAdjuntoPath: String? = nil,
         comprobanteDomicilioPath: String? = nil,
         comprobanteEstudiosPath: String? = nil,
+        contratoAdjuntoPath: String? = nil,
 
         antiguedadDias: Int = 0,
         bloqueoAsistenciaFecha: Date? = nil
@@ -396,6 +398,7 @@ class Personal {
         self.ineAdjuntoPath = ineAdjuntoPath
         self.comprobanteDomicilioPath = comprobanteDomicilioPath
         self.comprobanteEstudiosPath = comprobanteEstudiosPath
+        self.contratoAdjuntoPath = contratoAdjuntoPath
 
         self.antiguedadDias = antiguedadDias
         self.bloqueoAsistenciaFecha = bloqueoAsistenciaFecha

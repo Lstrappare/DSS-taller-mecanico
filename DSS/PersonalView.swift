@@ -545,6 +545,7 @@ fileprivate struct PersonalFormView: View {
     @State private var ineAdjuntoPath = ""
     @State private var comprobanteDomicilioPath = ""
     @State private var comprobanteEstudiosPath = ""
+    @State private var contratoAdjuntoPath = "" // Nuevo
     
     // Estado operacional
     @State private var estado: EstadoEmpleado = .disponible
@@ -655,6 +656,7 @@ fileprivate struct PersonalFormView: View {
             _ineAdjuntoPath = State(initialValue: personal.ineAdjuntoPath ?? "")
             _comprobanteDomicilioPath = State(initialValue: personal.comprobanteDomicilioPath ?? "")
             _comprobanteEstudiosPath = State(initialValue: personal.comprobanteEstudiosPath ?? "")
+            _contratoAdjuntoPath = State(initialValue: personal.contratoAdjuntoPath ?? "") // Init nuevo
             
             _salarioDiario = State(initialValue: personal.salarioDiario)
             _sbc = State(initialValue: personal.sbc)
@@ -1219,31 +1221,44 @@ fileprivate struct PersonalFormView: View {
                         SectionHeader(title: "7. Documentación (arrastra y suelta)", subtitle: "Se guardará en la carpeta de la app")
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], spacing: 10) {
                             DocumentDropField(
-                                title: "INE (PDF/imagen/ZIP)",
+                                title: "INE (PDF/Word/Img)",
                                 currentPath: $ineAdjuntoPath,
                                 rfcProvider: currentRFCForFiles,
                                 suggestedFileName: "INE",
+                                personName: nombre,
                                 onDelete: { deleteCurrentFile(&ineAdjuntoPath) },
                                 onReveal: { revealInFinder(ineAdjuntoPath) },
                                 onDroppedAndSaved: { newPath in ineAdjuntoPath = newPath }
                             )
                             DocumentDropField(
-                                title: "Comprobante de domicilio",
+                                title: "Comprobante de domicilio (PDF/Word/Img)",
                                 currentPath: $comprobanteDomicilioPath,
                                 rfcProvider: currentRFCForFiles,
                                 suggestedFileName: "Domicilio",
+                                personName: nombre, // Nuevo
                                 onDelete: { deleteCurrentFile(&comprobanteDomicilioPath) },
                                 onReveal: { revealInFinder(comprobanteDomicilioPath) },
                                 onDroppedAndSaved: { newPath in comprobanteDomicilioPath = newPath }
                             )
                             DocumentDropField(
-                                title: "Comprobante de estudios",
+                                title: "Comprobante de estudios (PDF/Word/Img)",
                                 currentPath: $comprobanteEstudiosPath,
                                 rfcProvider: currentRFCForFiles,
                                 suggestedFileName: "Estudios",
+                                personName: nombre, // Nuevo
                                 onDelete: { deleteCurrentFile(&comprobanteEstudiosPath) },
                                 onReveal: { revealInFinder(comprobanteEstudiosPath) },
                                 onDroppedAndSaved: { newPath in comprobanteEstudiosPath = newPath }
+                            )
+                            DocumentDropField(
+                                title: "Contrato (PDF/Word/Img)", // Nuevo campo
+                                currentPath: $contratoAdjuntoPath,
+                                rfcProvider: currentRFCForFiles,
+                                suggestedFileName: "Contrato",
+                                personName: nombre, // Nuevo
+                                onDelete: { deleteCurrentFile(&contratoAdjuntoPath) },
+                                onReveal: { revealInFinder(contratoAdjuntoPath) },
+                                onDroppedAndSaved: { newPath in contratoAdjuntoPath = newPath }
                             )
                         }
                         Text("Arrastra archivos aquí. Se copiarán a Application Support/MercedesTaller/Personal/<RFC>/")
@@ -1828,6 +1843,7 @@ fileprivate struct PersonalFormView: View {
             mec.ineAdjuntoPath = ineAdjuntoPath.isEmpty ? nil : ineAdjuntoPath
             mec.comprobanteDomicilioPath = comprobanteDomicilioPath.isEmpty ? nil : comprobanteDomicilioPath
             mec.comprobanteEstudiosPath = comprobanteEstudiosPath.isEmpty ? nil : comprobanteEstudiosPath
+            mec.contratoAdjuntoPath = contratoAdjuntoPath.isEmpty ? nil : contratoAdjuntoPath
             
             if let temp = tempFolderID, temp.hasPrefix("TEMP-"), mec.rfc != temp {
                 moveAllDocsIfNeeded(fromTemp: temp, toRFC: mec.rfc)
@@ -1855,6 +1871,7 @@ fileprivate struct PersonalFormView: View {
                 ineAdjuntoPath = updatePathAfterMove(ineAdjuntoPath, from: temp, to: finalRFC)
                 comprobanteDomicilioPath = updatePathAfterMove(comprobanteDomicilioPath, from: temp, to: finalRFC)
                 comprobanteEstudiosPath = updatePathAfterMove(comprobanteEstudiosPath, from: temp, to: finalRFC)
+                contratoAdjuntoPath = updatePathAfterMove(contratoAdjuntoPath, from: temp, to: finalRFC)
             }
             
             let nuevo = Personal(
@@ -1895,6 +1912,7 @@ fileprivate struct PersonalFormView: View {
                 ineAdjuntoPath: ineAdjuntoPath.isEmpty ? nil : ineAdjuntoPath,
                 comprobanteDomicilioPath: comprobanteDomicilioPath.isEmpty ? nil : comprobanteDomicilioPath,
                 comprobanteEstudiosPath: comprobanteEstudiosPath.isEmpty ? nil : comprobanteEstudiosPath,
+                contratoAdjuntoPath: contratoAdjuntoPath.isEmpty ? nil : contratoAdjuntoPath,
                 antiguedadDias: 0,
                 bloqueoAsistenciaFecha: nil
             )
@@ -2274,14 +2292,17 @@ fileprivate struct DocumentDropField: View {
     @Binding var currentPath: String
     var rfcProvider: () -> String
     var suggestedFileName: String
+    var personName: String
     var onDelete: () -> Void
     var onReveal: () -> Void
     var onDroppedAndSaved: (String) -> Void
     
     @State private var isTargeted: Bool = false
     @State private var lastError: String?
+    @State private var showingDeleteAlert = false
     
-    private let allowedExtensions: Set<String> = ["pdf", "jpg", "jpeg", "png", "zip"]
+    // Updated: Accept PDF, Images, and Word (doc, docx) - NO ZIP
+    private let allowedExtensions: Set<String> = ["pdf", "jpg", "jpeg", "png", "doc", "docx"]
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -2320,7 +2341,7 @@ fileprivate struct DocumentDropField: View {
                             .background(Color.blue.opacity(0.25)).cornerRadius(6)
                             
                             Button {
-                                onDelete()
+                                showingDeleteAlert = true
                             } label: {
                                 Label("Eliminar", systemImage: "trash")
                             }
@@ -2328,13 +2349,21 @@ fileprivate struct DocumentDropField: View {
                             .font(.caption2)
                             .padding(.horizontal, 8).padding(.vertical, 4)
                             .background(Color.red.opacity(0.25)).cornerRadius(6)
+                            .alert("¿Eliminar documento?", isPresented: $showingDeleteAlert) {
+                                Button("Cancelar", role: .cancel) { }
+                                Button("Eliminar", role: .destructive) {
+                                    onDelete()
+                                }
+                            } message: {
+                                Text("Esta acción no se puede deshacer.")
+                            }
                         }
                     }
                 }
                 .padding(12)
             }
             .frame(height: 96)
-            .onDrop(of: [UTType.fileURL.identifier, UTType.data.identifier], isTargeted: $isTargeted) { providers in
+            .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isTargeted) { providers in
                 handleDrop(providers: providers)
             }
             if let lastError {
@@ -2346,6 +2375,7 @@ fileprivate struct DocumentDropField: View {
     }
     
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        // Solo aceptamos archivos reales (URLs) para garantizar que es "tal cual"
         if let item = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }) {
             _ = item.loadObject(ofClass: URL.self) { url, _ in
                 guard let srcURL = url else { return }
@@ -2353,24 +2383,8 @@ fileprivate struct DocumentDropField: View {
             }
             return true
         }
-        if let item = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.data.identifier) }) {
-            _ = item.loadDataRepresentation(forTypeIdentifier: UTType.data.identifier) { data, _ in
-                guard let data else { return }
-                let fallbackExt = "pdf"
-                guard allowedExtensions.contains(fallbackExt) else {
-                    DispatchQueue.main.async { lastError = "Tipo no permitido." }
-                    return
-                }
-                let tmpURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(suggestedFileName)-\(UUID().uuidString).\(fallbackExt)")
-                do {
-                    try data.write(to: tmpURL)
-                    saveIncomingFile(srcURL: tmpURL)
-                } catch {
-                    DispatchQueue.main.async { lastError = "No se pudo guardar el archivo: \(error.localizedDescription)" }
-                }
-            }
-            return true
-        }
+        // Si no es un archivo, rechazamos para evitar conversiones implícitas o tipos no deseados
+        DispatchQueue.main.async { lastError = "Formato no soportado. Arrastra un archivo válido." }
         return false
     }
     
@@ -2378,7 +2392,7 @@ fileprivate struct DocumentDropField: View {
         let ext = srcURL.pathExtension.lowercased()
         guard !ext.isEmpty, allowedExtensions.contains(ext) else {
             DispatchQueue.main.async {
-                lastError = "Tipo de archivo no permitido. Solo: PDF, JPG, JPEG, PNG, ZIP."
+                lastError = "Archivo no permitido. Solo: PDF, WORD (doc/docx), JPG, PNG."
             }
             return
         }
@@ -2388,9 +2402,15 @@ fileprivate struct DocumentDropField: View {
             DispatchQueue.main.async { lastError = "No se pudo crear carpeta destino." }
             return
         }
+        
+        let safeName = sanitizeName(personName)
+        let finalBaseName = safeName.isEmpty ? suggestedFileName : "\(suggestedFileName)_\(safeName)"
+        
         do {
             try FileManager.default.createDirectory(at: destFolder, withIntermediateDirectories: true)
-            let destURL = destFolder.appendingPathComponent("\(suggestedFileName)-\(UUID().uuidString).\(ext)")
+            
+            let destURL = destFolder.appendingPathComponent("\(finalBaseName).\(ext)")
+            
             if FileManager.default.fileExists(atPath: destURL.path) {
                 try? FileManager.default.removeItem(at: destURL)
             }
@@ -2403,6 +2423,12 @@ fileprivate struct DocumentDropField: View {
         } catch {
             DispatchQueue.main.async { lastError = "Error copiando archivo: \(error.localizedDescription)" }
         }
+    }
+    
+    private func sanitizeName(_ raw: String) -> String {
+        let folded = raw.folding(options: .diacriticInsensitive, locale: .current)
+        let alphanumerics = CharacterSet.alphanumerics
+        return folded.unicodeScalars.filter { alphanumerics.contains($0) }.map { String($0) }.joined()
     }
 }
 
