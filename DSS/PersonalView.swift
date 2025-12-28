@@ -621,6 +621,12 @@ fileprivate struct PersonalFormView: View {
         }
         return nil
     }
+
+    // Sugerencias de especialidades existentes
+    private var allExistingSpecialties: [String] {
+        let unique = Set(allPersonal.flatMap { $0.especialidades })
+        return Array(unique).sorted()
+    }
     
     init(mode: ModalMode, parentMode: Binding<ModalMode?>) {
         self.mode = mode
@@ -964,7 +970,8 @@ fileprivate struct PersonalFormView: View {
                             TagInputView(
                                 tags: $especialidadesList,
                                 placeholder: "Escribe una especialidad y presiona Enter...",
-                                error: especialidadesInvalidas
+                                error: especialidadesInvalidas,
+                                availableTags: allExistingSpecialties // Autocompletado
                             )
                             
                             if especialidadesInvalidas {
@@ -1570,12 +1577,13 @@ fileprivate struct PersonalFormView: View {
     private func deleteCurrentFile(_ pathBinding: inout String) {
         let path = pathBinding
         guard !path.isEmpty else { return }
-        do {
-            try FileManager.default.removeItem(atPath: path)
-            pathBinding = ""
-        } catch {
-            print("No se pudo borrar el archivo: \(error)")
-        }
+        
+        // Intentar borrar archivo físico
+        try? FileManager.default.removeItem(atPath: path)
+        
+        // Siempre limpiar la referencia en UI, incluso si el archivo ya no existía
+        // Esto soluciona el bug de "archivo borrado manualmente"
+        pathBinding = ""
     }
     
     // Modal de Autenticación
@@ -2533,6 +2541,7 @@ struct TagInputView: View {
     @Binding var tags: [String]
     var placeholder: String
     var error: Bool
+    var availableTags: [String] = [] // Sugerencias
     
     @State private var newTag = ""
     
@@ -2575,10 +2584,23 @@ struct TagInputView: View {
                 TextField(placeholder, text: $newTag)
                     .textFieldStyle(.plain)
                     .onSubmit {
-                        addTag()
+                        addTag(fromInput: true)
+                    }
+                    // Nuevo: Capturar Tab para autocompletar
+                    .onKeyPress(.tab) {
+                        let lowerInput = newTag.lowercased()
+                        let matches = availableTags.filter { 
+                            $0.lowercased().contains(lowerInput) && !tags.contains($0)
+                        }.sorted()
+                        
+                        if let first = matches.first {
+                            addTag(specific: first)
+                            return .handled
+                        }
+                        return .ignored
                     }
                 Button {
-                    addTag()
+                    addTag(fromInput: true)
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .foregroundColor(newTag.isEmpty ? .gray : Color("MercedesPetrolGreen"))
@@ -2594,10 +2616,76 @@ struct TagInputView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(error ? Color.red.opacity(0.5) : Color.gray.opacity(0.3), lineWidth: 1)
             )
+            
+            // Sugerencias (Fuzzy Matching)
+            if !newTag.isEmpty {
+                let lowerInput = newTag.lowercased()
+                
+                // Filtramos y ordenamos por similitud
+                let matches = availableTags.filter { tag in
+                    if tags.contains(tag) { return false }
+                    let dist = lowerInput.levenshteinDistance(to: tag)
+                    // Mostrar si contiene el texto O si la distancia es pequeña (<= 3 para typos)
+                    return tag.lowercased().contains(lowerInput) || dist <= 3
+                }.sorted { t1, t2 in
+                    let d1 = lowerInput.levenshteinDistance(to: t1)
+                    let d2 = lowerInput.levenshteinDistance(to: t2)
+                    
+                    // Prioridad: 1. Contiene exacto, 2. Menor distancia Levenshtein
+                    let c1 = t1.lowercased().contains(lowerInput)
+                    let c2 = t2.lowercased().contains(lowerInput)
+                    
+                    if c1 && !c2 { return true }
+                    if !c1 && c2 { return false }
+                    
+                    return d1 < d2
+                }
+                
+                if !matches.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(matches, id: \.self) { match in
+                                    Button {
+                                        addTag(specific: match)
+                                    } label: {
+                                        Text(match)
+                                            .font(.caption)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 4)
+                                            .background(Color.white.opacity(0.1))
+                                            .cornerRadius(12)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .transition(.opacity)
+                        
+                        Text("Presiona TAB para autocompletar el primero.")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
         }
     }
     
-    private func addTag() {
+    private func addTag(fromInput: Bool = false, specific: String? = nil) {
+        if let specific = specific {
+            if !tags.contains(specific) {
+                withAnimation {
+                    tags.append(specific)
+                    newTag = ""
+                }
+            }
+            return
+        }
+        
         let trimmed = newTag.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             // Capitalizar primera letra
@@ -2731,5 +2819,30 @@ struct BenefitsSegment: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.gray.opacity(0.3), lineWidth: 1)
         )
+    }
+}
+
+// MARK: - String Extension for Fuzzy Matching
+extension String {
+    func levenshteinDistance(to destination: String) -> Int {
+        let s1 = Array(self.lowercased().utf16)
+        let s2 = Array(destination.lowercased().utf16)
+        
+        // Optimización rápida
+        if s1 == s2 { return 0 }
+        if s1.isEmpty { return s2.count }
+        if s2.isEmpty { return s1.count }
+        
+        let empty = [Int](repeating: 0, count: s2.count)
+        var last = [Int](0...s2.count)
+        
+        for (i, t1) in s1.enumerated() {
+            var cur = [i + 1] + empty
+            for (j, t2) in s2.enumerated() {
+                cur[j + 1] = t1 == t2 ? last[j] : Swift.min(last[j], last[j + 1], cur[j]) + 1
+            }
+            last = cur
+        }
+        return last.last ?? 0
     }
 }
