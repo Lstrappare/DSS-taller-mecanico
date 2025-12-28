@@ -729,7 +729,7 @@ fileprivate struct PersonalFormView: View {
     }
     private var sinDiasLaborales: Bool { diasLaborales.isEmpty }
     // NUEVO: Mínimo 6 días laborables
-    private var diasInsuficientes: Bool { diasLaborales.count < 6 }
+    private var diasInsuficientes: Bool { diasLaborales.count != 6 }
     private var telefonoInvalido: Bool {
         if !telefonoActivo { return false }
         let trimmed = telefono.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1076,7 +1076,7 @@ fileprivate struct PersonalFormView: View {
                                 .cornerRadius(8)
                                 .validationHint(
                                     isInvalid: diasInsuficientes,
-                                    message: "Debes seleccionar al menos 6 días laborables."
+                                    message: "Debes seleccionar exactamente 6 días laborables."
                                 )
                         }
                         HStack(spacing: 16) {
@@ -1735,8 +1735,8 @@ fileprivate struct PersonalFormView: View {
         }
         let nombreNormalizado = titleCasedName(nombre)
         
-        if diasLaborales.count < 6 {
-            errorMsg = "Debes seleccionar al menos 6 días laborables."
+        if diasLaborales.count != 6 {
+            errorMsg = "Debes seleccionar exactamente 6 días laborables."
             return
         }
         
