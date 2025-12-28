@@ -274,14 +274,33 @@ struct PersonalView: View {
             Image(systemName: "person.crop.circle.badge.questionmark")
                 .font(.system(size: 36, weight: .bold))
                 .foregroundColor(Color("MercedesPetrolGreen"))
-            Text(searchQuery.isEmpty ? "No hay personal registrado aún." :
-                 "No se encontraron empleados para “\(searchQuery)”.")
+            
+            if !searchQuery.isEmpty {
+                Text("No se encontraron empleados para “\(searchQuery)”.")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            } else {
+                // Mensajes contextuales según el filtro
+                Group {
+                    switch selectedFilter {
+                    case .todosActivos:
+                        Text("No hay personal registrado aún.")
+                    case .dadosDeBaja:
+                        Text("No hay personal dado de baja.")
+                    case .porRol(let rol):
+                        Text("No hay personal que sea \(rol.rawValue).")
+                    case .porEstado(let estado):
+                        Text("No hay personal con estado \(estado.rawValue).")
+                    }
+                }
                 .font(.subheadline)
                 .foregroundColor(.gray)
-            if searchQuery.isEmpty {
-                Text("Añade tu primer empleado para comenzar a asignar servicios.")
-                    .font(.caption2)
-                    .foregroundColor(.gray)
+                
+                if selectedFilter == .todosActivos {
+                    Text("Añade tu primer empleado para comenzar a asignar servicios.")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
             }
         }
     }
