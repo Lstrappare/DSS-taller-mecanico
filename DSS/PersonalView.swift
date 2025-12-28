@@ -2228,10 +2228,20 @@ fileprivate struct PersonalFormView: View {
     
     private func tieneServiciosProgramados(rfc: String) -> Bool {
         return serviciosEnProceso.contains { s in
-            s.rfcMecanicoAsignado == rfc && (
-                s.estado == .programado ||
-                (s.fechaProgramadaInicio ?? Date.distantPast) > Date()
-            )
+            // Solo considerar servicios asignados a este RFC
+            guard s.rfcMecanicoAsignado == rfc else { return false }
+            
+            // Ignorar explícitamente cancelados y completados
+            // (El bug anterior era que si la fecha era futura, lo contaba aunque estuviera cancelado/completado)
+            if s.estado == .cancelado || s.estado == .completado {
+                return false
+            }
+            
+            // Retornar true si está programado o si la fecha es futura (siempre que no esté cancelado/finalizado)
+            // Nota: Un servicio 'enProceso' se captura en tieneServiciosActivos, 
+            // pero si tiene fecha futura podría caer aquí. La distinción es semántica, 
+            // lo importante es que bloquée si hay compromiso futuro pendiente.
+            return s.estado == .programado || (s.fechaProgramadaInicio ?? Date.distantPast) > Date()
         }
     }
 }
