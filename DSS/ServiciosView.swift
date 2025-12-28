@@ -821,15 +821,21 @@ fileprivate struct ProgramarServicioModal: View {
             (empezarAhora || mec.horaEntrada <= startHour)
         }
         
+        print("DEBUG: Candidates base count: \(candidatosBase.count)")
+        
         // 1.5) REGLA SALARIO MÍNIMO
         // Si el servicio cobra mano de obra (> 0), los de salario mínimo NO participan.
         // Solo participan si la mano de obra es 0 (servicios gratuitos o incluidos).
         let candidatosFiltradosSalario = candidatosBase.filter { mec in
             if mec.tipoSalario == .minimo {
-                return servicio.costoManoDeObra == 0
+                let allowed = servicio.costoManoDeObra == 0
+                if !allowed { print("DEBUG: Excluding \(mec.nombre) (Minimum Wage) because service cost is \(servicio.costoManoDeObra)") }
+                return allowed
             }
             return true
         }
+        
+        print("DEBUG: Candidates after salary filter: \(candidatosFiltradosSalario.count)")
         
         // 2) Evitar solapes
         let candidatosSinSolape = candidatosFiltradosSalario.filter { mec in
