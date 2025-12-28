@@ -16,6 +16,32 @@ fileprivate enum ModalMode: Identifiable, Equatable {
     }
 }
 
+// --- ENUM FILTROS PERSONAL ---
+fileprivate enum PersonalFilterOption: Identifiable, Hashable {
+    case todosActivos
+    case porRol(Rol)
+    case porEstado(EstadoEmpleado)
+    case dadosDeBaja
+
+    var id: String {
+        switch self {
+        case .todosActivos: return "todos"
+        case .dadosDeBaja: return "baja"
+        case .porRol(let r): return "rol_\(r.rawValue)"
+        case .porEstado(let e): return "estado_\(e.rawValue)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .todosActivos: return "Todos (Activos)"
+        case .dadosDeBaja: return "Dados de Baja"
+        case .porRol(let r): return r.rawValue
+        case .porEstado(let e): return e.rawValue
+        }
+    }
+}
+
 // --- VISTA PRINCIPAL ---
 struct PersonalView: View {
     @Environment(\.modelContext) private var modelContext
@@ -23,9 +49,7 @@ struct PersonalView: View {
     
     @State private var modalMode: ModalMode?
     @State private var searchQuery = ""
-    @State private var filtroRol: Rol? = nil
-    @State private var filtroEstado: EstadoEmpleado? = nil
-    @State private var incluirDadosDeBaja: Bool = false
+    @State private var selectedFilter: PersonalFilterOption = .todosActivos
     
     // Ordenamiento (en línea con InventarioView)
     enum SortOption: String, CaseIterable, Identifiable {
@@ -40,9 +64,18 @@ struct PersonalView: View {
     var filteredPersonal: [Personal] {
         var base = personal
         
-        if incluirDadosDeBaja == false {
+        // Filtro unificado
+        switch selectedFilter {
+        case .todosActivos:
             base = base.filter { $0.activo }
+        case .dadosDeBaja:
+            base = base.filter { !$0.activo }
+        case .porRol(let rol):
+            base = base.filter { $0.activo && $0.rol == rol }
+        case .porEstado(let estado):
+            base = base.filter { $0.activo && $0.estado == estado }
         }
+        
         if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let q = searchQuery.lowercased()
             base = base.filter { mec in
@@ -53,8 +86,6 @@ struct PersonalView: View {
                 mec.especialidades.contains(where: { $0.lowercased().contains(q) })
             }
         }
-        if let filtroRol { base = base.filter { $0.rol == filtroRol } }
-        if let filtroEstado { base = base.filter { $0.estado == filtroEstado } }
         
         base.sort { a, b in
             switch sortOption {
@@ -163,129 +194,76 @@ struct PersonalView: View {
     private var filtrosView: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
+                // Barra de busqueda
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(Color("MercedesPetrolGreen"))
-                    TextField("Buscar por Nombre, RFC, CURP, Rol o Especialidad...", text: $searchQuery)
+                    TextField("Buscar...", text: $searchQuery)
                         .textFieldStyle(PlainTextFieldStyle())
                         .font(.subheadline)
-                        .animation(.easeInOut(duration: 0.15), value: searchQuery)
                     if !searchQuery.isEmpty {
-                        Button {
-                            searchQuery = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.gray)
+                        Button { searchQuery = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundColor(.gray)
                         }
                         .buttonStyle(.plain)
-                        .help("Limpiar búsqueda")
                     }
                 }
                 .padding(8)
                 .background(Color("MercedesCard"))
                 .cornerRadius(8)
                 
-                HStack(spacing: 6) {
-                    Picker("Ordenar", selection: $sortOption) {
+                // Ordenar
+                Menu {
+                    Picker("Ordenar por", selection: $sortOption) {
                         ForEach(SortOption.allCases) { opt in
                             Text(opt.rawValue).tag(opt)
                         }
                     }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 140)
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            sortAscending.toggle()
-                        }
+                        withAnimation { sortAscending.toggle() }
                     } label: {
-                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                            .font(.subheadline)
-                            .padding(6)
-                            .background(Color("MercedesCard"))
-                            .cornerRadius(6)
+                        Label(sortAscending ? "Ascendente" : "Descendente", systemImage: sortAscending ? "arrow.up" : "arrow.down")
                     }
-                    .buttonStyle(.plain)
-                    .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
+                } label: {
+                    Text(" Ordenar")
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.subheadline)
+                        .padding(8)
+                        .background(Color("MercedesCard"))
+                        .cornerRadius(8)
+                        .foregroundColor(Color("MercedesPetrolGreen"))
                 }
-                
-                Picker("Rol", selection: Binding(
-                    get: { filtroRol ?? Rol?.none ?? nil },
-                    set: { newValue in filtroRol = newValue }
-                )) {
-                    Text("Todos los Roles").tag(Rol?.none)
-                    ForEach(Rol.allCases, id: \.self) { r in
-                        Text(r.rawValue).tag(Rol?.some(r))
+
+                // Filtro Unificado
+                Menu {
+                    Picker("Filtro General", selection: $selectedFilter) {
+                        Text("Todos (Activos)").tag(PersonalFilterOption.todosActivos)
+                        
+                        Divider()
+                        
+                        ForEach(Rol.allCases, id: \.self) { rol in
+                            Text(rol.rawValue).tag(PersonalFilterOption.porRol(rol))
+                        }
+                        
+                        Divider()
+                        
+                        Text("Dados de Baja").tag(PersonalFilterOption.dadosDeBaja)
                     }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: 220)
-                .help("Filtrar por rol")
-                
-                Picker("Estado", selection: Binding(
-                    get: { filtroEstado ?? EstadoEmpleado?.none ?? nil },
-                    set: { newValue in filtroEstado = newValue }
-                )) {
-                    Text("Todos los Estados").tag(EstadoEmpleado?.none)
-                    ForEach(EstadoEmpleado.allCases, id: \.self) { e in
-                        Text(e.rawValue).tag(EstadoEmpleado?.some(e))
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: 240)
-                .help("Filtrar por estado")
-                
-                Toggle(isOn: $incluirDadosDeBaja) {
-                    Text("Incluir dados de baja")
-                }
-                .toggleStyle(.switch)
-                .help("Muestra también a los empleados dados de baja")
-                
-                if filtroRol != nil || filtroEstado != nil || !searchQuery.isEmpty || incluirDadosDeBaja {
+                } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "line.3.horizontal.decrease.circle")
-                        Text("Filtros activos")
-                        if let r = filtroRol {
-                            Text("Rol: \(r.rawValue)")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if let e = filtroEstado {
-                            Text("Estado: \(e.rawValue)")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if incluirDadosDeBaja {
-                            Text("Incluye de baja")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if !searchQuery.isEmpty {
-                            Text("“\(searchQuery)”")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        Button {
-                            withAnimation {
-                                filtroRol = nil
-                                filtroEstado = nil
-                                searchQuery = ""
-                                incluirDadosDeBaja = false
-                            }
-                        } label: {
-                            Text("Limpiar")
-                                .font(.caption2)
-                                .padding(.horizontal, 6).padding(.vertical, 4)
-                                .background(Color("MercedesCard"))
-                                .cornerRadius(6)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.gray)
-                        .help("Quitar filtros activos")
+                        Text(selectedFilter.title)
+                            .lineLimit(1)
                     }
-                    .font(.caption2)
-                    .foregroundColor(.gray)
+                    .font(.subheadline)
+                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .background(Color("MercedesCard"))
+                    .cornerRadius(8)
+                    .foregroundColor(selectedFilter == .todosActivos ? .primary : Color("MercedesPetrolGreen"))
                 }
-                
+                .menuStyle(.borderlessButton)
+                .frame(minWidth: 140)
+
                 Spacer()
             }
         }
