@@ -838,7 +838,7 @@ fileprivate struct ClienteFormView: View {
                         // Nombre con candado en edición y validación
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
-                                Text("• Nombre Completo (ID Único)").font(.caption2).foregroundColor(.gray)
+                                Text("• Nombre Completo").font(.caption2).foregroundColor(.gray)
                                 Image(systemName: isNombreUnlocked ? "lock.open.fill" : "lock.fill")
                                     .foregroundColor(isNombreUnlocked ? .green : .red)
                                     .font(.caption2)
@@ -1233,7 +1233,7 @@ fileprivate struct VehiculoFormView: View {
                         // Placas con Candado (solo si es edición)
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
-                                Text("• Placas (ID Único)").font(.caption2).foregroundColor(.gray)
+                                Text("• Placas").font(.caption2).foregroundColor(.gray)
                                 if esModoEdicion {
                                     Image(systemName: isPlacasUnlocked ? "lock.open.fill" : "lock.fill")
                                         .foregroundColor(isPlacasUnlocked ? .green : .red)

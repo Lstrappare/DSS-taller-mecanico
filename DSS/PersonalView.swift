@@ -1,5 +1,3 @@
-// the entire code of the file with your changes goes here.
-// Do not skip over anything.
 import SwiftUI
 import SwiftData
 import LocalAuthentication
@@ -821,7 +819,7 @@ fileprivate struct PersonalFormView: View {
                             .buttonStyle(.plain)
                             .padding(.top, 2)
                         }
-                        HStack(spacing: 16) {
+                        VStack(alignment: .leading, spacing: 16) {
                             FormField(title: "• Correo electrónico", placeholder: "ej. jose@taller.com", text: $email, characterLimit: 60, customCount: email.count)
                             .validationHint(isInvalid: emailInvalido, message: "Ingresa un correo válido.")
                             .onChange(of: email) { _, newValue in
@@ -829,15 +827,17 @@ fileprivate struct PersonalFormView: View {
                                     email = String(newValue.prefix(60))
                                 }
                             }
-                            VStack(alignment: .leading, spacing: 2) {
-                                FormField(title: "Teléfono (10 dígitos)", placeholder: "ej. 5512345678", text: $telefono, characterLimit: 10, customCount: telefono.count)
-                                    .disabled(!telefonoActivo)
-                                    .opacity(telefonoActivo ? 1.0 : 0.6)
-                                    .validationHint(isInvalid: telefonoInvalido, message: "Debe tener 10 dígitos.")
-                                Toggle("Teléfono activo", isOn: $telefonoActivo)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Toggle("¿Tiene teléfono celular?", isOn: $telefonoActivo)
                                     .toggleStyle(.switch)
                                     .font(.caption2)
                                     .foregroundColor(.gray)
+                                
+                                if telefonoActivo {
+                                    FormField(title: "• Teléfono (10 dígitos)", placeholder: "ej. 5512345678", text: $telefono, characterLimit: 10, customCount: telefono.count)
+                                        .validationHint(isInvalid: telefonoInvalido, message: "Debe tener 10 dígitos.")
+                                        .transition(.opacity.combined(with: .move(edge: .top)))
+                                }
                             }
                         }
                     }
