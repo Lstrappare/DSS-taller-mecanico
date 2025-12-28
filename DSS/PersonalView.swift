@@ -1086,98 +1086,88 @@ fileprivate struct PersonalFormView: View {
                     
                     // 5. Nómina
                     VStack(alignment: .leading, spacing: 16) {
-                        SectionHeader(title: "5. Nómina", subtitle: "Parámetros y vista previa")
-                        HStack(spacing: 16) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("• Tipo de salario").font(.caption2).foregroundColor(.gray)
+                        SectionHeader(title: "5. Nómina", subtitle: "Configuración salarial")
+                        
+                        HStack(alignment: .top, spacing: 24) {
+                            // Tipo de Salario
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("• Tipo de Salario")
+                                    .font(.caption).foregroundColor(tipoSalarioNoSeleccionado ? .red : .gray)
+                                
                                 if mecanicoAEditar == nil {
-                                    Picker("", selection: Binding(
-                                        get: { tipoSalarioSeleccion as TipoSalario? },
-                                        set: { tipoSalarioSeleccion = $0 }
-                                    )) {
-                                        Text("Selecciona tipo…").tag(TipoSalario?.none)
-                                        ForEach(TipoSalario.allCases, id: \.self) { Text($0.rawValue).tag(TipoSalario?.some($0)) }
-                                    }
-                                    .pickerStyle(.menu)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(4)
-                                    .background(Color("MercedesBackground").opacity(0.9))
-                                    .cornerRadius(8)
-                                    .validationHint(isInvalid: tipoSalarioNoSeleccionado, message: "Debes seleccionar el tipo de salario (Mínimo o Mixto).")
+                                    SalaryTypeSegment(selection: $tipoSalarioSeleccion)
                                 } else {
-                                    Picker("", selection: $tipoSalario) {
-                                        ForEach(TipoSalario.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                                    }
-                                    .pickerStyle(.menu)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(4)
-                                    .background(Color("MercedesBackground").opacity(0.9))
-                                    .cornerRadius(8)
+                                    SalaryTypeSegment(selection: .constant(nil), selectionBinding: $tipoSalario)
                                 }
                             }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("• Frecuencia de pago").font(.caption2).foregroundColor(.gray)
+                            .frame(maxWidth: .infinity)
+                            
+                            // Frecuencia de Pago
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("• Frecuencia de Pago")
+                                    .font(.caption).foregroundColor(frecuenciaPagoNoSeleccionada ? .red : .gray)
+                                
                                 if mecanicoAEditar == nil {
-                                    Picker("", selection: Binding(
-                                        get: { frecuenciaPagoSeleccion as FrecuenciaPago? },
-                                        set: { frecuenciaPagoSeleccion = $0 }
-                                    )) {
-                                        Text("Selecciona frecuencia…").tag(FrecuenciaPago?.none)
-                                        ForEach(FrecuenciaPago.allCases, id: \.self) { Text($0.rawValue).tag(FrecuenciaPago?.some($0)) }
-                                    }
-                                    .pickerStyle(.menu)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(4)
-                                    .background(Color("MercedesBackground").opacity(0.9))
-                                    .cornerRadius(8)
-                                    .validationHint(isInvalid: frecuenciaPagoNoSeleccionada, message: "Debes seleccionar la frecuencia de pago.")
+                                    PaymentFrequencyChips(
+                                        selected: frecuenciaPagoSeleccion,
+                                        onSelect: { frecuenciaPagoSeleccion = $0 }
+                                    )
                                 } else {
-                                    Picker("", selection: $frecuenciaPago) {
-                                        ForEach(FrecuenciaPago.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                                    }
-                                    .pickerStyle(.menu)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(4)
-                                    .background(Color("MercedesBackground").opacity(0.9))
-                                    .cornerRadius(8)
+                                    PaymentFrequencyChips(
+                                        selected: frecuenciaPago,
+                                        onSelect: { frecuenciaPago = $0 }
+                                    )
                                 }
                             }
+                            .frame(maxWidth: .infinity)
                         }
-                        HStack(spacing: 16) {
-                            VStack(alignment: .leading, spacing: 2) {
+                        
+                        Divider().background(Color.gray.opacity(0.1))
+                        
+                        HStack(alignment: .top, spacing: 24) {
+                            // Salario Mínimo
+                            VStack(alignment: .leading, spacing: 4) {
                                 FormField(title: "• Salario mínimo de referencia", placeholder: "ej. 248.93", text: $salarioMinimoReferenciaString)
-                                    .validationHint(isInvalid: salarioMinimoInvalido, message: "Debe ser un número mayor a 0.")
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Este valor se puede modificar si no coincide con el vigente.")
-                                        .font(.caption2).foregroundColor(.gray)
-                                    Link("Consultar salario mínimo vigente (CONASAMI)",
-                                         destination: URL(string: "https://www.gob.mx/conasami/documentos/tabla-de-salarios-minimos-generales-y-profesionales-por-areas-geograficas?idiom=es")!)
-                                        .font(.caption2)
-                                        .foregroundColor(Color("MercedesPetrolGreen"))
-                                }
+                                    .validationHint(isInvalid: salarioMinimoInvalido, message: "Debe ser > 0.")
+                                
+                                Link("Consultar tablas vigentes (CONASAMI)", destination: URL(string: "https://www.gob.mx/conasami")!)
+                                    .font(.caption2)
+                                    .foregroundColor(Color("MercedesPetrolGreen"))
+                                    .padding(.leading, 4)
                             }
-                            VStack(alignment: .leading, spacing: 2) {
+                            
+                            // Factor Integración
+                            VStack(alignment: .leading, spacing: 4) {
                                 FormField(title: "• Factor de integración", placeholder: "ej. 1.0452", text: $factorIntegracionString)
                                     .validationHint(isInvalid: factorIntegracionInvalido, message: "Debe ser > 0.")
-                                Text("Para SBC.")
+                                Text("Usado para cálculo SBC")
                                     .font(.caption2)
                                     .foregroundColor(.gray)
+                                    .padding(.leading, 4)
                             }
                         }
-                        HStack(spacing: 16) {
-                            Toggle("Prestaciones mínimas", isOn: $prestacionesMinimas)
-                                .toggleStyle(.switch)
-                                .font(.caption2)
-                                .foregroundColor(.gray)
-                            Spacer()
-                            // CAMBIO: Ocultar completamente el campo de comisiones si salario es mínimo.
+                        
+                        HStack(spacing: 24) {
+                            // Prestaciones (Switch mejorado)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("• Prestaciones")
+                                    .font(.caption).foregroundColor(.gray)
+                                BenefitsSegment(prestacionesMinimas: $prestacionesMinimas)
+                            }
+                            .frame(maxWidth: .infinity)
+                            
+                            // Comisiones
                             let isMinInAdd = (mecanicoAEditar == nil ? (tipoSalarioSeleccion == .minimo) : false)
                             let isMinInEdit = (mecanicoAEditar != nil ? (tipoSalario == .minimo) : false)
-                            if !(isMinInAdd || isMinInEdit) {
+                            let showComisiones = !(isMinInAdd || isMinInEdit)
+                            
+                            VStack(alignment: .leading, spacing: 0) {
+                                // FormField ya incluye label
                                 FormField(title: "• Comisiones acumuladas", placeholder: "0.00", text: $comisionesString)
-                                    .frame(width: 180)
                                     .validationHint(isInvalid: comisionesInvalidas, message: "Número válido.")
                             }
+                            .frame(maxWidth: .infinity)
+                            .opacity(showComisiones ? 1 : 0)
                         }
                     }
                     
@@ -2595,5 +2585,125 @@ struct TagInputView: View {
                 newTag = "" // Ya existe
             }
         }
+    }
+}
+
+struct SalaryTypeSegment: View {
+    @Binding var selection: TipoSalario?
+    // Opción para modo edición directo (non-optional binding wrapper)
+    var selectionBinding: Binding<TipoSalario>? = nil
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(TipoSalario.allCases, id: \.self) { type in
+                let isSelected = (selectionBinding?.wrappedValue == type) || (selection == type)
+                
+                Button {
+                    withAnimation {
+                        if let b = selectionBinding { b.wrappedValue = type }
+                        else { selection = type }
+                    }
+                } label: {
+                    Text(type.rawValue)
+                        .font(.caption)
+                        .fontWeight(isSelected ? .semibold : .regular)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(isSelected ? Color("MercedesPetrolGreen") : Color.clear)
+                        .foregroundColor(isSelected ? .white : .gray)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(Color("MercedesBackground"))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+struct PaymentFrequencyChips: View {
+    var selected: FrecuenciaPago?
+    var onSelect: (FrecuenciaPago) -> Void
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            ForEach(FrecuenciaPago.allCases, id: \.self) { freq in
+                let isSelected = (selected == freq)
+                Button {
+                    onSelect(freq)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .font(.caption)
+                        Text(freq.rawValue)
+                            .font(.caption)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(isSelected ? Color("MercedesPetrolGreen").opacity(0.15) : Color("MercedesBackground"))
+                    .foregroundColor(isSelected ? Color("MercedesPetrolGreen") : .gray)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(isSelected ? Color("MercedesPetrolGreen") : Color.gray.opacity(0.3), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+struct BenefitsSegment: View {
+    @Binding var prestacionesMinimas: Bool
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            // Opción 1: Mínimas
+            Button {
+                withAnimation { prestacionesMinimas = true }
+            } label: {
+                Text("De Ley (Mínimas)")
+                    .font(.caption)
+                    .fontWeight(prestacionesMinimas ? .semibold : .regular)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .background(prestacionesMinimas ? Color("MercedesPetrolGreen") : Color.clear)
+                    .foregroundColor(prestacionesMinimas ? .white : .gray)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            
+            // Separator
+            Rectangle()
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 1)
+                .padding(.vertical, 4)
+            
+            // Opción 2: Superiores
+            Button {
+                withAnimation { prestacionesMinimas = false }
+            } label: {
+                Text("Superiores")
+                    .font(.caption)
+                    .fontWeight(!prestacionesMinimas ? .semibold : .regular)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .background(!prestacionesMinimas ? Color("MercedesPetrolGreen") : Color.clear)
+                    .foregroundColor(!prestacionesMinimas ? .white : .gray)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .background(Color("MercedesBackground"))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+        )
     }
 }
