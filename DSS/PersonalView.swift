@@ -585,6 +585,7 @@ fileprivate struct PersonalFormView: View {
     // Opción B: confirmación para aplicar a todos
     @State private var pendingApplyAllSMI: Double?
     @State private var pendingApplyAllFactor: Double?
+    @State private var pendingApplyAllRole: Rol? // Nuevo: para scopear la alerta
     @State private var showingApplyAllAlert: Bool = false
     @State private var postApplyAllAction: (() -> Void)? = nil
 
@@ -1548,12 +1549,16 @@ fileprivate struct PersonalFormView: View {
             authModalView()
         }
         // Confirmación única para aplicar a todos (Opción B)
-        .alert("Aplicar cambios a todos los empleados", isPresented: $showingApplyAllAlert) {
-            Button("Aplicar a todos") {
+        .alert(
+            "Aplicar cambios a todos los \(pendingApplyAllRole?.rawValue ?? "empleados")",
+            isPresented: $showingApplyAllAlert
+        ) {
+            Button("Aplicar a todos los \(pendingApplyAllRole?.rawValue ?? "empleados")") {
                 let newSMI = pendingApplyAllSMI
                 let newFactor = pendingApplyAllFactor
+                let targetRole = pendingApplyAllRole
                 Task {
-                    await applyToAllEmployees(newSMI: newSMI, newFactor: newFactor)
+                    await applyToAllEmployees(newSMI: newSMI, newFactor: newFactor, role: targetRole)
                     // Continuar con guardado real
                     postApplyAllAction?()
                 }
@@ -1569,7 +1574,9 @@ fileprivate struct PersonalFormView: View {
                 smiTxt != nil ? "Salario mínimo: \(smiTxt!)" : nil,
                 facTxt != nil ? "Factor de integración: \(facTxt!)" : nil
             ].compactMap { $0 }
-            Text("Detectamos cambios en:\n\(parts.joined(separator: "\n"))\n¿Quieres aplicar estos valores a todos los empleados?")
+            
+            let roleName = pendingApplyAllRole?.rawValue ?? "este rol"
+            Text("Detectamos cambios en:\n\(parts.joined(separator: "\n"))\n¿Quieres aplicar estos valores a todos los empleados con el rol '\(roleName)'?")
         }
         .alert(alertTitle, isPresented: $showingValidationAlert) {
             Button("Entendido", role: .cancel) { }
@@ -1705,18 +1712,23 @@ fileprivate struct PersonalFormView: View {
         if willAsk {
             pendingApplyAllSMI = smiToApply
             pendingApplyAllFactor = factorToApply
+            // Capturar el rol actual
+            pendingApplyAllRole = (mecanicoAEditar == nil) ? rolSeleccion : rol
             showingApplyAllAlert = true
         } else {
             guardarCambios()
         }
     }
     
-    // Aplica a todos los empleados y recalcula snapshots
-    private func applyToAllEmployees(newSMI: Double?, newFactor: Double?) async {
+    // Aplica a todos los empleados del mismo rol y recalcula snapshots
+    private func applyToAllEmployees(newSMI: Double?, newFactor: Double?, role: Rol?) async {
         do {
             let descriptor = FetchDescriptor<Personal>()
             let todos = try modelContext.fetch(descriptor)
             for mec in todos {
+                 // Si se especificó un rol, filtrar
+                if let r = role, mec.rol != r { continue }
+                
                 if let s = newSMI { mec.salarioMinimoReferencia = s }
                 if let f = newFactor { mec.factorIntegracion = f }
                 mec.recalcularYActualizarSnapshots()
