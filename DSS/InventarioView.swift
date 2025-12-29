@@ -347,9 +347,9 @@ struct InventarioView: View {
                             sortOption = .nombre
                         } label: {
                             if !incluirInactivos && filtroCategoria == "Todas" && sortOption == .nombre {
-                                Label("Por Nombre", systemImage: "checkmark")
+                                Label("Ordenar por Nombre", systemImage: "checkmark")
                             } else {
-                                Text("Por Nombre")
+                                Text("Ordenar por Nombre")
                             }
                         }
                         
@@ -359,9 +359,9 @@ struct InventarioView: View {
                             sortOption = .precio
                         } label: {
                             if !incluirInactivos && filtroCategoria == "Todas" && sortOption == .precio {
-                                Label("Por Precio", systemImage: "checkmark")
+                                Label("Ordenar por Precio", systemImage: "checkmark")
                             } else {
-                                Text("Por Precio")
+                                Text("Ordenar por Precio")
                             }
                         }
                         
@@ -371,16 +371,16 @@ struct InventarioView: View {
                             sortOption = .stock
                         } label: {
                             if !incluirInactivos && filtroCategoria == "Todas" && sortOption == .stock {
-                                Label("Por Stock", systemImage: "checkmark")
+                                Label("Ordenar por Stock", systemImage: "checkmark")
                             } else {
-                                Text("Por Stock")
+                                Text("Ordenar por Stock")
                             }
                         }
                         
                         Divider()
                         
                         // Sección 2: Categorías
-                        Menu("Por Categoría...") {
+                        Menu("Ordenar por Categoría...") {
                             ForEach(categorias, id: \.self) { cat in
                                 if cat != "Todas" { // "Todas" ya está implícito en los de arriba
                                     Button {
@@ -405,9 +405,9 @@ struct InventarioView: View {
                             incluirInactivos = true
                         } label: {
                             if incluirInactivos {
-                                Label("Productos de Baja", systemImage: "checkmark")
+                                Label("Productos dados de Baja", systemImage: "checkmark")
                             } else {
-                                Text("Productos de Baja")
+                                Text("Productos dados de Baja")
                             }
                         }
                         
@@ -415,9 +415,9 @@ struct InventarioView: View {
                          HStack(spacing: 6) {
                             // Texto dinámico: Prioridad Inactivos > Categoría > Orden
                             let labelText: String = {
-                                if incluirInactivos { return "De Baja" }
-                                if filtroCategoria != "Todas" { return "Cat: \(filtroCategoria)" }
-                                return "Por \(sortOption.rawValue)"
+                                if incluirInactivos { return "Productos dados de Baja" }
+                                if filtroCategoria != "Todas" { return "Categoría: \(filtroCategoria)" }
+                                return "Ordenar por \(sortOption.rawValue)"
                             }()
                             
                             Text(labelText)
@@ -430,7 +430,7 @@ struct InventarioView: View {
                         .foregroundColor(Color("MercedesPetrolGreen"))
                     }
                     .menuStyle(.borderlessButton)
-                    .frame(width: 140)
+                    .frame(width: 200)
 
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -438,8 +438,8 @@ struct InventarioView: View {
                         }
                     } label: {
                         HStack(spacing: 6) {
-                            Text(sortAscending ? "Ascendente" : "Descendente")
                             Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                            Text(sortAscending ? "Ascendente" : "Descendente")
                         }
                         .font(.subheadline)
                         .padding(8)
