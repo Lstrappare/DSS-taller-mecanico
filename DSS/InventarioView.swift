@@ -537,14 +537,21 @@ fileprivate struct ProductoCard: View {
                     }
                 }
                 Spacer()
-                // Precio y costo
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text("$\(producto.precioVenta, specifier: "%.2f")")
-                        .font(.headline).fontWeight(.bold)
-                        .foregroundColor(.white)
-                    Text("Costo: $\(producto.costo, specifier: "%.2f")")
-                        .font(.caption2).foregroundColor(.gray)
+                Spacer()
+                
+                // Botón Editar (Movido aquí)
+                Button {
+                    onEdit()
+                } label: {
+                    Label("Editar", systemImage: "pencil")
+                        .font(.caption)
+                        .padding(.horizontal, 8).padding(.vertical, 5)
+                        .background(Color("MercedesBackground"))
+                        .cornerRadius(6)
                 }
+                .buttonStyle(.plain)
+                .foregroundColor(.white)
+                .help("Editar este producto")
             }
             
             // Banner de Inactivo
@@ -561,14 +568,14 @@ fileprivate struct ProductoCard: View {
             
             // Desglose de utilidad real
             HStack(spacing: 6) {
-                chip(text: "Margen de Ganancia: $\(desglose.ganancia, default: "%.2f")", icon: "chart.line.uptrend.xyaxis")
-                chip(text: "Gastos de Administración: $\(desglose.gastosAdmin, default: "%.2f")", icon: "gearshape.2.fill")
+                chip(text: "Margen de Ganancia: $" + String(format: "%.2f", desglose.ganancia), icon: "chart.line.uptrend.xyaxis")
+                chip(text: "Gastos de Administración: $" + String(format: "%.2f", desglose.gastosAdmin), icon: "gearshape.2.fill")
                 Spacer()
             }
             
             // Reparto real después del ISR
             HStack(spacing: 6) {
-                chip(text: "Ganancia real (después de ISR): $\(desglose.gananciaRealDespuesISR, default: "%.2f")", icon: "dollarsign.arrow.circlepath")
+                chip(text: "Ganancia real (después de ISR): $" + String(format: "%.2f", desglose.gananciaRealDespuesISR), icon: "dollarsign.arrow.circlepath")
                 Spacer()
             }
             
@@ -582,34 +589,35 @@ fileprivate struct ProductoCard: View {
                     chip(text: "Reponer", icon: "exclamationmark.triangle.fill", color: .red)
                 }
                 Spacer()
-                if let cad = producto.fechaCaducidad {
-                    HStack(spacing: 4) {
-                        Image(systemName: "calendar")
-                        Text("Caduca: \(cad.formatted(date: .abbreviated, time: .omitted))")
-                    }
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-                }
             }
             
             // Footer acciones
-            HStack {
+            // Footer acciones
+            HStack(alignment: .bottom) {
+                // Info Stock
                 Text("Stock: \(producto.cantidad, specifier: "%.2f") \(producto.unidadDeMedida)(s)")
                     .font(.caption2).foregroundColor(.gray)
+                
                 Spacer()
-                HStack(spacing: 6) {
-                    Button {
-                        onEdit()
-                    } label: {
-                        Label("Editar", systemImage: "pencil")
-                            .font(.caption)
-                            .padding(.horizontal, 8).padding(.vertical, 5)
-                            .background(Color("MercedesBackground"))
-                            .cornerRadius(6)
+                
+                // Precio (Arriba) y Fecha (Abajo) en esquina inferior derecha
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("Precio de venta: $\(producto.precioVenta, specifier: "%.2f")")
+                        .font(.headline).fontWeight(.bold)
+                        .foregroundColor(.white)
+                    // Mostrar costo discreto debajo del precio o al lado? El usuario prioriza precio.
+                    // Lo pondré pequeño si cabe, o solo precio. "El precio lo puedes poner arriba de la fecha".
+                    // Voy a omitir costo aquí para no saturar, o ponerlo muy pequeño.
+                    // Mejor solo precio y fecha como pidió explicitamente.
+                    
+                    if let cad = producto.fechaCaducidad {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar")
+                            Text("Caduca: \(cad.formatted(date: .abbreviated, time: .omitted))")
+                        }
+                        .font(.caption2)
+                        .foregroundColor(.gray)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.white)
-                    .help("Editar este producto")
                 }
             }
         }
@@ -1537,3 +1545,4 @@ fileprivate extension View {
         }
     }
 }
+
