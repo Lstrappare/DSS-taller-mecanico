@@ -462,11 +462,19 @@ struct InventarioView: View {
             Image(systemName: "shippingbox")
                 .font(.system(size: 36, weight: .bold))
                 .foregroundColor(Color("MercedesPetrolGreen"))
-            Text(searchQuery.isEmpty ? "No hay productos registrados aún." :
-                 "No se encontraron productos para “\(searchQuery)”.")
-                .font(.subheadline)
-                .foregroundColor(.gray)
-            if searchQuery.isEmpty {
+            
+            if !searchQuery.isEmpty {
+                Text("No se encontraron productos para “\(searchQuery)”.")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            } else if incluirInactivos {
+                Text("No hay productos dados de baja.")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            } else {
+                Text("No hay productos registrados aún.")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
                 Text("Añade tu primer producto para empezar a gestionar el inventario.")
                     .font(.caption2)
                     .foregroundColor(.gray)
