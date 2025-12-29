@@ -132,8 +132,12 @@ struct InventarioView: View {
         if filtroCategoria != "Todas" {
             base = base.filter { $0.categoria == filtroCategoria }
         }
-        // Filtro de activos
-        if !incluirInactivos {
+        // Filtro de activos/inactivos
+        if incluirInactivos {
+            // Modo "Ver de baja": Solo inactivos
+            base = base.filter { !$0.activo }
+        } else {
+            // Modo normal: Solo activos
             base = base.filter { $0.activo }
         }
         if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -332,80 +336,120 @@ struct InventarioView: View {
                 .background(Color("MercedesCard"))
                 .cornerRadius(8)
                 
-                // Orden
+                // Orden (Consolidado)
                 HStack(spacing: 6) {
-                    Picker("Ordenar", selection: $sortOption) {
-                        ForEach(SortOption.allCases) { opt in
-                            Text(opt.rawValue).tag(opt)
+                    Menu {
+                        // Sección 1: Ordenamiento General (Activos)
+                        Button {
+                            // Resetear filtros
+                            filtroCategoria = "Todas"
+                            incluirInactivos = false
+                            sortOption = .nombre
+                        } label: {
+                            if !incluirInactivos && filtroCategoria == "Todas" && sortOption == .nombre {
+                                Label("Por Nombre", systemImage: "checkmark")
+                            } else {
+                                Text("Por Nombre")
+                            }
                         }
+                        
+                        Button {
+                            filtroCategoria = "Todas"
+                            incluirInactivos = false
+                            sortOption = .precio
+                        } label: {
+                            if !incluirInactivos && filtroCategoria == "Todas" && sortOption == .precio {
+                                Label("Por Precio", systemImage: "checkmark")
+                            } else {
+                                Text("Por Precio")
+                            }
+                        }
+                        
+                        Button {
+                            filtroCategoria = "Todas"
+                            incluirInactivos = false
+                            sortOption = .stock
+                        } label: {
+                            if !incluirInactivos && filtroCategoria == "Todas" && sortOption == .stock {
+                                Label("Por Stock", systemImage: "checkmark")
+                            } else {
+                                Text("Por Stock")
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        // Sección 2: Categorías
+                        Menu("Por Categoría...") {
+                            ForEach(categorias, id: \.self) { cat in
+                                if cat != "Todas" { // "Todas" ya está implícito en los de arriba
+                                    Button {
+                                        incluirInactivos = false
+                                        filtroCategoria = cat
+                                    } label: {
+                                        if !incluirInactivos && filtroCategoria == cat {
+                                            Label(cat, systemImage: "checkmark")
+                                        } else {
+                                            Text(cat)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        // Sección 3: Inactivos
+                        Button {
+                            filtroCategoria = "Todas" // Resetear categoría para ver todos los inactivos
+                            incluirInactivos = true
+                        } label: {
+                            if incluirInactivos {
+                                Label("Productos de Baja", systemImage: "checkmark")
+                            } else {
+                                Text("Productos de Baja")
+                            }
+                        }
+                        
+                    } label: {
+                         HStack(spacing: 6) {
+                            // Texto dinámico: Prioridad Inactivos > Categoría > Orden
+                            let labelText: String = {
+                                if incluirInactivos { return "De Baja" }
+                                if filtroCategoria != "Todas" { return "Cat: \(filtroCategoria)" }
+                                return "Por \(sortOption.rawValue)"
+                            }()
+                            
+                            Text(labelText)
+                            Image(systemName: "line.3.horizontal.decrease.circle")
+                        }
+                        .font(.subheadline)
+                        .padding(8)
+                        .background(Color("MercedesCard"))
+                        .cornerRadius(8)
+                        .foregroundColor(Color("MercedesPetrolGreen"))
                     }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 140)
+                    .menuStyle(.borderlessButton)
+                    .frame(width: 140)
+
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             sortAscending.toggle()
                         }
                     } label: {
-                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                            .font(.subheadline)
-                            .padding(6)
-                            .background(Color("MercedesCard"))
-                            .cornerRadius(6)
+                        HStack(spacing: 6) {
+                            Text(sortAscending ? "Ascendente" : "Descendente")
+                            Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                        }
+                        .font(.subheadline)
+                        .padding(8)
+                        .background(Color("MercedesCard"))
+                        .cornerRadius(8)
+                        .foregroundColor(Color("MercedesPetrolGreen"))
                     }
                     .buttonStyle(.plain)
                     .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
                 }
-                
-                // Categoría
-                Picker("Categoría", selection: $filtroCategoria) {
-                    ForEach(categorias, id: \.self) { Text($0) }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: 200)
-                .help("Filtrar por categoría")
-                
-                // Filtros activos + limpiar (solo si aplica)
-                if filtroCategoria != "Todas" || !searchQuery.isEmpty {
-                    HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                        Text("Filtros activos")
-                        if filtroCategoria != "Todas" {
-                            Text("Categoría: \(filtroCategoria)")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if !searchQuery.isEmpty {
-                            Text("“\(searchQuery)”")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        Button {
-                            withAnimation {
-                                filtroCategoria = "Todas"
-                                searchQuery = ""
-                            }
-                        } label: {
-                            Text("Limpiar")
-                                .font(.caption2)
-                                .padding(.horizontal, 6).padding(.vertical, 4)
-                                .background(Color("MercedesCard"))
-                                .cornerRadius(6)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.gray)
-                        .help("Quitar filtros activos")
-                    }
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-                    .foregroundColor(.gray)
-                }
-                
-                // Toggle inactivos
-                Toggle("Ver inactivos", isOn: $incluirInactivos)
-                    .toggleStyle(.switch)
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                    .help("Mostrar productos dados de baja temporalmente")
                 
                 Spacer()
             }
@@ -558,19 +602,6 @@ fileprivate struct ProductoCard: View {
                     .buttonStyle(.plain)
                     .foregroundColor(.white)
                     .help("Editar este producto")
-                    
-                    Button(role: .destructive) {
-                        onDelete()
-                    } label: {
-                        Label("Eliminar", systemImage: "trash")
-                            .font(.caption)
-                            .padding(.horizontal, 8).padding(.vertical, 5)
-                            .background(Color.red.opacity(0.18))
-                            .cornerRadius(6)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.red)
-                    .help("Eliminar este producto")
                 }
             }
         }
