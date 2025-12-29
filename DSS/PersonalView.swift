@@ -16,28 +16,20 @@ fileprivate enum ModalMode: Identifiable, Equatable {
     }
 }
 
-// --- ENUM FILTROS PERSONAL ---
-fileprivate enum PersonalFilterOption: Identifiable, Hashable {
-    case todosActivos
-    case porRol(Rol)
-    case porEstado(EstadoEmpleado)
-    case dadosDeBaja
+// --- MODO DE VISTA UNIFICADO ---
+fileprivate enum ViewMode: Equatable {
+    case standard // Por Nombre (Activos)
+    case byStatus // Por Estado (Disponible vs Fuera de Turno)
+    case byRole(Rol) // Por Rol
+    case deactivated // Dados de baja
 
-    var id: String {
-        switch self {
-        case .todosActivos: return "todos"
-        case .dadosDeBaja: return "baja"
-        case .porRol(let r): return "rol_\(r.rawValue)"
-        case .porEstado(let e): return "estado_\(e.rawValue)"
-        }
-    }
-
-    var title: String {
-        switch self {
-        case .todosActivos: return "Todos (Activos)"
-        case .dadosDeBaja: return "Dados de Baja"
-        case .porRol(let r): return r.rawValue
-        case .porEstado(let e): return e.rawValue
+    static func == (lhs: ViewMode, rhs: ViewMode) -> Bool {
+        switch (lhs, rhs) {
+        case (.standard, .standard): return true
+        case (.byStatus, .byStatus): return true
+        case (.deactivated, .deactivated): return true
+        case (.byRole(let r1), .byRole(let r2)): return r1 == r2
+        default: return false
         }
     }
 }
@@ -49,33 +41,37 @@ struct PersonalView: View {
     
     @State private var modalMode: ModalMode?
     @State private var searchQuery = ""
-    @State private var selectedFilter: PersonalFilterOption = .todosActivos
     
-    // Ordenamiento (en línea con InventarioView)
-    enum SortOption: String, CaseIterable, Identifiable {
-        case nombre = "Nombre"
-        case rol = "Rol"
-        case estado = "Estado"
-        var id: String { rawValue }
-    }
-    @State private var sortOption: SortOption = .nombre
+    // Configuración de vista unificada
+    @State private var viewMode: ViewMode = .standard
     @State private var sortAscending: Bool = true
     
     var filteredPersonal: [Personal] {
         var base = personal
         
-        // Filtro unificado
-        switch selectedFilter {
-        case .todosActivos:
+        // 1. Filtrado Base
+        switch viewMode {
+        case .standard:
             base = base.filter { $0.activo }
-        case .dadosDeBaja:
-            base = base.filter { !$0.activo }
-        case .porRol(let rol):
+        case .byStatus:
+            base = base.filter { $0.activo }
+            // Lógica específica de estado:
+            // Ascendente -> Disponibles (y en horario)
+            // Descendente -> Fuera de Turno (o no disponibles)
+            if sortAscending {
+                // Disponibles y en horario
+                base = base.filter { $0.estado == .disponible && $0.estaEnHorario }
+            } else {
+                // Fuera de turno, descansos, etc. (No en horario operativo efectivo)
+                base = base.filter { !$0.estaEnHorario }
+            }
+        case .byRole(let rol):
             base = base.filter { $0.activo && $0.rol == rol }
-        case .porEstado(let estado):
-            base = base.filter { $0.activo && $0.estado == estado }
+        case .deactivated:
+            base = base.filter { !$0.activo }
         }
         
+        // 2. Búsqueda
         if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let q = searchQuery.lowercased()
             base = base.filter { mec in
@@ -87,19 +83,12 @@ struct PersonalView: View {
             }
         }
         
+        // 3. Ordenamiento (siempre por nombre al final, salvo lógica específica)
         base.sort { a, b in
-            switch sortOption {
-            case .nombre:
-                let cmp = a.nombre.localizedCaseInsensitiveCompare(b.nombre)
-                return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
-            case .rol:
-                let cmp = a.rol.rawValue.localizedCaseInsensitiveCompare(b.rol.rawValue)
-                return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
-            case .estado:
-                let cmp = a.estado.rawValue.localizedCaseInsensitiveCompare(b.estado.rawValue)
-                return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
-            }
+            let cmp = a.nombre.localizedCaseInsensitiveCompare(b.nombre)
+            return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
         }
+        
         return base
     }
 
@@ -212,57 +201,86 @@ struct PersonalView: View {
                 .background(Color("MercedesCard"))
                 .cornerRadius(8)
                 
-                // Ordenar
+                // Menú Unificado de Ordenar
                 Menu {
-                    Picker("Ordenar por", selection: $sortOption) {
-                        ForEach(SortOption.allCases) { opt in
-                            Text(opt.rawValue).tag(opt)
-                        }
-                    }
+                    // Sección Principal
                     Button {
-                        withAnimation { sortAscending.toggle() }
+                        viewMode = .standard
                     } label: {
-                        Label(sortAscending ? "Ascendente" : "Descendente", systemImage: sortAscending ? "arrow.up" : "arrow.down")
+                        if viewMode == .standard { Label("Por Nombre", systemImage: "checkmark") }
+                        else { Text("Por Nombre") }
                     }
-                } label: {
-                    Text(" Ordenar")
-                    Image(systemName: "arrow.up.arrow.down")
-                        .font(.subheadline)
-                        .padding(8)
-                        .background(Color("MercedesCard"))
-                        .cornerRadius(8)
-                        .foregroundColor(Color("MercedesPetrolGreen"))
-                }
 
-                // Filtro Unificado
-                Menu {
-                    Picker("Filtro General", selection: $selectedFilter) {
-                        Text("Todos (Activos)").tag(PersonalFilterOption.todosActivos)
-                        
-                        Divider()
-                        
-                        ForEach(Rol.allCases, id: \.self) { rol in
-                            Text(rol.rawValue).tag(PersonalFilterOption.porRol(rol))
-                        }
-                        
-                        Divider()
-                        
-                        Text("Dados de Baja").tag(PersonalFilterOption.dadosDeBaja)
+                    Button {
+                        viewMode = .byStatus
+                    } label: {
+                        if viewMode == .byStatus { Label("Por Estado", systemImage: "checkmark") }
+                        else { Text("Por Estado") }
                     }
+                    
+                    Menu("Por Rol...") {
+                        ForEach(Rol.allCases, id: \.self) { rol in
+                            Button {
+                                viewMode = .byRole(rol)
+                            } label: {
+                                if case .byRole(let r) = viewMode, r == rol {
+                                    Label(rol.rawValue, systemImage: "checkmark")
+                                } else {
+                                    Text(rol.rawValue)
+                                }
+                            }
+                        }
+                    }
+                    
+                    Divider()
+                    
+                    Button {
+                        viewMode = .deactivated
+                    } label: {
+                        if viewMode == .deactivated { Label("Dados de Baja", systemImage: "checkmark") }
+                        else { Text("Dados de Baja") }
+                    }
+                    
                 } label: {
                     HStack(spacing: 6) {
+                        // Texto dinámico para el botón Ordenar
+                        let labelText: String = {
+                            switch viewMode {
+                            case .standard: return "Ordenar por Nombre"
+                            case .byStatus: return "Ordenar por Estado"
+                            case .byRole(let rol): return "Ordenar por \(rol.rawValue)"
+                            case .deactivated: return "Ver Dados de Baja"
+                            }
+                        }()
+                        
+                        Text(labelText)
                         Image(systemName: "line.3.horizontal.decrease.circle")
-                        Text(selectedFilter.title)
-                            .lineLimit(1)
                     }
                     .font(.subheadline)
-                    .padding(.horizontal, 10).padding(.vertical, 8)
+                    .padding(8)
                     .background(Color("MercedesCard"))
                     .cornerRadius(8)
-                    .foregroundColor(selectedFilter == .todosActivos ? .primary : Color("MercedesPetrolGreen"))
+                    .foregroundColor(Color("MercedesPetrolGreen"))
                 }
                 .menuStyle(.borderlessButton)
-                .frame(minWidth: 140)
+                .frame(width: 180) // Aumentado ligeramente para caber textos más largos
+
+                // Botón Ascendente/Descendente (Al lado)
+                Button {
+                    withAnimation { sortAscending.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                        Text(sortAscending ? "Ascendente" : "Descendente")
+                    }
+                    .font(.subheadline)
+                    .padding(8)
+                    .background(Color("MercedesCard"))
+                    .cornerRadius(8)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                }
+                .help(sortAscending ? "Ascendente" : "Descendente")
+                .buttonStyle(.plain)
 
                 Spacer()
             }
@@ -280,23 +298,28 @@ struct PersonalView: View {
                     .font(.subheadline)
                     .foregroundColor(.gray)
             } else {
-                // Mensajes contextuales según el filtro
+                // Mensajes contextuales según el modo
                 Group {
-                    switch selectedFilter {
-                    case .todosActivos:
+                    switch viewMode {
+                    case .standard:
                         Text("No hay personal registrado aún.")
-                    case .dadosDeBaja:
+                    case .deactivated:
                         Text("No hay personal dado de baja.")
-                    case .porRol(let rol):
+                    case .byRole(let rol):
                         Text("No hay personal que sea \(rol.rawValue).")
-                    case .porEstado(let estado):
-                        Text("No hay personal con estado \(estado.rawValue).")
+                    case .byStatus:
+                        // Mensaje dinámico según toggle
+                        if sortAscending {
+                            Text("No hay personal disponible en este momento.")
+                        } else {
+                            Text("No hay personal fuera de turno.")
+                        }
                     }
                 }
                 .font(.subheadline)
                 .foregroundColor(.gray)
                 
-                if selectedFilter == .todosActivos {
+                if case .standard = viewMode {
                     Text("Añade tu primer empleado para comenzar a asignar servicios.")
                         .font(.caption2)
                         .foregroundColor(.gray)
