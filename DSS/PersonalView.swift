@@ -207,18 +207,18 @@ struct PersonalView: View {
                     Button {
                         viewMode = .standard
                     } label: {
-                        if viewMode == .standard { Label("Por Nombre", systemImage: "checkmark") }
-                        else { Text("Por Nombre") }
+                        if viewMode == .standard { Label("Ordenar por Nombre", systemImage: "checkmark") }
+                        else { Text("Ordenar por Nombre") }
                     }
 
                     Button {
                         viewMode = .byStatus
                     } label: {
-                        if viewMode == .byStatus { Label("Por Estado", systemImage: "checkmark") }
-                        else { Text("Por Estado") }
+                        if viewMode == .byStatus { Label("Ordenar por Estado", systemImage: "checkmark") }
+                        else { Text("Ordenar por Estado") }
                     }
                     
-                    Menu("Por Rol...") {
+                    Menu("Ordenar por Rol...") {
                         ForEach(Rol.allCases, id: \.self) { rol in
                             Button {
                                 viewMode = .byRole(rol)
@@ -238,7 +238,7 @@ struct PersonalView: View {
                         viewMode = .deactivated
                     } label: {
                         if viewMode == .deactivated { Label("Dados de Baja", systemImage: "checkmark") }
-                        else { Text("Dados de Baja") }
+                        else { Text("Ver dados de Baja") }
                     }
                     
                 } label: {

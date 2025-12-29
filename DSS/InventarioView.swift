@@ -405,9 +405,9 @@ struct InventarioView: View {
                             incluirInactivos = true
                         } label: {
                             if incluirInactivos {
-                                Label("Productos dados de Baja", systemImage: "checkmark")
+                                Label("Ver Productos dados de Baja", systemImage: "checkmark")
                             } else {
-                                Text("Productos dados de Baja")
+                                Text("Ver Productos dados de Baja")
                             }
                         }
                         
@@ -415,7 +415,7 @@ struct InventarioView: View {
                          HStack(spacing: 6) {
                             // Texto dinámico: Prioridad Inactivos > Categoría > Orden
                             let labelText: String = {
-                                if incluirInactivos { return "Productos dados de Baja" }
+                                if incluirInactivos { return "Ver Productos dados de Baja" }
                                 if filtroCategoria != "Todas" { return "Categoría: \(filtroCategoria)" }
                                 return "Ordenar por \(sortOption.rawValue)"
                             }()
