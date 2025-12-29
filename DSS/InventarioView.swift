@@ -965,25 +965,43 @@ fileprivate struct ProductFormView: View {
                                     }
                                 }
                             
+                            // Campo de Fecha de Caducidad (Estilizado)
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Fecha de caducidad").font(.caption2).foregroundColor(.gray)
-                                    Toggle("Con fecha", isOn: Binding(
+                                Text("Fecha de caducidad")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                                
+                                HStack {
+                                    Toggle("", isOn: Binding(
                                         get: { fechaCaducidad != nil },
                                         set: { hasDate in fechaCaducidad = hasDate ? Date() : nil }
                                     ))
                                     .toggleStyle(.switch)
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
-
-                                if fechaCaducidad != nil {
-                                    DatePicker("", selection: Binding(
-                                        get: { fechaCaducidad ?? Date() },
-                                        set: { fechaCaducidad = $0 }
-                                    ), displayedComponents: .date)
                                     .labelsHidden()
+                                    
+                                    Text(fechaCaducidad == nil ? "Sin caducidad" : "Vence el:")
+                                        .font(.subheadline)
+                                        .foregroundColor(fechaCaducidad == nil ? .gray.opacity(0.8) : .white)
+                                    
+                                    Spacer()
+                                    
+                                    if fechaCaducidad != nil {
+                                        DatePicker("", selection: Binding(
+                                            get: { fechaCaducidad ?? Date() },
+                                            set: { fechaCaducidad = $0 }
+                                        ), displayedComponents: .date)
+                                        .labelsHidden()
+                                        .datePickerStyle(.compact)
+                                    }
                                 }
+                                .padding(8)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
                             .help("Selecciona la fecha de caducidad si aplica")
                         }
                         
