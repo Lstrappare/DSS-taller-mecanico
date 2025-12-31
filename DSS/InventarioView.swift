@@ -99,12 +99,17 @@ fileprivate enum ProductPricingHelpers {
 struct InventarioView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Producto.nombre) private var productos: [Producto]
+    // Queries para validación de dependencias
+    @Query private var servicios: [Servicio]
+    @Query private var serviciosEnProceso: [ServicioEnProceso]
     
     @State private var modalMode: ProductModalMode?
     @State private var searchQuery = ""
     @State private var filtroCategoria: String = "Todas"
     @State private var productoAEliminar: Producto?
     @State private var mostrandoConfirmacionBorrado = false
+    @State private var showingDependencyAlert = false
+    @State private var dependencyAlertMessage = ""
     
     // NUEVO: Filtro de activos
     @State private var incluirInactivos = false
@@ -178,6 +183,33 @@ struct InventarioView: View {
         max(0, valorInventario - costoTotal)
     }
 
+    // MARK: - Helpers de Dependencias
+    private func validarDependencias(_ producto: Producto) -> String? {
+        // 1. Revisar Servcios (Catálogo)
+        let serviciosDependientes = servicios.filter { servicio in
+            servicio.ingredientes.contains { ing in
+                ing.nombreProducto == producto.nombre
+            }
+        }
+        
+        if !serviciosDependientes.isEmpty {
+            let nombres = serviciosDependientes.prefix(3).map(\.nombre).joined(separator: ", ")
+            let mas = serviciosDependientes.count > 3 ? " y \(serviciosDependientes.count - 3) más" : ""
+            return "Este producto es usado en los siguientes servicios: \(nombres)\(mas).\n\nPara eliminarlo, primero debes quitar el servicio o editarlo para eliminar este producto de sus ingredientes."
+        }
+        
+        // 2. Revisar Servicios En Proceso
+        let procesosDependientes = serviciosEnProceso.filter { proceso in
+            proceso.productosConsumidos.contains(producto.nombre)
+        }
+        
+        if !procesosDependientes.isEmpty {
+             return "Este producto está siendo usado en un servicio en curso (\(procesosDependientes.first?.nombreServicio ?? "")).\n\nFinaliza el servicio antes de modificar el producto."
+        }
+        
+        return nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header compacto
@@ -209,8 +241,13 @@ struct InventarioView: View {
                                 lowStockThreshold: lowStockThreshold,
                                 onEdit: { modalMode = .edit(producto) },
                                 onDelete: {
-                                    productoAEliminar = producto
-                                    mostrandoConfirmacionBorrado = true
+                                    if let mensaje = validarDependencias(producto) {
+                                        dependencyAlertMessage = mensaje
+                                        showingDependencyAlert = true
+                                    } else {
+                                        productoAEliminar = producto
+                                        mostrandoConfirmacionBorrado = true
+                                    }
                                 }
                             )
                             .transition(.opacity.combined(with: .move(edge: .top)))
@@ -245,6 +282,11 @@ struct InventarioView: View {
             Button("Cancelar", role: .cancel) { productoAEliminar = nil }
         } message: {
             Text("Esta acción no se puede deshacer.")
+        }
+        .alert("No se puede eliminar", isPresented: $showingDependencyAlert) {
+            Button("Entendido", role: .cancel) { }
+        } message: {
+            Text(dependencyAlertMessage)
         }
     }
     
@@ -667,6 +709,9 @@ fileprivate struct ProductFormView: View {
     
     // Query para validar duplicados
     @Query private var allProducts: [Producto]
+    // Queries para validación de dependencias
+    @Query private var servicios: [Servicio]
+    @Query private var serviciosEnProceso: [ServicioEnProceso]
     
     @AppStorage("user_password") private var userPassword = ""
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
@@ -707,6 +752,8 @@ fileprivate struct ProductFormView: View {
     
     // NUEVO: Alerta para activar/desactivar producto
     @State private var showingStatusAlert = false
+    @State private var showingDependencyAlert = false
+    @State private var dependencyAlertMessage = ""
     
     // Enum para la razón de la autenticación
     private enum AuthReason {
@@ -721,6 +768,33 @@ fileprivate struct ProductFormView: View {
         case .add: return "Añadir Producto"
         case .edit: return "Editar Producto"
         }
+    }
+
+    // MARK: - Helpers de Dependencias
+    private func validarDependencias(_ producto: Producto) -> String? {
+        // 1. Revisar Servcios (Catálogo)
+        let serviciosDependientes = servicios.filter { servicio in
+            servicio.ingredientes.contains { ing in
+                ing.nombreProducto == producto.nombre
+            }
+        }
+        
+        if !serviciosDependientes.isEmpty {
+            let nombres = serviciosDependientes.prefix(3).map(\.nombre).joined(separator: ", ")
+            let mas = serviciosDependientes.count > 3 ? " y \(serviciosDependientes.count - 3) más" : ""
+            return "Este producto es usado en los siguientes servicios: \(nombres)\(mas).\n\nPara eliminarlo, primero debes quitar el servicio o editarlo para eliminar este producto de sus ingredientes."
+        }
+        
+        // 2. Revisar Servicios En Proceso
+        let procesosDependientes = serviciosEnProceso.filter { proceso in
+            proceso.productosConsumidos.contains(producto.nombre)
+        }
+        
+        if !procesosDependientes.isEmpty {
+             return "Este producto está siendo usado en un servicio en curso (\(procesosDependientes.first?.nombreServicio ?? "")).\n\nFinaliza el servicio antes de modificar el producto."
+        }
+        
+        return nil
     }
     
     // --- Bools de Validación ---
@@ -1158,8 +1232,13 @@ fileprivate struct ProductFormView: View {
                                 .multilineTextAlignment(.center)
                             
                             Button(role: .destructive) {
-                                authReason = .deleteProduct
-                                showingAuthModal = true
+                                if let p = productoAEditar, let msg = validarDependencias(p) {
+                                    dependencyAlertMessage = msg
+                                    showingDependencyAlert = true
+                                } else {
+                                    authReason = .deleteProduct
+                                    showingAuthModal = true
+                                }
                             } label: {
                                 Label("Eliminar producto permanentemente", systemImage: "trash.fill")
                                     .padding(.vertical, 10)
@@ -1217,7 +1296,14 @@ fileprivate struct ProductFormView: View {
                 if productoAEditar != nil {
                     Button {
                         // Mostrar alerta de confirmación en lugar de togglear directo
-                        showingStatusAlert = true
+                        if let p = productoAEditar, activo, let msg = validarDependencias(p) {
+                            // Si está activo y queremos desactivar (activo=true), validamos.
+                            // Si ya está inactivo (activo=false) y queremos reactivar, no hay problema de dependencia (al contrario, es bueno).
+                            dependencyAlertMessage = msg
+                            showingDependencyAlert = true
+                        } else {
+                            showingStatusAlert = true
+                        }
                     } label: {
                         Text(activo ? "Quitar temporalmente" : "Devolver al inventario")
                             .padding(.vertical, 8)
@@ -1274,6 +1360,11 @@ fileprivate struct ProductFormView: View {
                 ? "No se borrarán los datos del producto; solo quedará inactivo. Podrás devolverlo al inventario más adelante."
                 : "El producto volverá al inventario"
             )
+        }
+        .alert("Acción no permitida", isPresented: $showingDependencyAlert) {
+            Button("Entendido", role: .cancel) { }
+        } message: {
+            Text(dependencyAlertMessage)
         }
     }
     
