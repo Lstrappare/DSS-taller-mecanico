@@ -598,6 +598,9 @@ class Producto {
     
     // Contenido neto (ej. 3 Litros)
     var contenidoNeto: Double
+    
+    // Nuevo: Contador de ventas para Top 5
+    var vecesVendido: Int = 0
 
     init(
         nombre: String,
@@ -617,7 +620,8 @@ class Producto {
         isrPorcentajeEstimado: Double = 10.0,
         precioModificadoManualmente: Bool = false,
         activo: Bool = true,
-        contenidoNeto: Double = 1.0
+        contenidoNeto: Double = 1.0,
+        vecesVendido: Int = 0
     ) {
         self.nombre = nombre
         self.costo = costo
@@ -638,6 +642,7 @@ class Producto {
         self.precioModificadoManualmente = precioModificadoManualmente
         self.activo = activo
         self.contenidoNeto = contenidoNeto
+        self.vecesVendido = vecesVendido
     }
 
     var margen: Double {

@@ -113,6 +113,9 @@ struct InventarioView: View {
     
     // NUEVO: Filtro de activos
     @State private var incluirInactivos = false
+
+    // NUEVO: Ganancias acumuladas (persistencia simple)
+    @AppStorage("gananciaAcumulada") private var gananciaAcumulada: Double = 0.0
     
     // NUEVO: Ordenamiento
     enum SortOption: String, CaseIterable, Identifiable {
@@ -214,6 +217,9 @@ struct InventarioView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Header compacto
             header
+
+            // Top 5 Productos más vendidos
+            topProductosView
             
             // Filtros y búsqueda mejorados
             filtrosView
@@ -324,6 +330,21 @@ struct InventarioView: View {
                 .help("Crear un nuevo producto")
             }
             .padding(.horizontal, 12)
+            
+            // Overlay de Ganancias (Esquina superior derecha del header)
+            .overlay(alignment: .topTrailing) {
+                HStack(spacing: 4) {
+                    Image(systemName: "dollarsign.circle.fill")
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                    Text("Ganancias: $\(gananciaAcumulada, specifier: "%.2f")")
+                        .font(.caption).fontWeight(.bold)
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                }
+                .padding(6)
+                .background(Color.white.opacity(0.8))
+                .cornerRadius(6)
+                .padding(8)
+            }
         }
     }
     
@@ -523,6 +544,57 @@ struct InventarioView: View {
             }
         }
     }
+    
+    // Top 5 View
+    private var topProductosView: some View {
+        let top5 = productos.sorted { $0.vecesVendido > $1.vecesVendido }.prefix(5)
+        
+        return Group {
+            if !top5.isEmpty && top5.first!.vecesVendido > 0 {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Top 5 Más Vendidos", systemImage: "trophy.fill")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.leading, 4)
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(Array(top5.enumerated()), id: \.element.nombre) { index, prod in
+                                if prod.vecesVendido > 0 {
+                                    HStack(spacing: 8) {
+                                        // Badge Rank
+                                        ZStack {
+                                            Circle()
+                                                .fill(index == 0 ? Color.yellow : Color.gray.opacity(0.5))
+                                                .frame(width: 24, height: 24)
+                                            Text("#\(index + 1)")
+                                                .font(.caption2).fontWeight(.bold)
+                                                .foregroundColor(index == 0 ? .black : .white)
+                                        }
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(prod.nombre)
+                                                .font(.caption).fontWeight(.semibold)
+                                                .foregroundColor(.white)
+                                                .lineLimit(1)
+                                            Text("\(prod.vecesVendido) ventas")
+                                                .font(.caption2)
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                                    .background(Color("MercedesCard"))
+                                    .cornerRadius(8)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.bottom, 4)
+            }
+        }
+    }
 }
 
 // Tarjeta individual de producto (UI más clara)
@@ -531,6 +603,10 @@ fileprivate struct ProductoCard: View {
     let lowStockThreshold: Double
     var onEdit: () -> Void
     var onDelete: () -> Void
+    
+    // Acceso a Ganancias Globales
+    @AppStorage("gananciaAcumulada") private var gananciaAcumulada: Double = 0.0
+
     
     private var isLowStock: Bool {
         producto.cantidad <= lowStockThreshold
@@ -633,7 +709,58 @@ fileprivate struct ProductoCard: View {
                 Spacer()
             }
             
-            // Footer acciones
+            // Footer acciones (Vender / Reponer / Editar)
+            VStack(spacing: 8) {
+                // Fila de botones de acción rápida
+                HStack(spacing: 12) {
+                    // Botón Vender (Solo baja stock, suma ganancia)
+                    Button {
+                        if producto.cantidad > 0 {
+                            producto.cantidad -= 1
+                            producto.vecesVendido += 1
+                            gananciaAcumulada += producto.precioVenta
+                        }
+                    } label: {
+                        Label("Vender", systemImage: "cart.badge.minus")
+                            .font(.caption).fontWeight(.semibold)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity)
+                            .background(producto.cantidad > 0 ? Color("MercedesPetrolGreen") : Color.gray)
+                            .foregroundColor(.white)
+                            .cornerRadius(6)
+                    }
+                    .disabled(producto.cantidad <= 0)
+                    .buttonStyle(.plain)
+                    
+                    // Botón Reponer (Sube stock, resta ganancia)
+                    Button {
+                        producto.cantidad += 1
+                        // Restar costo, pero ganancia no baja de 0
+                        gananciaAcumulada = max(0, gananciaAcumulada - producto.costo)
+                    } label: {
+                        Label("Reponer (+1)", systemImage: "shippingbox.fill")
+                            .font(.caption).fontWeight(.semibold)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity)
+                            .background(Color("MercedesCard"))
+                            .foregroundColor(.white)
+                            .cornerRadius(6)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+                
+                // Leyenda de reponer
+                Text("Usa Editar para reponer mayores cantidades.")
+                    .font(.caption2)
+                    .foregroundColor(.gray.opacity(0.7))
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .padding(.top, 4)
+            
             // Footer acciones
             HStack(alignment: .bottom) {
                 // Info Stock
