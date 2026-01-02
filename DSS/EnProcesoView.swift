@@ -17,6 +17,19 @@ struct EnProcesoView: View {
     @State private var searchQuery = ""
     @State private var filtroUrgencia: UrgenciaFiltro = .todos
     
+    // NUEVO: Filtros y Ordenamiento avanzados
+    enum SortOption: String, CaseIterable, Identifiable {
+        case fechaInicio = "Hora de Inicio"
+        case fechaFin = "Fin Estimado"
+        case cliente = "Cliente"
+        case servicio = "Servicio"
+        var id: String { rawValue }
+    }
+    
+    @State private var sortOption: SortOption = .fechaInicio
+    @State private var sortAscending: Bool = true
+    @State private var filtroMecanico: String = "Todos" // Guarda RFC o "Todos"
+    
     // Modales
     @State private var servicioACerrar: ServicioEnProceso?
     @State private var ticketAReprogramar: ServicioEnProceso?
@@ -40,21 +53,39 @@ struct EnProcesoView: View {
     
     // Derivados por estado
     private var ticketsProgramados: [ServicioEnProceso] {
-        baseFiltrado(todosLosTickets.filter { $0.estado == .programado })
-            .sorted { (a, b) in
-                let ai = a.fechaProgramadaInicio ?? a.horaInicio
-                let bi = b.fechaProgramadaInicio ?? b.horaInicio
-                return ai < bi
-            }
+        ordenarResultados(baseFiltrado(todosLosTickets.filter { $0.estado == .programado }))
     }
     private var ticketsEnProceso: [ServicioEnProceso] {
-        baseFiltrado(todosLosTickets.filter { $0.estado == .enProceso })
-            .sorted { $0.horaFinEstimada < $1.horaFinEstimada }
+        ordenarResultados(baseFiltrado(todosLosTickets.filter { $0.estado == .enProceso }))
+    }
+    
+    // Lógica consolidada de ordenamiento
+    private func ordenarResultados(_ lista: [ServicioEnProceso]) -> [ServicioEnProceso] {
+        lista.sorted { a, b in
+            switch sortOption {
+            case .fechaInicio:
+                let ai = a.fechaProgramadaInicio ?? a.horaInicio
+                let bi = b.fechaProgramadaInicio ?? b.horaInicio
+                return sortAscending ? (ai < bi) : (ai > bi)
+            case .fechaFin:
+                return sortAscending ? (a.horaFinEstimada < b.horaFinEstimada) : (a.horaFinEstimada > b.horaFinEstimada)
+            case .cliente:
+                let ca = a.vehiculo?.cliente?.nombre ?? ""
+                let cb = b.vehiculo?.cliente?.nombre ?? ""
+                return sortAscending ? (ca.localizedCaseInsensitiveCompare(cb) == .orderedAscending)
+                                     : (ca.localizedCaseInsensitiveCompare(cb) == .orderedDescending)
+            case .servicio:
+                return sortAscending ? (a.nombreServicio.localizedCaseInsensitiveCompare(b.nombreServicio) == .orderedAscending)
+                                     : (a.nombreServicio.localizedCaseInsensitiveCompare(b.nombreServicio) == .orderedDescending)
+            }
+        }
     }
     
     // Filtro de texto y urgencia compartido
     private func baseFiltrado(_ lista: [ServicioEnProceso]) -> [ServicioEnProceso] {
-        let base: [ServicioEnProceso]
+        var base: [ServicioEnProceso]
+        
+        // 1. Filtro Texto
         if searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             base = lista
         } else {
@@ -68,6 +99,25 @@ struct EnProcesoView: View {
                 return nombreServicioMatch || placasMatch || clienteMatch || mecanicoMatch
             }
         }
+        
+        // 2. Filtro Mecánico
+        if filtroMecanico != "Todos" {
+            base = base.filter { s in
+                // Coincidencia exacta por RFC si es posible, o por nombre si guardamos nombre.
+                // Como filtroMecanico guarda el nombre (o RFC), lo compararemos.
+                // Mejor usar RFC para precisión si tenemos acceso a la lista de personal.
+                // Aquí asumiré que filtroMecanico guarda el RFC.
+                if let _ = personal.first(where: { $0.rfc == filtroMecanico }) {
+                    // Es un RFC válido
+                    return s.rfcMecanicoAsignado == filtroMecanico || s.rfcMecanicoSugerido == filtroMecanico
+                } else {
+                    // Fallback a comparación flexible si fuera texto
+                    return true
+                }
+            }
+        }
+        
+        // 3. Filtro Urgencia
         switch filtroUrgencia {
         case .todos:
             return base
@@ -115,7 +165,7 @@ struct EnProcesoView: View {
                     // Sección Programados
                     sectionHeader("Programados", count: ticketsProgramados.count, systemImage: "calendar.badge.clock")
                     if ticketsProgramados.isEmpty {
-                        emptySection(texto: searchQuery.isEmpty && filtroUrgencia == .todos ? "No hay servicios programados." : "No hay servicios programados en este filtro.")
+                        emptySection(texto: searchQuery.isEmpty && filtroUrgencia == .todos && filtroMecanico == "Todos" ? "No hay servicios programados." : "No hay servicios programados con estos filtros.")
                     } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 360), spacing: 12)], spacing: 12) {
                             ForEach(ticketsProgramados) { ticket in
@@ -137,7 +187,7 @@ struct EnProcesoView: View {
                     // Sección En Proceso
                     sectionHeader("En Proceso", count: ticketsEnProceso.count, systemImage: "timer")
                     if ticketsEnProceso.isEmpty {
-                        emptySection(texto: searchQuery.isEmpty && filtroUrgencia == .todos ? "No hay servicios en proceso." : "No hay servicios en proceso en este filtro.")
+                        emptySection(texto: searchQuery.isEmpty && filtroUrgencia == .todos && filtroMecanico == "Todos" ? "No hay servicios en proceso." : "No hay servicios en proceso con estos filtros.")
                     } else {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 360), spacing: 12)], spacing: 12) {
                             ForEach(ticketsEnProceso) { servicio in
@@ -248,6 +298,11 @@ struct EnProcesoView: View {
         }
     }
     
+    // Lista de mecánicos disponibles en el sistema (activos) para el filtro
+    private var listaMecanicos: [Personal] {
+        personal.filter { $0.activo && $0.rol != .atencionCliente }.sorted { $0.nombre < $1.nombre }
+    }
+    
     private var filtrosView: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
@@ -274,50 +329,117 @@ struct EnProcesoView: View {
                 .background(Color("MercedesCard"))
                 .cornerRadius(8)
                 
-                // Urgencia
-                Picker("Urgencia", selection: $filtroUrgencia) {
-                    ForEach(UrgenciaFiltro.allCases) { f in
-                        Text(f.rawValue).tag(f)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: 180)
-                .help("Filtrar por urgencia")
-                
-                // Filtros activos + limpiar (solo si aplica)
-                if !searchQuery.isEmpty || filtroUrgencia != .todos {
-                    HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                        Text("Filtros activos")
-                        if !searchQuery.isEmpty {
-                            Text("“\(searchQuery)”")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if filtroUrgencia != .todos {
-                            Text("Urgencia: \(filtroUrgencia.rawValue)")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        Button {
-                            withAnimation {
-                                searchQuery = ""
-                                filtroUrgencia = .todos
+                // Menú Unificado de Filtros
+                Menu {
+                    // Sección 1: Ordenamiento
+                    Section("Ordenamiento") {
+                        ForEach(SortOption.allCases) { opt in
+                            Button {
+                                sortOption = opt
+                            } label: {
+                                if sortOption == opt {
+                                    Label(opt.rawValue, systemImage: "checkmark")
+                                } else {
+                                    Text(opt.rawValue)
+                                }
                             }
-                        } label: {
-                            Text("Limpiar")
-                                .font(.caption2)
-                                .padding(.horizontal, 6).padding(.vertical, 4)
-                                .background(Color("MercedesCard"))
-                                .cornerRadius(6)
                         }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.gray)
-                        .help("Quitar filtros activos")
                     }
-                    .font(.caption2)
-                    .foregroundColor(.gray)
+                    
+                    Divider()
+                    
+                    // Sección 2: Mecánico (Filtrado)
+                    Section("Filtrar por Mecánico") {
+                        Button {
+                            filtroMecanico = "Todos"
+                        } label: {
+                            if filtroMecanico == "Todos" {
+                                Label("Todos", systemImage: "checkmark")
+                            } else {
+                                Text("Todos")
+                            }
+                        }
+                        ForEach(listaMecanicos) { mec in
+                            Button {
+                                filtroMecanico = mec.rfc
+                            } label: {
+                                if filtroMecanico == mec.rfc {
+                                    Label(mec.nombre, systemImage: "checkmark")
+                                } else {
+                                    Text(mec.nombre)
+                                }
+                            }
+                        }
+                    }
+                     
+                    Divider()
+                    
+                    // Sección 3: Urgencia / Tiempo
+                    Section("Tiempo / Estado") {
+                        ForEach(UrgenciaFiltro.allCases) { f in
+                            Button {
+                                filtroUrgencia = f
+                            } label: {
+                                if filtroUrgencia == f {
+                                    Label(f.rawValue, systemImage: "checkmark")
+                                } else {
+                                    Text(f.rawValue)
+                                }
+                            }
+                        }
+                    }
+                    
+                } label: {
+                    HStack(spacing: 6) {
+                        // Texto dinámico: Prioridad Mecánico > Urgencia > Orden
+                        let labelText: String = {
+                            var parts: [String] = []
+                            if filtroMecanico != "Todos" {
+                                // Buscar nombre para mostrar bonito
+                                let nombre = listaMecanicos.first(where: { $0.rfc == filtroMecanico })?.nombre ?? "Mecánico"
+                                parts.append(nombre)
+                            }
+                            if filtroUrgencia != .todos {
+                                parts.append(filtroUrgencia.rawValue)
+                            }
+                            if parts.isEmpty {
+                                return "Ordenar por \(sortOption.rawValue)"
+                            } else {
+                                return parts.joined(separator: " + ")
+                            }
+                        }()
+                        
+                        Text(labelText)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    }
+                    .font(.subheadline)
+                    .padding(8)
+                    .background(Color("MercedesCard"))
+                    .cornerRadius(8)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
                 }
+                .menuStyle(.borderlessButton)
+                .frame(width: 220)
+                
+                // Botón dirección (Asc/Desc)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        sortAscending.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                    }
+                    .font(.subheadline)
+                    .padding(8)
+                    .background(Color("MercedesCard"))
+                    .cornerRadius(8)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                }
+                .buttonStyle(.plain)
+                .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
                 
                 Spacer()
             }
@@ -661,7 +783,7 @@ fileprivate struct ProgramadoCard: View {
             }
             Divider().opacity(0.5)
             HStack(spacing: 8) {
-                Button {
+                /* Button {
                     onIniciarAhora()
                 } label: {
                     Label("Iniciar ahora", systemImage: "play.circle.fill")
@@ -671,7 +793,7 @@ fileprivate struct ProgramadoCard: View {
                         .foregroundColor(.white)
                         .cornerRadius(8)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain) */
                 
                 Button {
                     onReprogramar()
