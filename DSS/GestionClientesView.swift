@@ -19,11 +19,20 @@ fileprivate enum ModalMode: Identifiable {
     }
 }
 
-// Ordenamiento (alineado a InventarioView/PersonalView)
-fileprivate enum SortOption: String, CaseIterable, Identifiable {
-    case nombre = "Nombre"
-    case vehiculos = "Vehículos"
-    var id: String { rawValue }
+// --- MODO DE VISTA UNIFICADO ---
+fileprivate enum ViewMode: Equatable {
+    case standard // Por Nombre (All)
+    case byMake(String) // Filter by Brand
+    case byModel(String) // Filter by Model
+    
+    static func == (lhs: ViewMode, rhs: ViewMode) -> Bool {
+        switch (lhs, rhs) {
+        case (.standard, .standard): return true
+        case (.byMake(let m1), .byMake(let m2)): return m1 == m2
+        case (.byModel(let m1), .byModel(let m2)): return m1 == m2
+        default: return false
+        }
+    }
 }
 
 // Helper de validación de nombre de cliente
@@ -54,11 +63,39 @@ struct GestionClientesView: View {
     
     @State private var modalMode: ModalMode?
     @State private var searchQuery = ""
-    @State private var sortOption: SortOption = .nombre
+    
+    // Configuración de vista unificada
+    @State private var viewMode: ViewMode = .standard
     @State private var sortAscending: Bool = true
+    
+    // Listas únicas para filtros
+    private var allMakes: [String] {
+        let makes = clientes.flatMap { $0.vehiculos }.map { $0.marca }
+        return Array(Set(makes)).sorted()
+    }
+    
+    private var allModels: [String] {
+        let models = clientes.flatMap { $0.vehiculos }.map { $0.modelo }
+        return Array(Set(models)).sorted()
+    }
     
     var filteredClientes: [Cliente] {
         var base = clientes
+        
+        // 0. Filtro previo por Modo (Marca/Modelo)
+        switch viewMode {
+        case .standard:
+            break // No filtrar, mostrar todos
+        case .byMake(let make):
+            base = base.filter { client in
+                client.vehiculos.contains { $0.marca == make }
+            }
+        case .byModel(let model):
+            base = base.filter { client in
+                client.vehiculos.contains { $0.modelo == model }
+            }
+        }
+        
         if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let query = searchQuery.lowercased()
             base = base.filter { cliente in
@@ -74,15 +111,10 @@ struct GestionClientesView: View {
                 return nombreMatch || telefonoMatch || emailMatch || vehiculosMatch
             }
         }
-        // Ordenamiento
+        // Ordenamiento siempre por nombre (el filtrado ya redujo la lista)
         base.sort { a, b in
-            switch sortOption {
-            case .nombre:
-                let cmp = a.nombre.localizedCaseInsensitiveCompare(b.nombre)
-                return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
-            case .vehiculos:
-                return sortAscending ? (a.vehiculos.count < b.vehiculos.count) : (a.vehiculos.count > b.vehiculos.count)
-            }
+            let cmp = a.nombre.localizedCaseInsensitiveCompare(b.nombre)
+            return sortAscending ? (cmp == .orderedAscending) : (cmp == .orderedDescending)
         }
         return base
     }
@@ -226,70 +258,82 @@ struct GestionClientesView: View {
                 .background(Color("MercedesCard"))
                 .cornerRadius(8)
                 
-                // Orden
-                HStack(spacing: 6) {
-                    Picker("Ordenar", selection: $sortOption) {
-                        ForEach(SortOption.allCases) { opt in
-                            Text(opt.rawValue).tag(opt)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 160)
+                // Menú Unificado de Ordenar
+                Menu {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            sortAscending.toggle()
-                        }
+                        viewMode = .standard
                     } label: {
-                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                            .font(.subheadline)
-                            .padding(6)
-                            .background(Color("MercedesCard"))
-                            .cornerRadius(6)
+                        if viewMode == .standard { Label("Mostrar Todos", systemImage: "checkmark") }
+                        else { Text("Mostrar Todos") }
                     }
-                    .buttonStyle(.plain)
-                    .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
-                }
-                
-                // Filtros activos + limpiar (solo si aplica)
-                if !searchQuery.isEmpty || sortOption != .nombre || sortAscending == false {
-                    HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                        Text("Filtros activos")
-                        if !searchQuery.isEmpty {
-                            Text("“\(searchQuery)”")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if sortOption != .nombre {
-                            Text("Orden: \(sortOption.rawValue)")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if sortAscending == false {
-                            Text("Descendente")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        Button {
-                            withAnimation {
-                                searchQuery = ""
-                                sortOption = .nombre
-                                sortAscending = true
+                    
+                    Menu("Filtrar por Marca...") {
+                        ForEach(allMakes, id: \.self) { make in
+                            Button {
+                                viewMode = .byMake(make)
+                            } label: {
+                                if case .byMake(let m) = viewMode, m == make {
+                                    Label(make, systemImage: "checkmark")
+                                } else {
+                                    Text(make)
+                                }
                             }
-                        } label: {
-                            Text("Limpiar")
-                                .font(.caption2)
-                                .padding(.horizontal, 6).padding(.vertical, 4)
-                                .background(Color("MercedesCard"))
-                                .cornerRadius(6)
                         }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.gray)
-                        .help("Quitar filtros activos")
                     }
-                    .font(.caption2)
-                    .foregroundColor(.gray)
+                    
+                    Menu("Filtrar por Modelo...") {
+                        ForEach(allModels, id: \.self) { model in
+                            Button {
+                                viewMode = .byModel(model)
+                            } label: {
+                                if case .byModel(let m) = viewMode, m == model {
+                                    Label(model, systemImage: "checkmark")
+                                } else {
+                                    Text(model)
+                                }
+                            }
+                        }
+                    }
+
+                } label: {
+                    HStack(spacing: 6) {
+                        // Texto dinámico para el botón Ordenar
+                        let labelText: String = {
+                            switch viewMode {
+                            case .standard: return "Mostrar Todos"
+                            case .byMake(let m): return "Marca: \(m)"
+                            case .byModel(let m): return "Modelo: \(m)"
+                            }
+                        }()
+                        
+                        Text(labelText)
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    }
+                    .font(.subheadline)
+                    .padding(8)
+                    .background(Color("MercedesCard"))
+                    .cornerRadius(8)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
                 }
+                .menuStyle(.borderlessButton)
+                .frame(width: 180)
+
+                // Botón Ascendente/Descendente (Al lado)
+                Button {
+                    withAnimation { sortAscending.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                        Text(sortAscending ? "Ascendente" : "Descendente")
+                    }
+                    .font(.subheadline)
+                    .padding(8)
+                    .background(Color("MercedesCard"))
+                    .cornerRadius(8)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                }
+                .help(sortAscending ? "Ascendente" : "Descendente")
+                .buttonStyle(.plain)
                 
                 Spacer()
             }
@@ -301,15 +345,29 @@ struct GestionClientesView: View {
             Image(systemName: "person.badge.key.fill")
                 .font(.system(size: 36, weight: .bold))
                 .foregroundColor(Color("MercedesPetrolGreen"))
-            Text(searchQuery.isEmpty ? "No hay clientes registrados aún." :
-                 "No se encontraron clientes para “\(searchQuery)”.")
+                // Mensajes contextuales según el modo
+                Group {
+                    if !searchQuery.isEmpty {
+                        Text("No se encontraron clientes para “\(searchQuery)”.")
+                    } else {
+                        switch viewMode {
+                        case .standard:
+                            Text("No hay clientes registrados aún.")
+                        case .byMake(let make):
+                            Text("No hay clientes con autos de la marca \(make).")
+                        case .byModel(let model):
+                            Text("No hay clientes con autos modelo \(model).")
+                        }
+                        
+                        if case .standard = viewMode {
+                            Text("Añade tu primer cliente para empezar a registrar vehículos.")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
                 .font(.subheadline)
                 .foregroundColor(.gray)
-            if searchQuery.isEmpty {
-                Text("Añade tu primer cliente para empezar a registrar vehículos.")
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-            }
         }
     }
 }
