@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 import LocalAuthentication
 import Network
+import UniformTypeIdentifiers // [NEW]
 
 // ID Constante para el chat
 private let strategicConversationID = UUID()
@@ -42,6 +43,11 @@ struct ConsultaView: View {
     @State private var personalModalMode: PersonalModalMode?
     @State private var clientModalMode: ClientModalMode?
     
+    // Estados para Archivos Adjuntos [NEW]
+    @State private var showFileImporter = false
+    @State private var attachedFileName: String?
+    @State private var attachedFileContent: String?
+    
     // UI
     @State private var showClearConfirm = false
     @State private var showCopiedToast = false
@@ -50,6 +56,7 @@ struct ConsultaView: View {
     // Feedback de erroes en shortcuts
     @State private var showingNotFoundError = false
     @State private var notFoundItemName = ""
+
     
     // Límite de caracteres para el input del usuario
     private let maxUserChars = 500
@@ -81,6 +88,14 @@ struct ConsultaView: View {
             
             // Input
             inputBar
+            
+            VStack(spacing: 2) {
+                Text("La IA puede cometer errores. Por favor verifica las respuestas.")
+                Text("Entre más interactúes, el asistente responderá de manera más inteligente.")
+            }
+            .font(.caption2)
+            .foregroundColor(.gray)
+            .frame(maxWidth: .infinity)
             
             if let error = service.errorMessage {
                 HStack(spacing: 8) {
@@ -612,7 +627,45 @@ struct ConsultaView: View {
     // MARK: - Input Bar
     private var inputBar: some View {
         VStack(alignment: .leading, spacing: 4) {
+            
+            // Indicador de archivo adjunto
+            if let fileName = attachedFileName {
+                HStack {
+                    Image(systemName: "doc.text.fill")
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                    Text(fileName)
+                        .font(.caption)
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    Spacer()
+                    
+                    Button {
+                        clearAttachment()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(8)
+                .background(Color("MercedesCard"))
+                .cornerRadius(8)
+                .padding(.bottom, 2)
+            }
+            
             HStack(spacing: 8) {
+                // Botón de adjuntar
+                Button {
+                    showFileImporter = true
+                } label: {
+                    Image(systemName: "paperclip")
+                        .font(.system(size: 20))
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                }
+                .buttonStyle(.plain)
+                .help("Adjuntar archivo (Excel .xlsx / CSV)")
+                
                 HStack(spacing: 8) {
                     Image(systemName: "bubble.left.and.bubble.right.fill")
                         .foregroundColor(Color("MercedesPetrolGreen"))
@@ -673,6 +726,16 @@ struct ConsultaView: View {
             }
             .padding(.leading, 4)
         }
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [
+                UTType(filenameExtension: "xlsx") ?? .data,
+                .commaSeparatedText
+            ],
+            allowsMultipleSelection: false
+        ) { result in
+            handleFileImport(result)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Barra de entrada de texto")
     }
@@ -707,18 +770,50 @@ struct ConsultaView: View {
     
     private func sendMessage() {
         let prompt = userPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !prompt.isEmpty,
+        
+        // Permitimos enviar si hay archivo adjunto aunque el prompt sea muy corto, 
+        // pero validamos que haya "algo" (texto o archivo).
+        let hasAttachment = attachedFileContent != nil
+        guard (!prompt.isEmpty || hasAttachment),
               service.isModelLoaded,
               !service.isGenerating,
               prompt.count <= maxUserChars else { return }
+        
         userPrompt = ""
         
-        insertUserMessage(prompt)
+        // Construimos mensaje visual para el usuario
+        var visualMessage = prompt
+        
+        // Construimos el mensaje completo para la IA
+        var fullPromptToAI = prompt
+        
+        if let fileContent = attachedFileContent, let fileName = attachedFileName {
+            // Visualmente mostramos un indicador (o nada extra si ya se vio el chip)
+            // Agregamos una nota visual sutil en el historial
+            if !visualMessage.isEmpty { visualMessage += "\n\n" }
+            visualMessage += "📎 [Archivo Adjunto: \(fileName)]"
+            
+            // A la IA le mandamos todo el contenido
+            fullPromptToAI += """
+            
+            
+            [INICIO ARCHIVO ADJUNTO: \(fileName)]
+            \(fileContent)
+            [FIN ARCHIVO ADJUNTO]
+            
+            Instrucción adicional: Analiza el contenido de este archivo. Si el contenido NO tiene relación con la gestión del taller mecánico, inventario, ventas, personal o servicios, responde únicamente: "El archivo adjunto no parece estar relacionado con el negocio del taller mecánico." y detente. Si es relevante, procede con la solicitud del usuario.
+            """
+            
+            // Limpiamos adjunto después de enviar
+            clearAttachment()
+        }
+        
+        insertUserMessage(visualMessage)
         
         Task {
             await service.refreshMasterContext(modelContext: modelContext)
             await MainActor.run { service.isGenerating = true }
-            await service.ask(prompt)
+            await service.ask(fullPromptToAI)
             await MainActor.run {
                 service.isGenerating = false
                 if !service.outputText.isEmpty {
@@ -726,6 +821,36 @@ struct ConsultaView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - File Handling
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            
+            // Usamos nuestro Handler
+            if let fileParams = FileImportHandler.readText(from: url) {
+                // Éxito
+                self.attachedFileName = fileParams.name
+                self.attachedFileContent = fileParams.content
+            } else {
+                // Fallo (quizás binario no soportado)
+                self.attachedFileName = "Error al leer \(url.lastPathComponent)"
+                self.attachedFileContent = nil
+                
+                // Podríamos mostrar una alerta aquí
+                print("No se pudo leer el archivo (quizás es binario o Excel no soportado directamente)")
+            }
+            
+        case .failure(let error):
+            print("Error importando archivo: \(error.localizedDescription)")
+        }
+    }
+    
+    private func clearAttachment() {
+        attachedFileName = nil
+        attachedFileContent = nil
     }
     
     private func insertUserMessage(_ text: String) {
