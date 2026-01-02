@@ -30,7 +30,7 @@ struct ServiciosView: View {
     // Ordenamiento (patrón InventarioView)
     enum SortOption: String, CaseIterable, Identifiable {
         case nombre = "Nombre"
-        case precio = "Precio final"
+        case precio = "Precio"
         case duracion = "Duración"
         var id: String { rawValue }
     }
@@ -48,8 +48,12 @@ struct ServiciosView: View {
             }
         }
         
-        // Filtro de activos (por defecto solo ver activos)
-        if !incluirInactivos {
+        // Filtro de activos/inactivos
+        if incluirInactivos {
+            // Modo "Ver inactivos": Solo inactivos
+            base = base.filter { !$0.activo }
+        } else {
+            // Modo normal: Solo activos
             base = base.filter { $0.activo }
         }
         
@@ -172,6 +176,7 @@ struct ServiciosView: View {
     
     private var filtrosView: some View {
         VStack(spacing: 8) {
+            // Única barra: búsqueda + orden + limpiar
             HStack(spacing: 8) {
                 // Buscar
                 HStack(spacing: 8) {
@@ -196,76 +201,94 @@ struct ServiciosView: View {
                 .background(Color("MercedesCard"))
                 .cornerRadius(8)
                 
-                // Orden
+                // Orden (Consolidado)
                 HStack(spacing: 6) {
-                    Picker("Ordenar", selection: $sortOption) {
-                        ForEach(SortOption.allCases) { opt in
-                            Text(opt.rawValue).tag(opt)
+                    Menu {
+                        // Sección 1: Ordenamiento General (Activos)
+                        Button {
+                            // Resetear filtros
+                            incluirInactivos = false
+                            sortOption = .nombre
+                        } label: {
+                            if !incluirInactivos && sortOption == .nombre {
+                                Label("Ordenar por Nombre", systemImage: "checkmark")
+                            } else {
+                                Text("Ordenar por Nombre")
+                            }
                         }
+                        
+                        Button {
+                            incluirInactivos = false
+                            sortOption = .precio
+                        } label: {
+                            if !incluirInactivos && sortOption == .precio {
+                                Label("Ordenar por Precio", systemImage: "checkmark")
+                            } else {
+                                Text("Ordenar por Precio")
+                            }
+                        }
+                        
+                        Button {
+                            incluirInactivos = false
+                            sortOption = .duracion
+                        } label: {
+                            if !incluirInactivos && sortOption == .duracion {
+                                Label("Ordenar por Duración", systemImage: "checkmark")
+                            } else {
+                                Text("Ordenar por Duración")
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        // Sección 2: Inactivos
+                        Button {
+                            incluirInactivos = true
+                        } label: {
+                            if incluirInactivos {
+                                Label("Ver inactivos", systemImage: "checkmark")
+                            } else {
+                                Text("Ver inactivos")
+                            }
+                        }
+                        
+                    } label: {
+                         HStack(spacing: 6) {
+                            // Texto dinámico: Prioridad Inactivos > Orden
+                            let labelText: String = {
+                                if incluirInactivos { return "Ver inactivos" }
+                                return "Ordenar por \(sortOption.rawValue)"
+                            }()
+                            
+                            Text(labelText)
+                            Image(systemName: "line.3.horizontal.decrease.circle")
+                        }
+                        .font(.subheadline)
+                        .padding(8)
+                        .background(Color("MercedesCard"))
+                        .cornerRadius(8)
+                        .foregroundColor(Color("MercedesPetrolGreen"))
                     }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 160)
+                    .menuStyle(.borderlessButton)
+                    .frame(width: 200)
+
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             sortAscending.toggle()
                         }
                     } label: {
-                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                            .font(.subheadline)
-                            .padding(6)
-                            .background(Color("MercedesCard"))
-                            .cornerRadius(6)
+                        HStack(spacing: 6) {
+                            Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                            Text(sortAscending ? "Ascendente" : "Descendente")
+                        }
+                        .font(.subheadline)
+                        .padding(8)
+                        .background(Color("MercedesCard"))
+                        .cornerRadius(8)
+                        .foregroundColor(Color("MercedesPetrolGreen"))
                     }
                     .buttonStyle(.plain)
                     .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
-                }
-                
-                // Toggle inactivos (alineado a la derecha junto al spacer)
-                Toggle("Ver inactivos", isOn: $incluirInactivos)
-                    .toggleStyle(.switch)
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                    .help("Mostrar servicios dados de baja temporalmente")
-                
-                // Filtros activos + limpiar (si aplica)
-                if !searchQuery.isEmpty || sortOption != .nombre || sortAscending == false {
-                    HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                        Text("Filtros activos")
-                        if !searchQuery.isEmpty {
-                            Text("“\(searchQuery)”")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if sortOption != .nombre {
-                            Text("Orden: \(sortOption.rawValue)")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if sortAscending == false {
-                            Text("Descendente")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        Button {
-                            withAnimation {
-                                searchQuery = ""
-                                sortOption = .nombre
-                                sortAscending = true
-                            }
-                        } label: {
-                            Text("Limpiar")
-                                .font(.caption2)
-                                .padding(.horizontal, 6).padding(.vertical, 4)
-                                .background(Color("MercedesCard"))
-                                .cornerRadius(6)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.gray)
-                        .help("Quitar filtros activos")
-                    }
-                    .font(.caption2)
-                    .foregroundColor(.gray)
                 }
                 
                 Spacer()
