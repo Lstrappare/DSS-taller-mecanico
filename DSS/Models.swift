@@ -824,8 +824,11 @@ class ServicioEnProceso {
     }
     
     // Helper de solape: [inicio, fin) se solapa si inicio < tf && fin > ti
-    static func existeSolape(paraRFC rfc: String, inicio: Date, fin: Date, tickets: [ServicioEnProceso]) -> Bool {
+    static func existeSolape(paraRFC rfc: String, inicio: Date, fin: Date, tickets: [ServicioEnProceso], ignoringID: UUID? = nil) -> Bool {
         for t in tickets {
+            // Si nos pasaron un ID a ignorar (el ticket que estamos reprogramando), lo saltamos
+            if let ignore = ignoringID, t.id == ignore { continue }
+            
             guard (t.estado == .programado || t.estado == .enProceso) else { continue }
             guard t.rfcMecanicoAsignado == rfc || t.rfcMecanicoSugerido == rfc else { continue }
             let ti = t.fechaProgramadaInicio ?? t.horaInicio

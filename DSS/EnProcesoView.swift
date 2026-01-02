@@ -862,6 +862,17 @@ fileprivate struct ProgramarTicketModal: View {
     @State private var candidato: Personal?
     @State private var conflictoMensaje: String?
     @State private var stockAdvertencia: String?
+    @State private var horaTexto: String = ""
+
+    var isHoraValida: Bool {
+        let cal = Calendar.current
+        let hora = cal.component(.hour, from: fechaInicio)
+        let minuto = cal.component(.minute, from: fechaInicio)
+        if hora < 6 { return false }
+        if hora > 20 { return false }
+        if hora == 20 && minuto > 0 { return false }
+        return true
+    }
     
     init(ticket: ServicioEnProceso,
          personal: [Personal],
@@ -876,6 +887,10 @@ fileprivate struct ProgramarTicketModal: View {
         
         _fechaInicio = State(initialValue: ticket.fechaProgramadaInicio ?? Date().addingTimeInterval(2 * 3600))
         _candidato = State(initialValue: nil)
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        _horaTexto = State(initialValue: formatter.string(from: (ticket.fechaProgramadaInicio ?? Date().addingTimeInterval(2 * 3600))))
     }
     
     var body: some View {
@@ -903,7 +918,41 @@ fileprivate struct ProgramarTicketModal: View {
                 Text("Fecha y hora de inicio").font(.headline)
                 DatePicker("", selection: $fechaInicio, displayedComponents: [.date, .hourAndMinute])
                     .datePickerStyle(.graphical)
-                    .onChange(of: fechaInicio) { _, _ in recalcularCandidato() }
+                    .onChange(of: fechaInicio) { _, newValue in
+                         recalcularCandidato()
+                         let formatter = DateFormatter()
+                         formatter.dateFormat = "HH:mm"
+                         let str = formatter.string(from: newValue)
+                         if horaTexto != str { horaTexto = str }
+                    }
+                
+                // Input manual de hora y validación
+                HStack {
+                    Image(systemName: "clock").foregroundColor(.gray)
+                    TextField("HH:mm (24h)", text: $horaTexto)
+                        .textFieldStyle(.plain)
+                        .onChange(of: horaTexto) { _, newValue in
+                            let formatter = DateFormatter()
+                            formatter.dateFormat = "HH:mm"
+                            if let dateTime = formatter.date(from: newValue) {
+                                let cal = Calendar.current
+                                let compTime = cal.dateComponents([.hour, .minute], from: dateTime)
+                                let compDate = cal.dateComponents([.year, .month, .day], from: fechaInicio)
+                                var newComps = DateComponents()
+                                newComps.year = compDate.year
+                                newComps.month = compDate.month
+                                newComps.day = compDate.day
+                                newComps.hour = compTime.hour
+                                newComps.minute = compTime.minute
+                                if let newDate = cal.date(from: newComps), newDate != fechaInicio {
+                                    fechaInicio = newDate
+                                }
+                            }
+                        }
+                }
+                .padding(8)
+                .background(Color("MercedesBackground"))
+                .cornerRadius(8)
                 Text("Fin estimado: \(fechaInicio.addingTimeInterval(ticket.duracionHoras * 3600).formatted(date: .abbreviated, time: .shortened))")
                     .font(.caption).foregroundColor(.gray)
             }
@@ -937,6 +986,18 @@ fileprivate struct ProgramarTicketModal: View {
                         .font(.caption)
                         .foregroundColor(.orange)
                 }
+
+                if fechaInicio < Date() {
+                    Label("La fecha de inicio no puede ser en el pasado.", systemImage: "xmark.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+                
+                if !isHoraValida {
+                    Label("El horario de programación debe ser entre 06:00 AM y 08:00 PM.", systemImage: "clock.badge.exclamationmark.fill")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
             }
             .padding()
             .background(Color("MercedesCard"))
@@ -961,8 +1022,8 @@ fileprivate struct ProgramarTicketModal: View {
                         .cornerRadius(8)
                 }
                 .buttonStyle(.plain)
-                .disabled(candidato == nil)
-                .opacity((candidato == nil) ? 0.6 : 1.0)
+                .disabled(candidato == nil || fechaInicio < Date() || !isHoraValida)
+                .opacity((candidato == nil || fechaInicio < Date() || !isHoraValida) ? 0.6 : 1.0)
             }
         }
         .padding(24)
@@ -1000,7 +1061,7 @@ fileprivate struct ProgramarTicketModal: View {
         }
         
         let candidatosSinSolape = candidatosBase.filter {
-            !ServicioEnProceso.existeSolape(paraRFC: $0.rfc, inicio: fechaInicio, fin: endDate, tickets: todosLosTickets)
+            !ServicioEnProceso.existeSolape(paraRFC: $0.rfc, inicio: fechaInicio, fin: endDate, tickets: todosLosTickets, ignoringID: ticket.id)
         }
         
         if let rfcSug = ticket.rfcMecanicoSugerido,
