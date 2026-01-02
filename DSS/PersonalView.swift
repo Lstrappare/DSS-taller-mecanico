@@ -4,7 +4,7 @@ import LocalAuthentication
 import UniformTypeIdentifiers
 
 // --- MODO DEL MODAL ---
-fileprivate enum ModalMode: Identifiable, Equatable {
+enum PersonalModalMode: Identifiable, Equatable {
     case add
     case edit(Personal)
     
@@ -39,7 +39,7 @@ struct PersonalView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Personal.nombre) private var personal: [Personal]
     
-    @State private var modalMode: ModalMode?
+    @State private var modalMode: PersonalModalMode?
     @State private var searchQuery = ""
     
     // Configuración de vista unificada
@@ -570,7 +570,7 @@ fileprivate struct PersonalCard: View {
 }
 
 // --- VISTA DEL FORMULARIO PROFESIONAL ---
-fileprivate struct PersonalFormView: View {
+struct PersonalFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query private var allPersonal: [Personal]
@@ -579,8 +579,8 @@ fileprivate struct PersonalFormView: View {
     @AppStorage("user_password") private var userPassword = ""
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
 
-    let mode: ModalMode
-    @Binding var parentMode: ModalMode?
+    let mode: PersonalModalMode
+    @Binding var parentMode: PersonalModalMode?
     
     // Datos personales
     @State private var nombre = ""
@@ -709,7 +709,7 @@ fileprivate struct PersonalFormView: View {
         return Array(unique).sorted()
     }
     
-    init(mode: ModalMode, parentMode: Binding<ModalMode?>) {
+    init(mode: PersonalModalMode, parentMode: Binding<PersonalModalMode?>) {
         self.mode = mode
         self._parentMode = parentMode
         if case .edit(let personal) = mode {

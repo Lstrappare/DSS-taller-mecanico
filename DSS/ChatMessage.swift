@@ -12,6 +12,7 @@ private let typingID = UUID()
 struct ConsultaView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var service: AIStrategistService
+    @EnvironmentObject private var appState: AppNavigationState
     
     @State private var userPrompt = ""
     
@@ -34,6 +35,11 @@ struct ConsultaView: View {
     @Query private var tickets: [ServicioEnProceso]
     @Query(sort: \DecisionRecord.fecha, order: .reverse) private var decisiones: [DecisionRecord]
     
+    // Estados para Modales (Shortcuts)
+    @State private var productModalMode: ProductModalMode?
+    @State private var serviceModalMode: ServiceModalMode?
+    @State private var personalModalMode: PersonalModalMode?
+    
     // UI
     @State private var showClearConfirm = false
     @State private var showCopiedToast = false
@@ -41,6 +47,14 @@ struct ConsultaView: View {
     
     // Límite de caracteres para el input del usuario
     private let maxUserChars = 500
+    
+    // Tipos de Acción Detectados
+    enum ActionTag: Equatable {
+        case openProduct(String)
+        case openService(String)
+        case openPersonal(String)
+        case scheduleService(String)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -106,6 +120,31 @@ struct ConsultaView: View {
             Button("Cancelar", role: .cancel) { }
         } message: {
             Text("Esta acción eliminará el historial de esta conversación.")
+        }
+        // Sheets para Acciones
+        .sheet(item: $productModalMode) { mode in
+            ProductFormView(mode: $productModalMode, initialMode: mode)
+                .environment(\.modelContext, modelContext)
+                .id(mode.id)
+        }
+        .sheet(item: $personalModalMode) { mode in
+            PersonalFormView(mode: mode, parentMode: $personalModalMode)
+                .environment(\.modelContext, modelContext)
+                .id(mode.id)
+        }
+        .sheet(item: $serviceModalMode) { mode in
+            Group {
+                switch mode {
+                case .add:
+                    ServicioFormView(mode: .add, modalMode: $serviceModalMode)
+                case .edit(let s):
+                    ServicioFormView(mode: .edit(s), modalMode: $serviceModalMode)
+                case .schedule(let s):
+                    ProgramarServicioModal(servicio: s, appState: appState)
+                }
+            }
+            .environment(\.modelContext, modelContext)
+            .id(mode.id)
         }
     }
     
@@ -283,7 +322,10 @@ struct ConsultaView: View {
     }
     
     private func messageBubble(for msg: ChatMessage) -> some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        // Parsing de Acciones
+        let (displayText, actions) = parseMessageActions(msg.content)
+        
+        return HStack(alignment: .bottom, spacing: 8) {
             if msg.isFromUser == false {
                 avatar(system: "sparkles", color: Color("MercedesPetrolGreen"))
             } else {
@@ -291,11 +333,22 @@ struct ConsultaView: View {
             }
             
             VStack(alignment: .leading, spacing: 6) {
-                Text(msg.content)
+                Text(displayText)
                     .font(.body)
                     .foregroundColor(.white)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                
+                // --- BOTONES DE ACCIÓN (Shortcuts) ---
+                if !actions.isEmpty && !msg.isFromUser {
+                    HStack(spacing: 8) {
+                        ForEach(actions.indices, id: \.self) { i in
+                            actionButton(for: actions[i])
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+                // -------------------------------------
                 
                 HStack(spacing: 8) {
                     Text(msg.date.formatted(date: .omitted, time: .shortened))
@@ -307,7 +360,7 @@ struct ConsultaView: View {
                             #if os(macOS)
                             let pb = NSPasteboard.general
                             pb.clearContents()
-                            pb.setString(msg.content, forType: .string)
+                            pb.setString(displayText, forType: .string)
                             #endif
                             withAnimation { showCopiedToast = true }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
@@ -349,6 +402,96 @@ struct ConsultaView: View {
         .animation(.easeInOut(duration: 0.15), value: messages.count)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(msg.isFromUser ? "Mensaje del usuario" : "Mensaje del asistente")
+    }
+    
+    // Renderizado del botón de acción
+    private func actionButton(for action: ActionTag) -> some View {
+        Button {
+            executeAction(action)
+        } label: {
+            HStack(spacing: 6) {
+                switch action {
+                case .openProduct(let name):
+                    Label("Ver/Editar \(name)", systemImage: "shippingbox.fill")
+                case .openService(let name):
+                    Label("Ver/Editar \(name)", systemImage: "wrench.and.screwdriver.fill")
+                case .openPersonal(let name):
+                    Label("Ver/Editar \(name)", systemImage: "person.fill")
+                case .scheduleService(let name):
+                    Label("Programar \(name)", systemImage: "calendar.badge.plus")
+                }
+            }
+            .font(.caption).fontWeight(.medium)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Color("MercedesPetrolGreen").opacity(0.2))
+            .foregroundColor(Color("MercedesPetrolGreen"))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color("MercedesPetrolGreen").opacity(0.5), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // --- LÓGICA DE EJECUCIÓN ---
+    private func executeAction(_ action: ActionTag) {
+        switch action {
+        case .openProduct(let name):
+            if let p = productos.first(where: { $0.nombre.localizedCaseInsensitiveContains(name) }) {
+                productModalMode = .edit(p)
+            } else {
+                // Si no se encuentra exacto, abrir modal de buscar o nada
+            }
+        case .openService(let name):
+            if let s = servicios.first(where: { $0.nombre.localizedCaseInsensitiveContains(name) }) {
+                serviceModalMode = .edit(s)
+            }
+        case .openPersonal(let name):
+            if let p = personal.first(where: { $0.nombre.localizedCaseInsensitiveContains(name) }) {
+                personalModalMode = .edit(p)
+            }
+        case .scheduleService(let name):
+            // Buscar si existe el servicio
+            if let s = servicios.first(where: { $0.nombre.localizedCaseInsensitiveContains(name) }) {
+                serviceModalMode = .schedule(s)
+            } else {
+                // Si no encuentra nombre exacto...
+            }
+        }
+    }
+    
+    // --- PARSING ---
+    private func parseMessageActions(_ content: String) -> (String, [ActionTag]) {
+        var cleanText = content
+        var actions: [ActionTag] = []
+        
+        // Expresiones regulares para los tags generados por la IA
+        let patterns: [(String, (String) -> ActionTag)] = [
+            ("\\[\\[OPEN:PRODUCT:(.*?)\\]\\]", { .openProduct($0) }),
+            ("\\[\\[OPEN:SERVICE:(.*?)\\]\\]", { .openService($0) }),
+            ("\\[\\[OPEN:PERSONAL:(.*?)\\]\\]", { .openPersonal($0) }),
+            ("\\[\\[ACTION:SCHEDULE_SERVICE:(.*?)\\]\\]", { .scheduleService($0) })
+        ]
+        
+        for (pattern, constructor) in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                let nsString = cleanText as NSString
+                let matches = regex.matches(in: cleanText, options: [], range: NSRange(location: 0, length: nsString.length))
+                
+                // Procesar matchs inversa para no romper rangos
+                for match in matches.reversed() {
+                    if let range = Range(match.range, in: cleanText),
+                       let groupRange = Range(match.range(at: 1), in: cleanText) {
+                        let name = String(cleanText[groupRange])
+                        actions.append(constructor(name))
+                        cleanText.removeSubrange(range) // Quitar el tag del texto visible
+                    }
+                }
+            }
+        }
+        
+        return (cleanText.trimmingCharacters(in: .whitespacesAndNewlines), actions.reversed())
     }
     
     private var typingBubble: some View {

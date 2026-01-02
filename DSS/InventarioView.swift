@@ -3,7 +3,7 @@ import SwiftData
 import LocalAuthentication
 
 // --- MODO DEL MODAL ---
-fileprivate enum ProductModalMode: Identifiable {
+enum ProductModalMode: Identifiable {
     case add
     case edit(Producto)
     var id: String {
@@ -599,7 +599,7 @@ struct InventarioView: View {
 }
 
 // Tarjeta individual de producto (UI más clara)
-fileprivate struct ProductoCard: View {
+struct ProductoCard: View {
     let producto: Producto
     let lowStockThreshold: Double
     var onEdit: () -> Void
@@ -831,7 +831,7 @@ fileprivate struct ProductoCard: View {
 
 
 // --- VISTA DEL FORMULARIO (UI guiada y sin ambigüedad) ---
-fileprivate struct ProductFormView: View {
+struct ProductFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     

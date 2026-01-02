@@ -131,6 +131,23 @@ final class AIStrategistService: ObservableObject {
         - Si se solicita cálculo, explica en 1-3 pasos y da recomendación clara.
         - Si falta stock o personal, sugiere acciones concretas.
         - Mantén la respuesta breve.
+        
+        HERRAMIENTAS INTERACTIVAS (IMPORTANTE):
+        Tu objetivo no es solo dar texto, sino facilitar la navegación.
+        SIEMPRE que el usuario mencione querer VER, EDITAR o GESTIONAR un producto, servicio o empleado ESPECÍFICO, debes incluir al final de tu respuesta una etiqueta especial para generar un botón de acceso directo.
+        
+        Formatos de etiquetas (úsalos si aplica):
+        - Para abrir un producto: [[OPEN:PRODUCT:NombreExacto]]
+        - Para abrir un servicio: [[OPEN:SERVICE:NombreExacto]]
+        - Para abrir un empleado: [[OPEN:PERSONAL:NombreExacto]]
+        - Para programar un servicio nuevo: [[ACTION:SCHEDULE_SERVICE:NombreServicioOpcional]]
+        
+        Ejemplos:
+        Usuario: "Necesito editar el costo del Aceite Sintetico"
+        Asistente: "Entendido, aquí tienes el acceso al producto para que actualices su costo. [[OPEN:PRODUCT:Aceite Sintetico]]"
+        
+        Usuario: "Quiero agendar una Afinación"
+        Asistente: "Claro, abre el panel de programación para comenzar. [[ACTION:SCHEDULE_SERVICE:Afinación]]"
         """
         
         await MainActor.run {
@@ -152,38 +169,35 @@ final class AIStrategistService: ObservableObject {
         
         // Formateadores
         let currency: (Double) -> String = { String(format: "$%.2f", $0) }
-        let dateFmt: (Date) -> String = { $0.formatted(date: .abbreviated, time: .omitted) }
-        let antiguedad: (Date) -> String = { fecha in
-            let comps = Calendar.current.dateComponents([.year, .month], from: fecha, to: Date())
-            let y = comps.year ?? 0
-            let m = comps.month ?? 0
-            if y > 0 { return "\(y)a \(m)m" }
-            return "\(m)m"
-        }
         
-        // Top 5 por mayor costo mensual (más relevantes para decisiones)
-        let top = arr.sorted { $0.costoRealMensual > $1.costoRealMensual }.prefix(5).map { p in
-            var ficha = "- \(p.nombre) [\(p.rol.rawValue)] • Estado: \(p.estado.rawValue)\n"
-            ficha += "  Ingreso: \(dateFmt(p.fechaIngreso)) • Antigüedad: \(antiguedad(p.fechaIngreso)) • Contrato: \(p.tipoContrato.rawValue)\n"
-            ficha += "  Sueldo neto mensual: \(currency(p.sueldoNetoMensual)) • Costo al taller: \(currency(p.costoRealMensual)) • Costo/hora: \(currency(p.costoHora))\n"
-            if p.tipoSalario == .mixto || p.comisiones > 0 {
-                ficha += "  Comisiones acumuladas: \(currency(p.comisiones)) • Tipo salario: \(p.tipoSalario.rawValue)\n"
-            } else {
-                ficha += "  Tipo salario: \(p.tipoSalario.rawValue)\n"
+        // Top 5 Empleados más eficientes (por servicios realizados)
+        let topEficientes = arr
+            .sorted { $0.serviciosRealizados > $1.serviciosRealizados }
+            .prefix(5)
+            .map { p in
+                "- \(p.nombre) (\(p.rol.rawValue)) | Servicios completados: \(p.serviciosRealizados) | Costo hora: \(currency(p.costoHora))"
             }
-            return ficha
-        }.joined(separator: "\n")
+            .joined(separator: "\n")
+        
+        // Suma de costos mensuales de nómina activos
+        let totalNomina = arr.filter({ $0.activo }).reduce(0) { $0 + $1.costoRealMensual }
         
         return """
         Total: \(total) | Disponibles ahora: \(disponibles)
         Roles: \(porRol)
-        Detalle (Top 5 por costo mensual):
-        \(top.isEmpty ? "- Sin detalle disponible." : top)
+        Costo Nómina Mensual Aprox: \(currency(totalNomina))
+        
+        Top 5 Personal más activo (Servicios Realizados):
+        \(topEficientes.isEmpty ? "- Sin datos aún." : topEficientes)
         """
     }
     
     private func buildInventarioSummary(_ arr: [Producto]) -> String {
         if arr.isEmpty { return "- No hay productos." }
+        
+        // Recaudación estimada (Total Inventory Value)
+        let valorTotalInventarioCost = arr.reduce(0) { $0 + ($1.costo * $1.cantidad) }
+        let valorTotalInventarioVenta = arr.reduce(0) { $0 + ($1.precioVenta * $1.cantidad) }
         
         // Críticos por stock (<= 2)
         let lowStock = arr
@@ -193,30 +207,25 @@ final class AIStrategistService: ObservableObject {
             .map { "- \($0.nombre): \($0.cantidad) \($0.unidadDeMedida)" }
             .joined(separator: "\n")
         
-        // Listado detallado de productos (máx. 8) por mayor valor de stock (costo * cantidad)
-        let detallados = arr
-            .sorted { ($0.costo * $0.cantidad) > ($1.costo * $1.cantidad) }
-            .prefix(8)
-            .map { p -> String in
-                let ganancia = p.costo * (p.porcentajeMargenSugerido / 100.0)
-                let gastosAdmin = p.costo * (p.porcentajeGastosAdministrativos / 100.0)
-                let isr = ganancia * (p.isrPorcentajeEstimado / 100.0)
-                let gananciaNeta = max(0, ganancia - isr)
-                let stockStr = String(format: "%.2f", p.cantidad)
-                let gananciaStr = String(format: "%.2f", ganancia)
-                let adminStr = String(format: "%.2f", gastosAdmin)
-                let netaStr = String(format: "%.2f", gananciaNeta)
-                return "• \(p.nombre) | Stock: \(stockStr) \(p.unidadDeMedida) | Margen: $\(gananciaStr) | Gastos Adm.: $\(adminStr) | Ganancia neta (post ISR): $\(netaStr)"
+        // Top 5 Más Vendidos (vecesVendido)
+        let topVendidos = arr
+            .sorted { $0.vecesVendido > $1.vecesVendido }
+            .prefix(5)
+            .map { p in
+                "- \(p.nombre) | Vendido: \(p.vecesVendido) veces | Stock actual: \(p.cantidad)"
             }
             .joined(separator: "\n")
         
         return """
-        Total: \(arr.count)
-        Críticos:
+        Total items: \(arr.count)
+        Valor Total Costo: $\(String(format: "%.2f", valorTotalInventarioCost))
+        Valor Total Venta Potencial: $\(String(format: "%.2f", valorTotalInventarioVenta))
+        
+        Críticos (Stock Bajo):
         \(lowStock.isEmpty ? "Ninguno" : lowStock)
         
-        Detalle (máx. 8 por valor de stock):
-        \(detallados)
+        Top 5 Más Vendidos:
+        \(topVendidos.isEmpty ? "- Sin ventas registradas aún." : topVendidos)
         """
     }
     
@@ -225,54 +234,27 @@ final class AIStrategistService: ObservableObject {
         
         func fmt(_ v: Double) -> String { String(format: "%.2f", v) }
         
-        let lines: [String] = servicios.prefix(8).map { s in
-            // Costo de inventario a partir de ingredientes
-            let costoInventario = PricingHelpers.costoIngredientes(servicio: s, productos: productos)
-            // Refacciones si aplican
-            let ref = s.requiereRefacciones ? s.costoRefacciones : 0.0
-            // Desglose total
-            let desg = PricingHelpers.calcularDesglose(
-                manoDeObra: s.costoManoDeObra,
-                refacciones: ref,
-                costoInventario: costoInventario,
-                gananciaDeseada: s.gananciaDeseada,
-                gastosAdmin: s.gastosAdministrativos,
-                aplicarIVA: s.aplicarIVA,
-                aplicarISR: s.aplicarISR,
-                porcentajeISR: s.isrPorcentajeEstimado
-            )
-            
-            // Ingredientes detallados con unidades y proporciones
-            let ingredientesDetalle: String = {
-                if s.ingredientes.isEmpty { return "- Sin productos." }
-                let totalCostoInv = max(costoInventario, 0.000001)
-                let totalPrecioFinal = max(desg.precioFinal, 0.000001)
-                return s.ingredientes.map { ing in
-                    let prod = productos.first(where: { $0.nombre == ing.nombreProducto })
-                    let unidad = prod?.unidadDeMedida ?? ""
-                    let costoIng = (prod?.precioVenta ?? 0) * ing.cantidadUsada
-                    let propInv = costoIng / totalCostoInv
-                    let propFinal = costoIng / totalPrecioFinal
-                    return "  • \(ing.nombreProducto): \(fmt(ing.cantidadUsada)) \(unidad) | Costo: $\(fmt(costoIng)) | % en inventario: \(fmt(propInv * 100))% | % en precio final: \(fmt(propFinal * 100))%"
-                }.joined(separator: "\n")
-            }()
-            
-            var ficha = "- \(s.nombre) [\(s.especialidadRequerida) • \(s.rolRequerido.rawValue)] • Duración: \(fmt(s.duracionHoras)) h\n"
-            ficha += "  Mano de obra: $\(fmt(s.costoManoDeObra)) | Ganancia deseada: $\(fmt(s.gananciaDeseada)) | Gastos Adm.: $\(fmt(s.gastosAdministrativos))\n"
-            if s.requiereRefacciones {
-                ficha += "  Refacciones: $\(fmt(ref))\n"
+        // Top 5 Servicios más populares (vecesRealizado)
+        let topServicios = servicios
+            .sorted { $0.vecesRealizado > $1.vecesRealizado }
+            .prefix(5)
+            .map { s in
+                let gananciaNeta = s.precioFinalAlCliente - s.costoManoDeObra - s.costoRefacciones - PricingHelpers.costoIngredientes(servicio: s, productos: productos) - s.gastosAdministrativos
+                // Nota: Cálculo simplificado para el contexto
+                return "- \(s.nombre) | Realizado: \(s.vecesRealizado) veces | Precio: $\(fmt(s.precioFinalAlCliente)) | Ganancia Est. Unit: $\(fmt(gananciaNeta))"
             }
-            ficha += "  Insumos (inventario): $\(fmt(costoInventario))\n"
-            ficha += "  Totales => Costos directos: $\(fmt(desg.costosDirectos)) | Subtotal: $\(fmt(desg.subtotal)) | IVA: $\(fmt(desg.iva)) | Precio final: $\(fmt(s.precioFinalAlCliente)) (calc: $\(fmt(desg.precioFinal)))\n"
-            ficha += "  ISR sobre ganancia: $\(fmt(desg.isrSobreGanancia)) | Ganancia neta (post ISR): $\(fmt(desg.gananciaNeta))\n"
-            ficha += "  Ingredientes:\n\(ingredientesDetalle)"
-            return ficha
-        }
+            .joined(separator: "\n")
+            
+        // Catálogo General (nombres y precios)
+        let catalogoSimple = servicios.map { "\($0.nombre) [$\(fmt($0.precioFinalAlCliente))]" }.joined(separator: ", ")
         
         return """
-        Total: \(servicios.count)
-        Detalle (máx. 8):
-        \(lines.joined(separator: "\n"))
+        Total Servicios en Catálogo: \(servicios.count)
+        
+        Top 5 Servicios más solicitados:
+        \(topServicios.isEmpty ? "- Sin historial de servicios." : topServicios)
+        
+        Lista rápida: \(catalogoSimple)
         """
     }
     

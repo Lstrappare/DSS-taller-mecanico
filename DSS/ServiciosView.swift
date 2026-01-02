@@ -3,7 +3,7 @@ import SwiftData
 import LocalAuthentication
 
 // --- MODO DEL MODAL (Actualizado con assign y schedule) ---
-fileprivate enum ServiceModalMode: Identifiable {
+enum ServiceModalMode: Identifiable {
     case add
     case edit(Servicio)
     case schedule(Servicio)
@@ -572,7 +572,7 @@ fileprivate struct ServicioCard: View {
 }
 
 // --- MODAL UNIFICADO (PROGRAMAR O ASIGNAR AHORA) ---
-fileprivate struct ProgramarServicioModal: View {
+struct ProgramarServicioModal: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
@@ -1174,7 +1174,7 @@ fileprivate struct ProgramarServicioModal: View {
 
 // --- VISTA DEL FORMULARIO (Actualizada a porcentajes e impuestos) ---
 // --- VISTA DEL FORMULARIO (Actualizada a Montos Fijos) ---
-fileprivate struct ServicioFormView: View {
+struct ServicioFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
