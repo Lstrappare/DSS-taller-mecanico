@@ -9,11 +9,17 @@ import SwiftUI
 import SwiftData
 import LocalAuthentication
 
-fileprivate enum TipoDecision: String, CaseIterable, Identifiable {
-    case todas = "Todas"
-    case automatica = "Automática"
-    case manual = "Manual"
-    var id: String { rawValue }
+// --- MODO DE VISTA UNIFICADO (Historial) ---
+fileprivate enum ViewMode: Equatable {
+    case todas
+    case automaticas
+    case manuales
+    case byDateRange // Solo como estado interno si se quiere manejar así, o implícito.
+                     // En PersonalView usan .standard, .byStatus... aqui usaremos algo similar.
+    
+    // Para el menú, "Todas", "Solo Automáticas", "Solo Manuales" parece ser el equivalente.
+    // Además, en PersonalView el "Ordenar" es parte de la selección en algunos casos,
+    // pero aquí mantendremos Filtro (Tipo) y Orden (Fecha/Titulo) algo separados pero en el mismo menú unificado.
 }
 
 struct HistorialView: View {
@@ -26,10 +32,17 @@ struct HistorialView: View {
     
     // Estado de UI
     @State private var searchQuery = ""
-    @State private var filtroTipo: TipoDecision = .todas
+    
+    // Configuración de vista unificada coincidiendo con PersonalView
+    @State private var viewMode: ViewMode = .todas
+    
+    // Filtros Adicionales (que conviven con el ViewMode)
     @State private var fechaDesde: Date? = nil
     @State private var fechaHasta: Date? = nil
-    @State private var sortAscending: Bool = false
+    @State private var showingDatePicker = false
+    
+    // Ordenamiento
+    @State private var sortAscending: Bool = true // Por defecto fechas recientes primero (Descendente en Fecha)
     enum SortOption: String, CaseIterable, Identifiable {
         case fecha = "Fecha"
         case titulo = "Título"
@@ -56,10 +69,32 @@ struct HistorialView: View {
     @State private var manualError: String?
     
     // Derivados
-    private var filtered: [DecisionRecord] {
+    var filtered: [DecisionRecord] {
         var base = historial
         
-        // Texto
+        // 1. Filtro por Modo (Tipo)
+        switch viewMode {
+        case .todas:
+            break // No filtrar nada extra
+        case .automaticas:
+            base = base.filter { !$0.queryUsuario.lowercased().contains("manual") }
+        case .manuales:
+            base = base.filter { $0.queryUsuario.lowercased().contains("manual") }
+        case .byDateRange:
+            break // Se mezcla con todas, el rango aplica a todo
+        }
+        
+        // 2. Filtro por Fechas (Siempre activo si están definidas)
+        if let desde = fechaDesde {
+            let start = Calendar.current.startOfDay(for: desde)
+            base = base.filter { $0.fecha >= start }
+        }
+        if let hasta = fechaHasta {
+            let end = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: hasta) ?? hasta
+            base = base.filter { $0.fecha <= end }
+        }
+        
+        // 3. Búsqueda
         if !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let q = searchQuery.lowercased()
             base = base.filter { r in
@@ -68,29 +103,8 @@ struct HistorialView: View {
                 r.queryUsuario.lowercased().contains(q)
             }
         }
-        // Tipo
-        if filtroTipo != .todas {
-            base = base.filter { r in
-                let q = r.queryUsuario.lowercased()
-                if filtroTipo == .manual {
-                    return q.contains("manual")
-                } else {
-                    // automática: no contiene “manual”
-                    return !q.contains("manual")
-                }
-            }
-        }
-        // Rango de fechas (comparando solo día)
-        if let desde = fechaDesde {
-            let start = Calendar.current.startOfDay(for: desde)
-            base = base.filter { $0.fecha >= start }
-        }
-        if let hasta = fechaHasta {
-            // incluir todo el día de “hasta”
-            let end = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: hasta) ?? hasta
-            base = base.filter { $0.fecha <= end }
-        }
-        // Orden
+        
+        // 4. Ordenamiento
         base.sort { a, b in
             switch sortOption {
             case .fecha:
@@ -169,7 +183,6 @@ struct HistorialView: View {
             Text("Esta acción no se puede deshacer.")
         }
         .onAppear {
-            // Detectar biometría disponible para mostrar opción Touch ID si procede
             let context = LAContext()
             var error: NSError?
             touchIDAvailable = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
@@ -207,222 +220,225 @@ struct HistorialView: View {
                     }
                 }
                 Spacer()
-                HStack(spacing: 8) {
-                    Button {
-                        showingAddManualFlow = true
-                        // Arranca en modo de autenticación
-                        isAuthorizedForManual = false
-                        manualTitulo = ""
-                        manualRazon = ""
-                        manualError = nil
-                    } label: {
-                        Label("Agregar decisión manual", systemImage: "plus.circle.fill")
-                            .font(.subheadline)
-                            .padding(.vertical, 6).padding(.horizontal, 10)
-                            .background(Color("MercedesPetrolGreen"))
-                            .foregroundColor(.white)
-                            .cornerRadius(8)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Registrar una decisión manual (requiere contraseña)")
-                    
-                    if tieneFiltrosActivos {
-                        Button {
-                            limpiarFiltros()
-                        } label: {
-                            Label("Limpiar", systemImage: "xmark.circle")
-                                .font(.subheadline)
-                                .padding(.vertical, 6).padding(.horizontal, 10)
-                                .background(Color("MercedesCard"))
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Quitar filtros activos")
-                    }
+                Button {
+                    showingAddManualFlow = true
+                    isAuthorizedForManual = false
+                    manualTitulo = ""
+                    manualRazon = ""
+                    manualError = nil
+                } label: {
+                    Label("Agregar manual", systemImage: "plus.circle.fill")
+                        .font(.subheadline)
+                        .padding(.vertical, 6).padding(.horizontal, 10)
+                        .background(Color("MercedesPetrolGreen"))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
                 }
+                .buttonStyle(.plain)
+                .help("Registrar una decisión manual (requiere contraseña)")
             }
             .padding(.horizontal, 12)
         }
     }
     
-    // MARK: - Filtros
+    // MARK: - Filtros Unificados (Style PersonalView)
     private var filtrosView: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                // Buscar
+                // Barra de Búsqueda
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(Color("MercedesPetrolGreen"))
-                    TextField("Buscar por Título, Razón o Consulta original...", text: $searchQuery)
+                    TextField("Buscar...", text: $searchQuery)
                         .textFieldStyle(PlainTextFieldStyle())
                         .font(.subheadline)
-                        .animation(.easeInOut(duration: 0.15), value: searchQuery)
                     if !searchQuery.isEmpty {
-                        Button {
-                            withAnimation { searchQuery = "" }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.gray)
+                        Button { searchQuery = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundColor(.gray)
                         }
                         .buttonStyle(.plain)
-                        .help("Limpiar búsqueda")
                     }
                 }
                 .padding(8)
                 .background(Color("MercedesCard"))
                 .cornerRadius(8)
                 
-                // Tipo
-                Picker("Tipo", selection: $filtroTipo) {
-                    ForEach(TipoDecision.allCases) { t in
-                        Text(t.rawValue).tag(t)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: 160)
-                .help("Filtrar por tipo de decisión")
-                
-                // Rango de fechas
-                HStack(spacing: 6) {
-                    DatePicker("Desde", selection: Binding(get: {
-                        fechaDesde ?? Date()
-                    }, set: { new in
-                        fechaDesde = new
-                    }), displayedComponents: .date)
-                    .labelsHidden()
-                    .frame(maxWidth: 160)
-                    .opacity(fechaDesde == nil ? 0.5 : 1)
-                    .overlay(
-                        HStack {
-                            if fechaDesde != nil {
-                                Button {
-                                    fechaDesde = nil
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill").foregroundColor(.gray)
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.trailing, 4)
-                            }
-                        }, alignment: .trailing
-                    )
-                    
-                    Text("-").foregroundColor(.gray)
-                    
-                    DatePicker("Hasta", selection: Binding(get: {
-                        fechaHasta ?? Date()
-                    }, set: { new in
-                        fechaHasta = new
-                    }), displayedComponents: .date)
-                    .labelsHidden()
-                    .frame(maxWidth: 160)
-                    .opacity(fechaHasta == nil ? 0.5 : 1)
-                    .overlay(
-                        HStack {
-                            if fechaHasta != nil {
-                                Button {
-                                    fechaHasta = nil
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill").foregroundColor(.gray)
-                                }
-                                .buttonStyle(.plain)
-                                .padding(.trailing, 4)
-                            }
-                        }, alignment: .trailing
-                    )
-                }
-                .padding(6)
-                .background(Color("MercedesCard"))
-                .cornerRadius(8)
-                .help("Filtrar por rango de fechas (opcional)")
-                
-                // Orden
-                HStack(spacing: 6) {
-                    Picker("Ordenar", selection: $sortOption) {
-                        ForEach(SortOption.allCases) { opt in
-                            Text(opt.rawValue).tag(opt)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 140)
+                // Menú Unificado de Ordenar / Filtros
+                Menu {
+                    // Sección 1: Filtro Principal (Vista)
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            sortAscending.toggle()
-                        }
+                        viewMode = .todas
                     } label: {
-                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
-                            .font(.subheadline)
-                            .padding(6)
-                            .background(Color("MercedesCard"))
-                            .cornerRadius(6)
+                        if viewMode == .todas { Label("Ver Todas", systemImage: "checkmark") }
+                        else { Text("Ver Todas") }
                     }
-                    .buttonStyle(.plain)
-                    .help("Cambiar orden \(sortAscending ? "ascendente" : "descendente")")
-                }
-                
-                // Chips de filtros activos
-                if tieneFiltrosActivos {
-                    HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                        Text("Filtros activos")
-                        if !searchQuery.isEmpty {
-                            Text("“\(searchQuery)”")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if filtroTipo != .todas {
-                            Text("Tipo: \(filtroTipo.rawValue)")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if let d = fechaDesde {
-                            Text("Desde: \(d.formatted(date: .abbreviated, time: .omitted))")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if let h = fechaHasta {
-                            Text("Hasta: \(h.formatted(date: .abbreviated, time: .omitted))")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        if sortOption != .fecha || sortAscending {
-                            Text("Orden: \(sortOption.rawValue) \(sortAscending ? "↑" : "↓")")
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(Color("MercedesBackground")).cornerRadius(6)
-                        }
-                        Button {
-                            withAnimation { limpiarFiltros() }
+                    
+                    Button {
+                        viewMode = .automaticas
+                    } label: {
+                        if viewMode == .automaticas { Label("Ver Automáticas", systemImage: "checkmark") }
+                        else { Text("Ver Automáticas") }
+                    }
+                    
+                    Button {
+                        viewMode = .manuales
+                    } label: {
+                        if viewMode == .manuales { Label("Ver Manuales", systemImage: "checkmark") }
+                        else { Text("Ver Manuales") }
+                    }
+                    
+                    Divider()
+                    
+                    // Sección 2: Criterio de Orden
+                    Button {
+                        sortOption = .fecha
+                    } label: {
+                        if sortOption == .fecha { Label("Ordenar por Fecha", systemImage: "checkmark") }
+                        else { Text("Ordenar por Fecha") }
+                    }
+                    Button {
+                        sortOption = .titulo
+                    } label: {
+                        if sortOption == .titulo { Label("Ordenar por Título", systemImage: "checkmark") }
+                        else { Text("Ordenar por Título") }
+                    }
+                    
+                    Divider()
+                    
+                    // Sección 3: Rango de Fechas (Toggle simple o reset)
+                    // Aquí podríamos abrir un sheet, pero para mantener simpleza visual dentro del menú
+                    // podemos tener opciones de "Última semana", "Último mes" o "Seleccionar Rango..."
+                    // Por ahora mantendremos "Seleccionar Rango" que muestra los pickers abajo si se selecciona
+                    // O simplemente usamos los pickers fuera del menú si el usuario quiere.
+                    // Dado el request de "lucir como PersonalView", PersonalView no tiene fechas.
+                    // Mantendremos los DatePickers VISIBLES si el usuario activa "Filtrar por Fecha" en el menú?
+                    // O mejor, dejémoslo limpio: El menú controla Criterio y Filtro Tipo.
+                    // Y un botón de "Fechas" al lado abre popover?
+                    // Para alinearnos ESTRICTAMENTE a PersonalView, solo hay Menú + Botón SortDirection.
+                    // Pero Historial necesita fechas. Lo pondremos como opcion extra en el menú: "Limpiar Fechas" si existen.
+                    
+                    if fechaDesde != nil || fechaHasta != nil {
+                        Button(role: .destructive) {
+                            withAnimation {
+                                fechaDesde = nil
+                                fechaHasta = nil
+                            }
                         } label: {
-                            Text("Limpiar")
-                                .font(.caption2)
-                                .padding(.horizontal, 6).padding(.vertical, 4)
-                                .background(Color("MercedesCard"))
-                                .cornerRadius(6)
+                            Label("Limpiar filtro de fechas", systemImage: "xmark")
                         }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.gray)
-                        .help("Quitar filtros activos")
                     }
-                    .font(.caption2)
-                    .foregroundColor(.gray)
+                    
+                } label: {
+                    HStack(spacing: 6) {
+                        // Texto dinámico
+                        let labelText: String = {
+                            switch viewMode {
+                            case .todas: return "Ver Todas"
+                            case .automaticas: return "Ver Automáticas"
+                            case .manuales: return "Ver Manuales"
+                            default: return "Historial"
+                            }
+                        }()
+                        
+                        Text(labelText)
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    }
+                    .font(.subheadline)
+                    .padding(8)
+                    .background(Color("MercedesCard"))
+                    .cornerRadius(8)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
                 }
+                .menuStyle(.borderlessButton)
+                .frame(width: 170)
                 
+                // Botón Fechas (Popover interactivo)
+                Button {
+                    showingDatePicker = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "calendar")
+                        if fechaDesde != nil || fechaHasta != nil {
+                            Circle().fill(Color("MercedesPetrolGreen")).frame(width: 6, height: 6)
+                        }
+                    }
+                    .font(.subheadline)
+                    .padding(8)
+                    .background(Color("MercedesCard"))
+                    .cornerRadius(8)
+                    .foregroundColor((fechaDesde != nil || fechaHasta != nil) ? Color("MercedesPetrolGreen") : .gray)
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $showingDatePicker) {
+                    VStack(alignment: .leading, spacing: 15) {
+                        Text("Filtrar por Rango de Fechas")
+                            .font(.headline)
+                            .padding(.bottom, 5)
+                        
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("Desde:").font(.caption).foregroundColor(.gray)
+                            DatePicker("", selection: Binding(get: { fechaDesde ?? Date() }, set: { fechaDesde = $0 }), displayedComponents: .date)
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("Hasta:").font(.caption).foregroundColor(.gray)
+                             DatePicker("", selection: Binding(get: { fechaHasta ?? Date() }, set: { fechaHasta = $0 }), displayedComponents: .date)
+                                .labelsHidden()
+                                 .datePickerStyle(.compact)
+                        }
+                        
+                        Divider()
+                        
+                        Button(role: .destructive) {
+                            fechaDesde = nil
+                            fechaHasta = nil
+                            showingDatePicker = false
+                        } label: {
+                            Label("Limpiar filtro de fechas", systemImage: "xmark.circle")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                    .padding()
+                    .frame(width: 320)
+                }
+
+                // Botón Ascendente/Descendente
+                Button {
+                    withAnimation { sortAscending.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: sortAscending ? "arrow.up" : "arrow.down")
+                        Text(sortAscending ? "Ascendente" : "Descendente") // Abreviado para consistencia visual
+                    }
+                    .font(.subheadline)
+                    .padding(8)
+                    .background(Color("MercedesCard"))
+                    .cornerRadius(8)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                }
+                .help(sortAscending ? "Ascendente" : "Descendente")
+                .buttonStyle(.plain)
+
                 Spacer()
             }
         }
     }
     
     private var tieneFiltrosActivos: Bool {
-        return !searchQuery.isEmpty || filtroTipo != .todas || fechaDesde != nil || fechaHasta != nil || sortOption != .fecha || sortAscending
+        return !searchQuery.isEmpty || viewMode != .todas || fechaDesde != nil || fechaHasta != nil
     }
     
     private func limpiarFiltros() {
         searchQuery = ""
-        filtroTipo = .todas
+        viewMode = .todas
         fechaDesde = nil
         fechaHasta = nil
         sortOption = .fecha
-        sortAscending = false
+        sortAscending = true
     }
     
     // MARK: - Helpers
@@ -456,14 +472,37 @@ struct HistorialView: View {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 36, weight: .bold))
                 .foregroundColor(Color("MercedesPetrolGreen"))
-            Text(searchQuery.isEmpty ? "No hay decisiones registradas aún." :
-                 "No se encontraron resultados para “\(searchQuery)”.")
+            
+            if !searchQuery.isEmpty {
+                Text("No se encontraron resultados para “\(searchQuery)”.")
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            } else {
+                // Mensajes contextuales según ViewMode
+                Group {
+                    switch viewMode {
+                    case .todas:
+                        if fechaDesde != nil || fechaHasta != nil {
+                            Text("No hay decisiones en el rango de fechas seleccionado.")
+                        } else {
+                            Text("No hay decisiones registradas aún.")
+                        }
+                    case .automaticas:
+                        Text("No hay decisiones automáticas registradas.")
+                    case .manuales:
+                        Text("No hay decisiones manuales registradas.")
+                    default:
+                        Text("No hay resultados.")
+                    }
+                }
                 .font(.subheadline)
                 .foregroundColor(.gray)
-            if searchQuery.isEmpty {
-                Text("Aquí verás las decisiones automáticas y manuales que se vayan registrando.")
-                    .font(.caption2)
-                    .foregroundColor(.gray)
+                
+                if viewMode == .todas && fechaDesde == nil && fechaHasta == nil {
+                     Text("Aquí verás las decisiones automáticas y manuales que se vayan registrando.")
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
             }
         }
     }

@@ -92,7 +92,7 @@ struct ServiciosView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "dollarsign.circle.fill")
                         .foregroundColor(Color("MercedesPetrolGreen"))
-                    Text("Ganancias: $\(gananciaServiciosAcumulada, specifier: "%.2f")")
+                    Text("Ganancias Aproximadas: $\(gananciaServiciosAcumulada, specifier: "%.2f")")
                         .font(.caption).fontWeight(.bold)
                         .foregroundColor(Color("MercedesPetrolGreen"))
                 }

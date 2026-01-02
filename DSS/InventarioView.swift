@@ -230,7 +230,7 @@ struct InventarioView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "dollarsign.circle.fill")
                         .foregroundColor(Color("MercedesPetrolGreen"))
-                    Text("Ganancias: $\(gananciaAcumulada, specifier: "%.2f")")
+                    Text("Ganancias Aproximadas: $\(gananciaAcumulada, specifier: "%.2f")")
                         .font(.caption).fontWeight(.bold)
                         .foregroundColor(Color("MercedesPetrolGreen"))
                 }
