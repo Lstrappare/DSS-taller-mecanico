@@ -3,7 +3,8 @@ import SwiftData
 import LocalAuthentication // Necesario para seguridad
 
 // --- Enums para controlar los Modales ---
-fileprivate enum ModalMode: Identifiable {
+// --- Enums para controlar los Modales ---
+enum ClientModalMode: Identifiable {
     case addClienteConVehiculo
     case editCliente(Cliente)
     case addVehiculo(Cliente)
@@ -61,7 +62,7 @@ struct GestionClientesView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Cliente.nombre) private var clientes: [Cliente]
     
-    @State private var modalMode: ModalMode?
+    @State private var modalMode: ClientModalMode?
     @State private var searchQuery = ""
     
     // Configuración de vista unificada
@@ -510,11 +511,11 @@ fileprivate struct ClienteCard: View {
 
 
 // --- 1. FORMULARIO COMBINADO (ADD CLIENTE + VEHÍCULO) (alineado a ProductFormView) ---
-fileprivate struct ClienteConVehiculoFormView: View {
+struct ClienteConVehiculoFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
-    @Binding var modalMode: ModalMode?
+    @Binding var modalMode: ClientModalMode?
     @Query private var allClientes: [Cliente]
 
     // States
@@ -863,7 +864,7 @@ fileprivate struct ClienteConVehiculoFormView: View {
 
 
 // --- 2. FORMULARIO DE CLIENTE (SOLO EDITAR) (alineado a ProductFormView) ---
-fileprivate struct ClienteFormView: View {
+struct ClienteFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
@@ -871,7 +872,7 @@ fileprivate struct ClienteFormView: View {
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
 
     @Bindable var cliente: Cliente
-    @Binding var modalMode: ModalMode?
+    @Binding var modalMode: ClientModalMode?
     @Query private var allClientes: [Cliente]
 
     // States para Seguridad y Errores
@@ -1255,7 +1256,7 @@ fileprivate struct ClienteFormView: View {
 
 
 // --- 3. FORMULARIO DE VEHÍCULO (AÑADIR/EDITAR) (alineado a ProductFormView) ---
-fileprivate struct VehiculoFormView: View {
+struct VehiculoFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     

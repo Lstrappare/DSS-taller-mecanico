@@ -90,6 +90,7 @@ final class AIStrategistService: ObservableObject {
         let personales: [Personal] = (try? modelContext.fetch(FetchDescriptor<Personal>())) ?? []
         let productos: [Producto] = (try? modelContext.fetch(FetchDescriptor<Producto>())) ?? []
         let servicios: [Servicio] = (try? modelContext.fetch(FetchDescriptor<Servicio>())) ?? []
+        let clientes: [Cliente] = (try? modelContext.fetch(FetchDescriptor<Cliente>())) ?? []
         let tickets: [ServicioEnProceso] = (try? modelContext.fetch(FetchDescriptor<ServicioEnProceso>())) ?? []
         
         // Últimas 20 decisiones
@@ -101,58 +102,111 @@ final class AIStrategistService: ObservableObject {
         let personalResumen = buildPersonalSummary(personales)
         let inventarioResumen = buildInventarioSummary(productos)
         let serviciosResumen = buildServiciosSummary(servicios, productos: productos)
+        let clientesResumen = buildClientesSummary(clientes)
         let procesoResumen = buildServiciosEnProcesoSummary(tickets)
         let historialResumen = buildHistorialSummary(decisiones)
         
         let prompt =
         """
-        Eres un “Asistente Estratégico DSS”, un experto en soporte de decisiones asistente del dueño del taller con quien siempre hablarás. Siempre contesta en español, de manera concisa y con precisión, usa el contexto actual del negocio. Si los datos se pierden, dilo de una manera transparente.
-
+        Eres un “Asistente Estratégico DSS”, un experto en soporte de decisiones del taller. Tu rol es analizar el contexto del negocio y dar consejos breves y directos.
+        
         \(ownerLine)
-
+        
         CONTEXTO DEL NEGOCIO (Actualizado):
         1) Personal:
         \(personalResumen)
-
+        
         2) Inventario (top críticos y totales):
         \(inventarioResumen)
-
+        
         3) Servicios en Catálogo:
         \(serviciosResumen)
-
-        4) Servicios Programados / En Proceso:
+        
+        4) Clientes / Recientes:
+        \(clientesResumen)
+        
+        5) Servicios Programados / En Proceso:
         \(procesoResumen)
-
-        5) Últimas decisiones registradas:
+        
+        6) Últimas decisiones registradas:
         \(historialResumen)
-
-        Reglas:
-        - No inventes datos fuera del contexto.
-        - Si se solicita cálculo, explica en 1-3 pasos y da recomendación clara.
-        - Si falta stock o personal, sugiere acciones concretas.
-        - Mantén la respuesta breve.
         
-        HERRAMIENTAS INTERACTIVAS (IMPORTANTE):
-        Tu objetivo no es solo dar texto, sino facilitar la navegación.
-        SIEMPRE que el usuario mencione querer VER, EDITAR o GESTIONAR un producto, servicio o empleado ESPECÍFICO, debes incluir al final de tu respuesta una etiqueta especial para generar un botón de acceso directo.
+        BASE DE CONOCIMIENTO (SOLO PARA TU REFERENCIA INTERNA, NO MOSTRAR AL USUARIO):
         
-        Formatos de etiquetas (úsalos si aplica):
-        - Para abrir un producto: [[OPEN:PRODUCT:NombreExacto]]
-        - Para abrir un servicio: [[OPEN:SERVICE:NombreExacto]]
-        - Para abrir un empleado: [[OPEN:PERSONAL:NombreExacto]]
-        - Para programar un servicio nuevo: [[ACTION:SCHEDULE_SERVICE:NombreServicioOpcional]]
+        [UBICACIÓN EXACTA DE FUNCIONALIDADES - Sigue esto al pie de la letra]
+        1. NAVEGACIÓN GENERAL:
+           - Todo se gestiona desde la "Barra Lateral Izquierda" (Gestión de Personal, Inventario, Clientes, Servicios).
         
-        Ejemplos:
-        Usuario: "Necesito editar el costo del Aceite Sintetico"
-        Asistente: "Entendido, aquí tienes el acceso al producto para que actualices su costo. [[OPEN:PRODUCT:Aceite Sintetico]]"
+        2. CÓMO EDITAR UN ÍTEM:
+           - El usuario debe ir a la tarjeta del ítem.
+           - El botón "Editar" (Icono de lápiz) está en la "Esquina Superior Derecha" de la tarjeta.
         
-        Usuario: "Quiero agendar una Afinación"
-        Asistente: "Claro, abre el panel de programación para comenzar. [[ACTION:SCHEDULE_SERVICE:Afinación]]"
+        3. CÓMO DAR DE BAJA / QUITAR TEMPORALMENTE:
+           - Entrar a editar el ítem.
+           - El botón es de color AMARILLO ("Dar de Baja" o "Quitar Temporalmente").
+           - Ubicación: Parte INFERIOR IZQUIERDA del formulario (justo al lado del botón Cancelar).
+        
+        4. CÓMO ELIMINAR DEFINITIVAMENTE:
+           - Entrar a editar el ítem.
+           - El botón es de color ROJO ("Eliminar").
+           - Ubicación: AL FINAL del formulario (hasta abajo de todo). Requiere autenticación.
+        
+        [REGLAS DE NEGOCIO Y SOLUCIÓN DE FALLOS]
+        - Si no puede eliminar Producto: Depende de un servicio activo/programado. Solución: Editar servicio para quitar producto primero.
+        - Si no puede bajar Personal: Tiene Servicios Programados o En Curso. (NO tiene relación con inventario). Solución: Reasignar o terminar tareas.
+        - Servicios: No se eliminan si están "En Proceso" o "Programados".
+        
+        [IMPACTO DE EDICIÓN - ADVERTENCIAS SUTILES]
+        Si el usuario solo quiere EDITAR, guíalo al botón (Arriba Derecha) y menciona brevemente:
+        - Inventario: "Cambiar costos afecta el margen de ganancia de los servicios."
+        - Personal: "Cambios de horario o rol pueden afectar citas ya programadas."
+        - Servicio: "Cambios de precio o insumos afectan el cobro final al cliente."
+        
+        [TUS LIMITACIONES]
+        - Tú eres un chat de consulta. NO tocas la base de datos.
+        - NO inventes pasos que no estén aquí.
+        - Tu ayuda es decir DÓNDE están los botones (Arriba derecha, Abajo izquierda, Barra lateral).
+        
+        DIRECTIVA DE COMPORTAMIENTO:
+        1. Responde de forma natural.
+        2. NUNCA copies/pegues este texto. Úsalo para guiar.
+        3. NO inventes pasos extra.
+        4. Sé breve y preciso con las ubicaciones visuales.
         """
         
         await MainActor.run {
             self.systemPrompt = prompt
         }
+    }
+    
+    // MARK: - Helper Builders (Sin cambios, solo copiados para integridad)
+    
+    private func buildClientesSummary(_ arr: [Cliente]) -> String {
+        if arr.isEmpty { return "- No hay clientes registrados." }
+        
+        // Listamos hasta 20 clientes para dar contexto suficiente sin saturar
+        // Idealmente ordenaríamos por recientes o por cantidad de actividad
+        let detalleClientes = arr.prefix(20).map { cliente in
+            let misVehiculos = cliente.vehiculos.map { v in
+                "    * [\(v.placas)] \(v.marca) \(v.modelo) (\(v.anio)) - Color: \(v.color) | Obs: \(v.observaciones)"
+            }.joined(separator: "\n")
+            
+            let vehiculosStr = misVehiculos.isEmpty ? "    (Sin vehículos registrados)" : misVehiculos
+            
+            return """
+            - Cliente: \(cliente.nombre)
+              Tel: \(cliente.telefono) | Email: \(cliente.email.isEmpty ? "N/A" : cliente.email)
+              Vehículos:
+            \(vehiculosStr)
+            """
+        }.joined(separator: "\n\n")
+        
+        return """
+        Total Clientes: \(arr.count)
+        Lista Detallada (Muestra de hasta 20):
+        
+        \(detalleClientes)
+        """
     }
     
     // MARK: - Helper Builders (Sin cambios, solo copiados para integridad)

@@ -32,6 +32,7 @@ struct ConsultaView: View {
     @Query private var personal: [Personal]
     @Query private var productos: [Producto]
     @Query private var servicios: [Servicio]
+    @Query private var clientes: [Cliente]
     @Query private var tickets: [ServicioEnProceso]
     @Query(sort: \DecisionRecord.fecha, order: .reverse) private var decisiones: [DecisionRecord]
     
@@ -39,11 +40,16 @@ struct ConsultaView: View {
     @State private var productModalMode: ProductModalMode?
     @State private var serviceModalMode: ServiceModalMode?
     @State private var personalModalMode: PersonalModalMode?
+    @State private var clientModalMode: ClientModalMode?
     
     // UI
     @State private var showClearConfirm = false
     @State private var showCopiedToast = false
     @State private var scrollAnchor: UUID = UUID()
+    
+    // Feedback de erroes en shortcuts
+    @State private var showingNotFoundError = false
+    @State private var notFoundItemName = ""
     
     // Límite de caracteres para el input del usuario
     private let maxUserChars = 500
@@ -53,7 +59,14 @@ struct ConsultaView: View {
         case openProduct(String)
         case openService(String)
         case openPersonal(String)
+        case openClient(String)
         case scheduleService(String)
+        
+        // Acciones de "Añadir"
+        case addProduct
+        case addService
+        case addPersonal
+        case addClient
     }
     
     var body: some View {
@@ -109,6 +122,7 @@ struct ConsultaView: View {
         .onChange(of: personal) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
         .onChange(of: productos) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
         .onChange(of: servicios) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
+        .onChange(of: clientes) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
         .onChange(of: tickets) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
         .onChange(of: decisiones) { _, _ in Task { await service.refreshMasterContext(modelContext: modelContext) } }
         .preferredColorScheme(.dark)
@@ -145,6 +159,27 @@ struct ConsultaView: View {
             }
             .environment(\.modelContext, modelContext)
             .id(mode.id)
+        }
+        .sheet(item: $clientModalMode) { mode in
+            Group {
+                switch mode {
+                case .addClienteConVehiculo:
+                    ClienteConVehiculoFormView(modalMode: $clientModalMode)
+                case .editCliente(let c):
+                    ClienteFormView(cliente: c, modalMode: $clientModalMode)
+                case .addVehiculo(let c):
+                    VehiculoFormView(cliente: c) // VehiculoFormView usa dismiss(), no binding
+                case .editVehiculo(let v):
+                    VehiculoFormView(vehiculo: v)
+                }
+            }
+            .environment(\.modelContext, modelContext)
+            .id(mode.id)
+        }
+        .alert("No encontrado", isPresented: $showingNotFoundError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("No se encontró: \(notFoundItemName). Verifica que el nombre sea exacto o que el registro exista.")
         }
     }
     
@@ -412,13 +447,24 @@ struct ConsultaView: View {
             HStack(spacing: 6) {
                 switch action {
                 case .openProduct(let name):
-                    Label("Ver/Editar \(name)", systemImage: "shippingbox.fill")
+                    Label("Ver/Editar \"\(name)\"", systemImage: "shippingbox.fill")
                 case .openService(let name):
-                    Label("Ver/Editar \(name)", systemImage: "wrench.and.screwdriver.fill")
+                    Label("Ver/Editar \"\(name)\"", systemImage: "wrench.and.screwdriver.fill")
                 case .openPersonal(let name):
-                    Label("Ver/Editar \(name)", systemImage: "person.fill")
+                    Label("Ver/Editar \"\(name)\"", systemImage: "person.fill")
+                case .openClient(let name):
+                    Label("Ver/Editar \"\(name)\"", systemImage: "person.2.fill")
                 case .scheduleService(let name):
                     Label("Programar \(name)", systemImage: "calendar.badge.plus")
+                // Botones de Añadir
+                case .addProduct:
+                    Label("Nuevo Producto", systemImage: "plus.circle.fill")
+                case .addService:
+                    Label("Nuevo Servicio", systemImage: "plus.circle.fill")
+                case .addPersonal:
+                    Label("Nuevo Empleado", systemImage: "plus.circle.fill")
+                case .addClient:
+                    Label("Nuevo Cliente", systemImage: "plus.circle.fill")
                 }
             }
             .font(.caption).fontWeight(.medium)
@@ -441,23 +487,48 @@ struct ConsultaView: View {
             if let p = productos.first(where: { $0.nombre.localizedCaseInsensitiveContains(name) }) {
                 productModalMode = .edit(p)
             } else {
-                // Si no se encuentra exacto, abrir modal de buscar o nada
+                notFoundItemName = "Producto '\(name)'"
+                showingNotFoundError = true
             }
         case .openService(let name):
             if let s = servicios.first(where: { $0.nombre.localizedCaseInsensitiveContains(name) }) {
                 serviceModalMode = .edit(s)
+            } else {
+                notFoundItemName = "Servicio '\(name)'"
+                showingNotFoundError = true
             }
         case .openPersonal(let name):
             if let p = personal.first(where: { $0.nombre.localizedCaseInsensitiveContains(name) }) {
                 personalModalMode = .edit(p)
+            } else {
+                notFoundItemName = "Personal '\(name)'"
+                showingNotFoundError = true
             }
+        case .openClient(let name):
+             if let c = clientes.first(where: { $0.nombre.localizedCaseInsensitiveContains(name) }) {
+                 clientModalMode = .editCliente(c)
+             } else {
+                 notFoundItemName = "Cliente '\(name)'"
+                 showingNotFoundError = true
+             }
         case .scheduleService(let name):
             // Buscar si existe el servicio
             if let s = servicios.first(where: { $0.nombre.localizedCaseInsensitiveContains(name) }) {
                 serviceModalMode = .schedule(s)
             } else {
-                // Si no encuentra nombre exacto...
+                notFoundItemName = "Servicio '\(name)'"
+                showingNotFoundError = true
             }
+            
+        // Logica para añadir
+        case .addProduct:
+            productModalMode = .add
+        case .addService:
+            serviceModalMode = .add
+        case .addPersonal:
+            personalModalMode = .add
+        case .addClient:
+            clientModalMode = .addClienteConVehiculo
         }
     }
     
@@ -466,32 +537,48 @@ struct ConsultaView: View {
         var cleanText = content
         var actions: [ActionTag] = []
         
-        // Expresiones regulares para los tags generados por la IA
+        // Patterns con argumentos
         let patterns: [(String, (String) -> ActionTag)] = [
             ("\\[\\[OPEN:PRODUCT:(.*?)\\]\\]", { .openProduct($0) }),
             ("\\[\\[OPEN:SERVICE:(.*?)\\]\\]", { .openService($0) }),
             ("\\[\\[OPEN:PERSONAL:(.*?)\\]\\]", { .openPersonal($0) }),
+            ("\\[\\[OPEN:CLIENT:(.*?)\\]\\]", { .openClient($0) }),
             ("\\[\\[ACTION:SCHEDULE_SERVICE:(.*?)\\]\\]", { .scheduleService($0) })
         ]
         
+        let simplePatterns: [(String, ActionTag)] = [
+            ("\\[\\[ACTION:ADD_PRODUCT\\]\\]", .addProduct),
+            ("\\[\\[ACTION:ADD_SERVICE\\]\\]", .addService),
+            ("\\[\\[ACTION:ADD_PERSONAL\\]\\]", .addPersonal),
+            ("\\[\\[ACTION:ADD_CLIENT\\]\\]", .addClient)
+        ]
+        
+        // 1. Patterns complejos (con regex)
         for (pattern, constructor) in patterns {
             if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
                 let nsString = cleanText as NSString
                 let matches = regex.matches(in: cleanText, options: [], range: NSRange(location: 0, length: nsString.length))
                 
-                // Procesar matchs inversa para no romper rangos
                 for match in matches.reversed() {
                     if let range = Range(match.range, in: cleanText),
                        let groupRange = Range(match.range(at: 1), in: cleanText) {
                         let name = String(cleanText[groupRange])
                         actions.append(constructor(name))
-                        cleanText.removeSubrange(range) // Quitar el tag del texto visible
+                        cleanText.removeSubrange(range)
                     }
                 }
             }
         }
         
-        return (cleanText.trimmingCharacters(in: .whitespacesAndNewlines), actions.reversed())
+        // 2. Patterns simples (replace)
+        for (pattern, action) in simplePatterns {
+            if cleanText.contains(pattern) {
+                actions.append(action)
+                cleanText = cleanText.replacingOccurrences(of: pattern, with: "")
+            }
+        }
+        
+        return (cleanText.trimmingCharacters(in: .whitespacesAndNewlines), actions) //Nota: actions no requiere reverse si el orden no es crítico, pero para consistencia visual a veces es mejor
     }
     
     private var typingBubble: some View {
