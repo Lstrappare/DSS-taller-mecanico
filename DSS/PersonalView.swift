@@ -627,12 +627,13 @@ fileprivate struct PersonalFormView: View {
     
     // Bloqueos/Seguridad
     @State private var isRFCUnlocked = false
+    @State private var isComisionesUnlocked = false
     @State private var showingAuthModal = false
     @State private var showingStatusAlert = false
     @State private var authError = ""
     @State private var passwordAttempt = ""
     @State private var errorMsg: String?
-    private enum AuthReason { case unlockRFC, deleteEmployee, markAbsence }
+    private enum AuthReason { case unlockRFC, deleteEmployee, markAbsence, unlockComisiones }
     @State private var authReason: AuthReason = .unlockRFC
     
     // Campos automáticos (preview en vivo)
@@ -1252,8 +1253,51 @@ fileprivate struct PersonalFormView: View {
                             
                             VStack(alignment: .leading, spacing: 0) {
                                 // FormField ya incluye label
-                                FormField(title: "• Comisiones acumuladas", placeholder: "0.00", text: $comisionesString)
-                                    .validationHint(isInvalid: comisionesInvalidas, message: "Número válido.")
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 6) {
+                                        Text("• Comisiones acumuladas")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                        if mecanicoAEditar != nil {
+                                            Image(systemName: isComisionesUnlocked ? "lock.open.fill" : "lock.fill")
+                                                .foregroundColor(isComisionesUnlocked ? .green : .red)
+                                                .font(.caption)
+                                        }
+                                    }
+                                    HStack(spacing: 8) {
+                                        TextField("", text: $comisionesString)
+                                            .disabled(mecanicoAEditar != nil && !isComisionesUnlocked)
+                                            .textFieldStyle(.plain)
+                                            .padding(10)
+                                            .frame(maxWidth: .infinity)
+                                            .background(Color("MercedesBackground"))
+                                            .cornerRadius(8)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                            )
+                                        
+                                        if mecanicoAEditar != nil {
+                                            Button {
+                                                if isComisionesUnlocked { isComisionesUnlocked = false }
+                                                else {
+                                                    authReason = .unlockComisiones
+                                                    showingAuthModal = true
+                                                }
+                                            } label: {
+                                                Text(isComisionesUnlocked ? "Bloquear" : "Desbloquear")
+                                                    .font(.caption)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .foregroundColor(isComisionesUnlocked ? .green : .red)
+                                        }
+                                    }
+                                    Text("0.00")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray.opacity(0.7))
+                                        .padding(.leading, 4)
+                                }
+                                .validationHint(isInvalid: comisionesInvalidas, message: "Número válido.")
                             }
                             .frame(maxWidth: .infinity)
                             .opacity(showComisiones ? 1 : 0)
@@ -1708,6 +1752,7 @@ fileprivate struct PersonalFormView: View {
             case .unlockRFC: return "Autoriza para editar el RFC."
             case .deleteEmployee: return "Autoriza para ELIMINAR a este empleado."
             case .markAbsence: return "Autoriza para marcar AUSENCIA de todo el día."
+            case .unlockComisiones: return "Autoriza para editar las comisiones."
             }
         }()
         
@@ -2080,6 +2125,7 @@ fileprivate struct PersonalFormView: View {
             case .unlockRFC: return "Autoriza la edición del RFC."
             case .deleteEmployee: return "Autoriza la ELIMINACIÓN del empleado."
             case .markAbsence: return "Autoriza para marcar AUSENCIA."
+            case .unlockComisiones: return "Autoriza la edición de comisiones."
             }
         }()
         do {
@@ -2110,6 +2156,8 @@ fileprivate struct PersonalFormView: View {
             dismiss()
         case .markAbsence:
             marcarAusenciaDiaCompleto()
+        case .unlockComisiones:
+            isComisionesUnlocked = true
         }
         showingAuthModal = false
         authError = ""
