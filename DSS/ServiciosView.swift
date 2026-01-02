@@ -359,7 +359,9 @@ fileprivate struct ServicioCard: View {
         // Stock
         for ing in servicio.ingredientes {
             guard let p = productos.first(where: { $0.nombre == ing.nombreProducto }) else { continue }
-            if p.cantidad < ing.cantidadUsada {
+            let contenidoPorUnidad = max(p.contenidoNeto, 0.0001)
+            let stockTotal = p.cantidad * contenidoPorUnidad
+            if stockTotal < ing.cantidadUsada {
                 return (false, "Stock insuficiente")
             }
         }
@@ -527,7 +529,12 @@ fileprivate struct ProgramarServicioModal: View {
         guard empezarAhora else { return false }
         for ing in servicio.ingredientes {
              guard let p = productos.first(where: { $0.nombre == ing.nombreProducto }) else { return true }
-             if p.cantidad < ing.cantidadUsada { return true }
+             
+             // Validación correcta: Stock * Contenido >= Consumo
+             let contenidoPorUnidad = max(p.contenidoNeto, 0.0001) // Evitar 0
+             let stockTotalContenido = p.cantidad * contenidoPorUnidad
+             
+             if stockTotalContenido < ing.cantidadUsada { return true }
         }
         return false
     }
@@ -882,8 +889,12 @@ fileprivate struct ProgramarServicioModal: View {
         // 4) Check stock (informativo)
         var faltantes: [String] = []
         for ing in servicio.ingredientes {
-            if let p = productos.first(where: { $0.nombre == ing.nombreProducto }), p.cantidad < ing.cantidadUsada {
-                faltantes.append(ing.nombreProducto)
+            if let p = productos.first(where: { $0.nombre == ing.nombreProducto }) {
+                let contenidoPorUnidad = max(p.contenidoNeto, 0.0001)
+                let stockTotalContenido = p.cantidad * contenidoPorUnidad
+                if stockTotalContenido < ing.cantidadUsada {
+                    faltantes.append(ing.nombreProducto)
+                }
             }
         }
         if !faltantes.isEmpty {
@@ -902,7 +913,10 @@ fileprivate struct ProgramarServicioModal: View {
              // Consumir stock
              for ing in servicio.ingredientes {
                  if let p = productos.first(where: { $0.nombre == ing.nombreProducto }) {
-                     p.cantidad -= ing.cantidadUsada
+                     let contenidoPorUnidad = max(p.contenidoNeto, 0.0001)
+                     let stockTotalContenido = p.cantidad * contenidoPorUnidad
+                     let restante = stockTotalContenido - ing.cantidadUsada
+                     p.cantidad = max(0, restante / contenidoPorUnidad)
                  }
              }
              // Ocupar mecánico

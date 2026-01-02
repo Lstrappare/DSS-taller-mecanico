@@ -374,40 +374,71 @@ struct EnProcesoView: View {
             return
         }
         
-        for nombre in ticket.productosConsumidos {
-            guard let p = productos.first(where: { $0.nombre == nombre }) else {
-                if !silencioso {
-                    alertaError = "Producto '\(nombre)' no encontrado en inventario."
-                    mostrandoAlerta = true
+        // Lógica ROBUSTA: Buscar servicio para saber cantidades
+        // Si encontramos la definición del servicio, usamos sus ingredientes y cantidades (litros, etc).
+        // Si no (ej. borrado), hacemos fallback a "1 unidad por producto" de la lista del ticket.
+        if let servicioDef = servicios.first(where: { $0.nombre == ticket.nombreServicio }) {
+            // 1. Validar Stock
+            for ing in servicioDef.ingredientes {
+                guard let p = productos.first(where: { $0.nombre == ing.nombreProducto }) else {
+                    if !silencioso {
+                        alertaError = "Producto '\(ing.nombreProducto)' no encontrado en inventario."
+                        mostrandoAlerta = true
+                    }
+                    return
                 }
-                let registro = DecisionRecord(
-                    fecha: Date(),
-                    titulo: "Auto-inicio fallido: \(ticket.nombreServicio)",
-                    razon: "Producto '\(nombre)' no encontrado.",
-                    queryUsuario: "Scheduler de Programados"
-                )
-                modelContext.insert(registro)
-                return
-            }
-            if p.cantidad <= 0 {
-                if !silencioso {
-                    alertaError = "Stock insuficiente para '\(p.nombre)'."
-                    mostrandoAlerta = true
+                
+                let contenidoPorUnidad = max(p.contenidoNeto, 0.0001)
+                let totalContenido = p.cantidad * contenidoPorUnidad
+                
+                if totalContenido < ing.cantidadUsada {
+                    if !silencioso {
+                        alertaError = "Stock insuficiente para '\(p.nombre)' (Req: \(ing.cantidadUsada), Disp: \(totalContenido))."
+                        mostrandoAlerta = true
+                    }
+                    let registro = DecisionRecord(
+                        fecha: Date(),
+                        titulo: "Auto-inicio fallido: \(ticket.nombreServicio)",
+                        razon: "Stock insuficiente de '\(p.nombre)'.",
+                        queryUsuario: "Scheduler de Programados"
+                    )
+                    modelContext.insert(registro)
+                    return
                 }
-                let registro = DecisionRecord(
-                    fecha: Date(),
-                    titulo: "Auto-inicio fallido: \(ticket.nombreServicio)",
-                    razon: "Stock insuficiente de '\(p.nombre)'.",
-                    queryUsuario: "Scheduler de Programados"
-                )
-                modelContext.insert(registro)
-                return
             }
-        }
-        
-        for nombre in ticket.productosConsumidos {
-            if let p = productos.first(where: { $0.nombre == nombre }) {
-                p.cantidad = max(0, p.cantidad - 1)
+            
+            // 2. Consumir Stock
+            for ing in servicioDef.ingredientes {
+                if let p = productos.first(where: { $0.nombre == ing.nombreProducto }) {
+                    let contenidoPorUnidad = max(p.contenidoNeto, 0.0001)
+                    let total = p.cantidad * contenidoPorUnidad
+                    let restante = total - ing.cantidadUsada
+                    p.cantidad = max(0, restante / contenidoPorUnidad)
+                }
+            }
+        } else {
+            // Fallback: Servicio no encontrado en catálogo activo
+            for nombre in ticket.productosConsumidos {
+                guard let p = productos.first(where: { $0.nombre == nombre }) else {
+                    if !silencioso {
+                        alertaError = "Producto '\(nombre)' no encontrado."
+                        mostrandoAlerta = true
+                    }
+                    return
+                }
+                if p.cantidad < 1 {
+                    if !silencioso {
+                        alertaError = "Stock insuficiente para '\(p.nombre)'."
+                        mostrandoAlerta = true
+                    }
+                    return
+                }
+            }
+            
+            for nombre in ticket.productosConsumidos {
+                if let p = productos.first(where: { $0.nombre == nombre }) {
+                    p.cantidad = max(0, p.cantidad - 1)
+                }
             }
         }
         
@@ -453,23 +484,54 @@ struct EnProcesoView: View {
             return
         }
         
-        for nombre in ticket.productosConsumidos {
-            guard let p = productos.first(where: { $0.nombre == nombre }) else {
-                alertaError = "Producto '\(nombre)' no encontrado en inventario."
-                mostrandoAlerta = true
-                return
-            }
-            if p.cantidad <= 0 {
-                alertaError = "Stock insuficiente para '\(p.nombre)'."
-                mostrandoAlerta = true
-                return
-            }
-        }
-        
-        for nombre in ticket.productosConsumidos {
-            if let p = productos.first(where: { $0.nombre == nombre }) {
-                p.cantidad = max(0, p.cantidad - 1)
-            }
+        if let servicioDef = servicios.first(where: { $0.nombre == ticket.nombreServicio }) {
+             // 1. Validar Stock
+             for ing in servicioDef.ingredientes {
+                 guard let p = productos.first(where: { $0.nombre == ing.nombreProducto }) else {
+                     alertaError = "Producto '\(ing.nombreProducto)' no encontrado en inventario."
+                     mostrandoAlerta = true
+                     return
+                 }
+                 
+                 let contenidoPorUnidad = max(p.contenidoNeto, 0.0001)
+                 let totalContenido = p.cantidad * contenidoPorUnidad
+                 
+                 if totalContenido < ing.cantidadUsada {
+                     alertaError = "Stock insuficiente para '\(p.nombre)' (Req: \(ing.cantidadUsada), Disp: \(totalContenido))."
+                     mostrandoAlerta = true
+                     return
+                 }
+             }
+             
+             // 2. Consumir Stock
+             for ing in servicioDef.ingredientes {
+                 if let p = productos.first(where: { $0.nombre == ing.nombreProducto }) {
+                     let contenidoPorUnidad = max(p.contenidoNeto, 0.0001)
+                     let total = p.cantidad * contenidoPorUnidad
+                     let restante = total - ing.cantidadUsada
+                     p.cantidad = max(0, restante / contenidoPorUnidad)
+                 }
+             }
+        } else {
+             // Fallback
+             for nombre in ticket.productosConsumidos {
+                 guard let p = productos.first(where: { $0.nombre == nombre }) else {
+                     alertaError = "Producto '\(nombre)' no encontrado en inventario."
+                     mostrandoAlerta = true
+                     return
+                 }
+                 if p.cantidad < 1 {
+                     alertaError = "Stock insuficiente para '\(p.nombre)'."
+                     mostrandoAlerta = true
+                     return
+                 }
+             }
+             
+             for nombre in ticket.productosConsumidos {
+                 if let p = productos.first(where: { $0.nombre == nombre }) {
+                     p.cantidad = max(0, p.cantidad - 1)
+                 }
+             }
         }
         
         mecanico.estado = .ocupado
