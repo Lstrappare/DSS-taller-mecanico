@@ -1482,6 +1482,9 @@ fileprivate struct CierreServicioModalView: View {
                 )
                 modelContext.insert(registroComision)
                 
+                // NUEVO: Incrementar servicios realizados para el Top 5
+                mecanico.serviciosRealizados += 1
+                
                 // NUEVO: Incrementar Ganancia Global (Revenue/Venta)
                 gananciaServiciosAcumulada += servicioCatalogo.precioFinalAlCliente
             } else {

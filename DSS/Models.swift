@@ -116,6 +116,9 @@ class Personal {
     // Antigüedad / Asistencia
     var antiguedadDias: Int
     var bloqueoAsistenciaFecha: Date?
+    
+    // Nuevo: Contador de servicios realizados (para Top 5)
+    var serviciosRealizados: Int = 0
 
     // Relación de asistencias
     @Relationship(deleteRule: .cascade, inverse: \AsistenciaDiaria.empleado)
@@ -402,6 +405,7 @@ class Personal {
 
         self.antiguedadDias = antiguedadDias
         self.bloqueoAsistenciaFecha = bloqueoAsistenciaFecha
+        self.serviciosRealizados = 0
     }
 
     // MARK: - Nómina: Funciones de negocio

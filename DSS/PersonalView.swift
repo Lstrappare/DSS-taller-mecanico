@@ -95,6 +95,7 @@ struct PersonalView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             header
+            topPersonalView
             filtrosView
             ScrollView {
                 LazyVStack(spacing: 12) {
@@ -287,6 +288,58 @@ struct PersonalView: View {
         }
     }
     
+    // Top 5 Personal View
+    private var topPersonalView: some View {
+        let top5 = personal.sorted { $0.serviciosRealizados > $1.serviciosRealizados }.prefix(5)
+        
+        return Group {
+            if !top5.isEmpty && top5.first!.serviciosRealizados > 0 {
+                VStack(alignment: .leading, spacing: 5) {
+                    Label("Top 5 Desempeño (Servicios)", systemImage: "trophy.fill")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 4)
+                        
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(Array(top5.enumerated()), id: \.element.rfc) { index, mec in
+                                if mec.serviciosRealizados > 0 {
+                                    HStack(spacing: 8) {
+                                        // Badge Rank
+                                        ZStack {
+                                            Circle()
+                                                .fill(index == 0 ? Color.yellow : Color.gray.opacity(0.5))
+                                                .frame(width: 26, height: 26)
+                                            Text("#\(index + 1)")
+                                                .font(.caption2).fontWeight(.bold)
+                                                .foregroundColor(index == 0 ? .black : .white)
+                                        }
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(mec.nombre)
+                                                .font(.caption).fontWeight(.semibold)
+                                                .foregroundColor(.white)
+                                                .lineLimit(1)
+                                            Text("\(mec.serviciosRealizados) servicios")
+                                                .font(.caption2)
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(Color("MercedesCard"))
+                                    .cornerRadius(8)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 2)
+                    }
+                    .padding(.bottom, 6)
+                }
+            }
+        }
+    }
+
     private var emptyStateView: some View {
         VStack(spacing: 8) {
             Image(systemName: "person.crop.circle.badge.questionmark")
