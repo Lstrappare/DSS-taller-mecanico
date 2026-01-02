@@ -629,7 +629,7 @@ fileprivate struct ProgramarServicioModal: View {
                                             .font(.system(.body, design: .monospaced))
                                             .foregroundColor(Color("MercedesPetrolGreen"))
                                         VStack(alignment: .leading, spacing: 2) {
-                                            Text("\(vehiculo.marca) \(vehiculo.modelo) (\(vehiculo.anio))")
+                                            Text("\(vehiculo.marca) \(vehiculo.modelo) (\(String(vehiculo.anio)))")
                                                 .font(.subheadline).fontWeight(.semibold)
                                             Text("Cliente: \(vehiculo.cliente?.nombre ?? "N/A")")
                                                 .font(.caption2).foregroundColor(.gray)
@@ -649,23 +649,29 @@ fileprivate struct ProgramarServicioModal: View {
                         }
                     }
                     .frame(maxHeight: 200)
-                }
-                .frame(maxWidth: .infinity)
-                
-                // Leyenda de servicios programados (si el vehículo tiene)
-                if !serviciosActivosDelVehiculo.isEmpty {
+                    
+                    // Leyenda de servicios programados
+                    // Leyenda de servicios programados (Siempre visible)
                     VStack(alignment: .leading, spacing: 6) {
-                        Label("Servicios ya programados:", systemImage: "calendar.badge.exclamationmark")
+                        let nombreVehiculo = vehiculos.first(where: { $0.id == vehiculoSeleccionadoID })?.placas ?? "(seleccione un vehículo)"
+                        Label("Servicios ya programados para \(nombreVehiculo):", systemImage: "calendar.badge.exclamationmark")
                             .font(.caption).fontWeight(.bold)
                             .foregroundColor(.orange)
                         
-                        ForEach(serviciosActivosDelVehiculo) { s in
-                            let fecha = s.fechaProgramadaInicio ?? s.horaInicio
-                            let fechaStr = fecha.formatted(date: .long, time: .shortened)
-                            Text("• \(s.nombreServicio) - \(fechaStr)")
+                        if serviciosActivosDelVehiculo.isEmpty {
+                            Text("Ningún servicio programado aún")
                                 .font(.caption2)
                                 .foregroundColor(.gray)
-                                .fixedSize(horizontal: false, vertical: true)
+                                .italic()
+                        } else {
+                            ForEach(serviciosActivosDelVehiculo) { s in
+                                let fecha = s.fechaProgramadaInicio ?? s.horaInicio
+                                let fechaStr = fecha.formatted(date: .long, time: .shortened)
+                                Text("• \(s.nombreServicio) el \(fechaStr)")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
                     .padding(10)
@@ -673,6 +679,7 @@ fileprivate struct ProgramarServicioModal: View {
                     .background(Color("MercedesBackground"))
                     .cornerRadius(8)
                 }
+                .frame(maxWidth: .infinity)
                 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Fecha y hora de inicio").font(.headline)
