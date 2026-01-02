@@ -525,6 +525,8 @@ fileprivate struct ClienteConVehiculoFormView: View {
     @State private var marca = ""
     @State private var modelo = ""
     @State private var anioString = ""
+    @State private var color = ""
+    @State private var observaciones = ""
     @State private var errorMsg: String?
     
     // Bools de Validación
@@ -573,6 +575,13 @@ fileprivate struct ClienteConVehiculoFormView: View {
     private var modeloInvalido: Bool {
         let m = modelo.trimmingCharacters(in: .whitespaces)
         return m.count < 2
+    }
+    private var colorInvalido: Bool {
+        let c = color.trimmingCharacters(in: .whitespaces)
+        return c.count < 3 || c.count > 30
+    }
+    private var observacionesInvalidas: Bool {
+        observaciones.count > 255
     }
 
     var body: some View {
@@ -714,6 +723,36 @@ fileprivate struct ClienteConVehiculoFormView: View {
                                 }
                                 .validationHint(isInvalid: modeloInvalido, message: "Mínimo 2 caracteres.")
                         }
+                        HStack(spacing: 16) {
+                            FormField(title: "• Color", placeholder: "ej. Rojo", text: $color, characterLimit: 30)
+                                .onChange(of: color) { _, newValue in
+                                    if newValue.count > 30 { color = String(newValue.prefix(30)) }
+                                }
+                                .validationHint(isInvalid: colorInvalido, message: "Min 3, Max 30 caracteres.")
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Observaciones (Max 255)").font(.caption2).foregroundColor(.gray)
+                                Spacer()
+                                Text("\(observaciones.count)/255")
+                                    .font(.caption2)
+                                    .foregroundColor(observaciones.count > 255 ? .red : .gray)
+                            }
+                            TextEditor(text: $observaciones)
+                                .frame(height: 80)
+                                .padding(8)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+                                .onChange(of: observaciones) { _, newValue in
+                                    if newValue.count > 255 { observaciones = String(newValue.prefix(255)) }
+                                }
+                        }
+                        .validationHint(isInvalid: observacionesInvalidas, message: "Máximo 255 caracteres.")
                     }
                 }
                 .padding(24)
@@ -758,8 +797,8 @@ fileprivate struct ClienteConVehiculoFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido)
-                .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido) ? 0.6 : 1.0)
+                .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas)
+                .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
@@ -804,8 +843,13 @@ fileprivate struct ClienteConVehiculoFormView: View {
             return
         }
         
+        guard !colorInvalido else {
+            errorMsg = "El Color debe tener entre 3 y 30 caracteres."
+            return
+        }
+        
         let nuevoCliente = Cliente(nombre: nombreTrimmed, telefono: telefonoTrimmed, email: email.trimmingCharacters(in: .whitespaces))
-        let nuevoVehiculo = Vehiculo(placas: placasTrimmed, marca: marcaTrimined(marcaTrimmed), modelo: modeloTrimmed, anio: anio)
+        let nuevoVehiculo = Vehiculo(placas: placasTrimmed, marca: marcaTrimined(marcaTrimmed), modelo: modeloTrimmed, anio: anio, color: color.trimmingCharacters(in: .whitespaces), observaciones: observaciones.trimmingCharacters(in: .whitespaces))
         
         nuevoVehiculo.cliente = nuevoCliente
         nuevoCliente.vehiculos.append(nuevoVehiculo)
@@ -1250,10 +1294,17 @@ fileprivate struct VehiculoFormView: View {
     private var modeloInvalido: Bool {
         vehiculo.modelo.trimmingCharacters(in: .whitespaces).count < 2
     }
+    private var colorInvalido: Bool {
+        let c = vehiculo.color.trimmingCharacters(in: .whitespaces)
+        return c.count < 3 || c.count > 30
+    }
+    private var observacionesInvalidas: Bool {
+        vehiculo.observaciones.count > 255
+    }
     
     init(cliente: Cliente) {
         self.clientePadre = cliente
-        self._vehiculo = State(initialValue: Vehiculo(placas: "", marca: "", modelo: "", anio: 2020))
+        self._vehiculo = State(initialValue: Vehiculo(placas: "", marca: "", modelo: "", anio: 2020, color: "", observaciones: ""))
         self.esModoEdicion = false
     }
     
@@ -1377,6 +1428,37 @@ fileprivate struct VehiculoFormView: View {
                                 }
                                 .validationHint(isInvalid: anioInvalido, message: "Año inválido.")
                         }
+                        
+                        HStack(spacing: 16) {
+                            FormField(title: "• Color", placeholder: "ej. Azul", text: $vehiculo.color, characterLimit: 30)
+                                .onChange(of: vehiculo.color) { _, newValue in
+                                    if newValue.count > 30 { vehiculo.color = String(newValue.prefix(30)) }
+                                }
+                                .validationHint(isInvalid: colorInvalido, message: "Min 3, Max 30 caracteres.")
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Observaciones (Max 255)").font(.caption2).foregroundColor(.gray)
+                                Spacer()
+                                Text("\(vehiculo.observaciones.count)/255")
+                                    .font(.caption2)
+                                    .foregroundColor(vehiculo.observaciones.count > 255 ? .red : .gray)
+                            }
+                            TextEditor(text: $vehiculo.observaciones)
+                                .frame(height: 80)
+                                .padding(8)
+                                .background(Color("MercedesBackground"))
+                                .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+                                .onChange(of: vehiculo.observaciones) { _, newValue in
+                                    if newValue.count > 255 { vehiculo.observaciones = String(newValue.prefix(255)) }
+                                }
+                        }
+                        .validationHint(isInvalid: observacionesInvalidas, message: "Máximo 255 caracteres.")
                     }
                     
                     if esModoEdicion {
@@ -1451,8 +1533,8 @@ fileprivate struct VehiculoFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(placasInvalida || anioInvalido || marcaInvalida || modeloInvalido)
-                .opacity((placasInvalida || anioInvalido || marcaInvalida || modeloInvalido) ? 0.6 : 1.0)
+                .disabled(placasInvalida || anioInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas)
+                .opacity((placasInvalida || anioInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
@@ -1528,9 +1610,16 @@ fileprivate struct VehiculoFormView: View {
             return
         }
         
+        guard !colorInvalido else {
+             errorMsg = "El Color debe tener entre 3 y 30 caracteres."
+             return
+        }
+        
         vehiculo.placas = placasTrimmed
         vehiculo.marca = marcaTrimmed
         vehiculo.modelo = modeloTrimmed
+        vehiculo.color = vehiculo.color.trimmingCharacters(in: .whitespaces)
+        vehiculo.observaciones = vehiculo.observaciones.trimmingCharacters(in: .whitespaces)
         
         if !esModoEdicion {
             vehiculo.cliente = clientePadre
