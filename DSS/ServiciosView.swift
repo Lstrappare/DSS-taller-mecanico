@@ -1029,9 +1029,14 @@ fileprivate struct ServicioFormView: View {
     @Query private var productos: [Producto]
     @Query private var personal: [Personal]
     @Query private var servicios: [Servicio] // Para validar duplicados
+    @Query private var tickets: [ServicioEnProceso] // Para validar uso activo
 
     let mode: ServiceModalMode
     @Binding var modalMode: ServiceModalMode? // Para cambiar a modo edición si hay duplicado
+    
+    // Alert state for blocking actions
+    @State private var showingBlockingAlert = false
+    @State private var blockingMessage = ""
     
     // Datos base
     @State private var nombre = ""
@@ -1078,6 +1083,14 @@ fileprivate struct ServicioFormView: View {
     @State private var authReason: AuthReason = .unlockNombre
     
     private var servicioAEditar: Servicio?
+    
+    private var tieneTicketsActivos: Bool {
+        guard let s = servicioAEditar else { return false }
+        return tickets.contains { ticket in
+            ticket.nombreServicio == s.nombre && (ticket.estado == .programado || ticket.estado == .enProceso)
+        }
+    }
+    
     var formTitle: String {
         switch mode {
         case .add:
@@ -1609,8 +1622,13 @@ fileprivate struct ServicioFormView: View {
                                 .multilineTextAlignment(.center)
 
                             Button(role: .destructive) {
-                                authReason = .deleteServicio
-                                showingAuthModal = true
+                                if tieneTicketsActivos {
+                                    blockingMessage = "No se puede eliminar este servicio porque tiene tickets programados o en proceso. Primero cancela o finaliza esos servicios y vuelve a intentarlo."
+                                    showingBlockingAlert = true
+                                } else {
+                                    authReason = .deleteServicio
+                                    showingAuthModal = true
+                                }
                             } label: {
                                 Label("Eliminar servicio permanentemente", systemImage: "trash.fill")
                                     .padding(.vertical, 10)
@@ -1676,8 +1694,13 @@ fileprivate struct ServicioFormView: View {
                 // Botón de Activar/Desactivar
                 if servicioAEditar != nil {
                     Button {
-                        // Mostrar alerta de confirmación en lugar de togglear directo
-                        showingStatusAlert = true
+                        if tieneTicketsActivos && activo { // Solo bloquear si intenta desactivar (activo -> inactivo)
+                             blockingMessage = "No se puede dar de baja este servicio temporalmente porque actualmente está en uso (programado o en proceso). Espera a que finalicen los servicios activos o cancélalos."
+                             showingBlockingAlert = true
+                        } else {
+                            // Mostrar alerta de confirmación
+                            showingStatusAlert = true
+                        }
                     } label: {
                         Text(activo ? "Quitar temporalmente" : "Devolver al inventario")
                             .padding(.vertical, 8)
@@ -1713,15 +1736,18 @@ fileprivate struct ServicioFormView: View {
             }
             .padding(16)
             .background(Color("MercedesCard"))
+            .alert("Acción Requerida", isPresented: $showingBlockingAlert) {
+                Button("Entendido", role: .cancel) { }
+            } message: {
+                 Text(blockingMessage)
+            }
         }
         .background(Color("MercedesBackground"))
-        .preferredColorScheme(.dark)
         .frame(minWidth: 800, minHeight: 650, maxHeight: 700)
         .cornerRadius(12)
         .sheet(isPresented: $showingAuthModal) {
             authModalView()
         }
-        // ALERTA: Confirmar activar/desactivar
         .alert(activo ? "¿Quitar temporalmente?" : "¿Devolver al inventario?", isPresented: $showingStatusAlert) {
             Button(activo ? "Quitar temporalmente" : "Devolver al inventario", role: .destructive) {
                 activo.toggle()
@@ -1734,7 +1760,6 @@ fileprivate struct ServicioFormView: View {
                 : "El servicio volverá a estar disponible para asignación."
             )
         }
-        .opacity((nombreInvalido || duracionInvalida || costoMOInvalido || gananciaInvalida || gastosAdminInvalido || costoRefInvalido || pISRInvalido || especialidadRequerida.isEmpty) ? 0.6 : 1.0)
     }
     
     private func roField(_ title: String, _ value: Double) -> some View {
