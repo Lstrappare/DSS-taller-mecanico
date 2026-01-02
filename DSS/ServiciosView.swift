@@ -523,6 +523,17 @@ fileprivate struct ProgramarServicioModal: View {
     @State private var candidato: Personal?
     @State private var conflictoMensaje: String?
     @State private var stockAdvertencia: String?
+    @State private var conflictoVehiculoMensaje: String? // Alerta de empalme de servicios para el vehículo
+    
+    // Lista de servicios ya programados para el vehículo seleccionado (Leyenda)
+    var serviciosActivosDelVehiculo: [ServicioEnProceso] {
+        guard let id = vehiculoSeleccionadoID else { return [] }
+        return tickets.filter { t in
+            t.vehiculo?.id == id && (t.estado == .programado || t.estado == .enProceso)
+        }.sorted {
+            ($0.fechaProgramadaInicio ?? $0.horaInicio) < ($1.fechaProgramadaInicio ?? $1.horaInicio)
+        }
+    }
     
     // Check de stock estricto para "Empezar Ahora"
     private var stockInsuficienteParaAhora: Bool {
@@ -641,6 +652,28 @@ fileprivate struct ProgramarServicioModal: View {
                 }
                 .frame(maxWidth: .infinity)
                 
+                // Leyenda de servicios programados (si el vehículo tiene)
+                if !serviciosActivosDelVehiculo.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Servicios ya programados:", systemImage: "calendar.badge.exclamationmark")
+                            .font(.caption).fontWeight(.bold)
+                            .foregroundColor(.orange)
+                        
+                        ForEach(serviciosActivosDelVehiculo) { s in
+                            let fecha = s.fechaProgramadaInicio ?? s.horaInicio
+                            let fechaStr = fecha.formatted(date: .long, time: .shortened)
+                            Text("• \(s.nombreServicio) - \(fechaStr)")
+                                .font(.caption2)
+                                .foregroundColor(.gray)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color("MercedesBackground"))
+                    .cornerRadius(8)
+                }
+                
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Fecha y hora de inicio").font(.headline)
                     
@@ -736,6 +769,15 @@ fileprivate struct ProgramarServicioModal: View {
                         .foregroundColor(.yellow)
                 }
                 
+                if let conflictoVehiculoMensaje {
+                    Label(conflictoVehiculoMensaje, systemImage: "car.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(8)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(6)
+                }
+                
                 if let stockAdvertencia, !empezarAhora {
                     // Warning suave solo si es programado
                     Label(stockAdvertencia, systemImage: "shippingbox.fill")
@@ -797,13 +839,15 @@ fileprivate struct ProgramarServicioModal: View {
                     vehiculoSeleccionadoID == nil || 
                     candidato == nil || 
                     (!empezarAhora && (fechaInicio < Date() || !isHoraValida)) ||
-                    (empezarAhora && stockInsuficienteParaAhora)
+                    (empezarAhora && stockInsuficienteParaAhora) ||
+                    conflictoVehiculoMensaje != nil
                 )
                 .opacity(
                     (vehiculoSeleccionadoID == nil || 
                      candidato == nil || 
                      (!empezarAhora && (fechaInicio < Date() || !isHoraValida)) ||
-                     (empezarAhora && stockInsuficienteParaAhora)) ? 0.6 : 1.0
+                     (empezarAhora && stockInsuficienteParaAhora) ||
+                     conflictoVehiculoMensaje != nil) ? 0.6 : 1.0
                 )
             }
         }
@@ -834,6 +878,7 @@ fileprivate struct ProgramarServicioModal: View {
     // Selección automática del mejor candidato
     private func recalcularCandidato() {
         conflictoMensaje = nil
+        conflictoVehiculoMensaje = nil
         stockAdvertencia = nil
         
         let targetDate = empezarAhora ? Date() : fechaInicio
@@ -899,6 +944,32 @@ fileprivate struct ProgramarServicioModal: View {
         }
         if !faltantes.isEmpty {
             stockAdvertencia = "Stock insuficiente hoy para: \(faltantes.joined(separator: ", "))."
+        }
+        
+        // 5) Verificar conflicto de vehículo (Nueva Lógica)
+        if !serviciosActivosDelVehiculo.isEmpty {
+            // Intervalo Propuesto
+            let inicioPropuesto = targetDate
+            // Si hay candidato, usamos su cálculo preciso (incluye horario laboral). Si no, fallback simple.
+            let finPropuesto = candidato?.calcularFechaFin(inicio: inicioPropuesto, duracionHoras: servicio.duracionHoras) 
+                ?? inicioPropuesto.addingTimeInterval(servicio.duracionHoras * 3600)
+            
+            for t in serviciosActivosDelVehiculo {
+                let tInicio = t.fechaProgramadaInicio ?? t.horaInicio
+                let tFin = t.horaFinEstimada
+                
+                // Checar Solape: (StartA < EndB) y (EndA > StartB)
+                if inicioPropuesto < tFin && finPropuesto > tInicio {
+                    // Formato solicitado: dia, mes y año a las hh:mm
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "dd 'de' MMMM yyyy 'a las' HH:mm"
+                    formatter.locale = Locale(identifier: "es_MX")
+                    let fechaStr = formatter.string(from: tInicio)
+                    
+                    conflictoVehiculoMensaje = "Este vehículo tiene \(t.nombreServicio) programado para el \(fechaStr). No se puede programar otro servicio en este horario."
+                    break
+                }
+            }
         }
     }
     
