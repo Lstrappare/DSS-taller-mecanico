@@ -1346,6 +1346,10 @@ fileprivate struct ServicioFormView: View {
                                 .padding(6)
                                 .background(Color("MercedesBackground"))
                                 .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
                                 .validationHint(isInvalid: especialidadRequerida.isEmpty, message: "Requerido")
                             }
 
@@ -1362,6 +1366,10 @@ fileprivate struct ServicioFormView: View {
                                 .padding(6)
                                 .background(Color("MercedesBackground"))
                                 .cornerRadius(8)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
                                 .validationHint(isInvalid: rolRequerido == nil, message: "Requerido")
                             }
                         }

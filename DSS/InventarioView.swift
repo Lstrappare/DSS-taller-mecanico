@@ -765,7 +765,7 @@ fileprivate struct ProductoCard: View {
             // Footer acciones
             HStack(alignment: .bottom) {
                 // Info Stock
-                Text("Stock: \(producto.cantidad, specifier: "%.2f") \(producto.unidadDeMedida)(s)")
+                Text("Cantidad en Stock: \(producto.cantidad, specifier: "%.2f")")
                     .font(.caption2).foregroundColor(.gray)
                 
                 Spacer()
