@@ -27,6 +27,9 @@ struct ServiciosView: View {
     @State private var searchQuery = ""
     @State private var incluirInactivos = false
     
+    // NUEVO: Ganancias acumuladas (AppStorage)
+    @AppStorage("gananciaServiciosAcumulada") private var gananciaServiciosAcumulada: Double = 0.0
+    
     // Ordenamiento (patrón InventarioView)
     enum SortOption: String, CaseIterable, Identifiable {
         case nombre = "Nombre"
@@ -76,6 +79,31 @@ struct ServiciosView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Header compacto con métrica y CTA (patrón InventarioView)
             header
+            
+            // Fila de Título Top 5 y Ganancias
+            HStack(alignment: .center) {
+                if !servicios.isEmpty && servicios.contains(where: { $0.vecesRealizado > 0 }) {
+                     Label("Top 5 Más Solicitados", systemImage: "trophy.fill")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+                Spacer()
+                // Ganancias (Badge)
+                HStack(spacing: 4) {
+                    Image(systemName: "dollarsign.circle.fill")
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                    Text("Ganancias: $\(gananciaServiciosAcumulada, specifier: "%.2f")")
+                        .font(.caption).fontWeight(.bold)
+                        .foregroundColor(Color("MercedesPetrolGreen"))
+                }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Color.white.opacity(0.9))
+                .cornerRadius(6)
+            }
+            .padding(.horizontal, 4)
+
+            // Top 5 Servicios más solicitados (Lista horizontal)
+            topServiciosView
             
             // Filtros y búsqueda mejorados
             filtrosView
@@ -330,6 +358,50 @@ struct ServiciosView: View {
     func formatearIngredientes(_ ingredientes: [Ingrediente]) -> String {
         ingredientes.map { "\($0.nombreProducto) (\(String(format: "%.2f", $0.cantidadUsada)))" }
             .joined(separator: ", ")
+    }
+    
+    // Top 5 View (Solo el ScrollView content)
+    private var topServiciosView: some View {
+        let top5 = servicios.sorted { $0.vecesRealizado > $1.vecesRealizado }.prefix(5)
+        
+        return Group {
+            if !top5.isEmpty && top5.first!.vecesRealizado > 0 {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(Array(top5.enumerated()), id: \.element.nombre) { index, serv in
+                            if serv.vecesRealizado > 0 {
+                                HStack(spacing: 8) {
+                                    // Badge Rank
+                                    ZStack {
+                                        Circle()
+                                            .fill(index == 0 ? Color.yellow : Color.gray.opacity(0.5))
+                                            .frame(width: 24, height: 24)
+                                        Text("#\(index + 1)")
+                                            .font(.caption2).fontWeight(.bold)
+                                            .foregroundColor(index == 0 ? .black : .white)
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(serv.nombre)
+                                            .font(.caption).fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                            .lineLimit(1)
+                                        Text("\(serv.vecesRealizado) servicios")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                    }
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(Color("MercedesCard"))
+                                .cornerRadius(8)
+                            }
+                        }
+                    }
+                }
+                .padding(.bottom, 4)
+            }
+        }
     }
 }
 
@@ -1037,6 +1109,11 @@ fileprivate struct ProgramarServicioModal: View {
             queryUsuario: "Programación/Asignación desde Modal Unificado"
         )
         modelContext.insert(registro)
+        
+        // NUEVO: Incrementar contador Top 5 si empieza ahora
+        if empezarAhora {
+            servicio.vecesRealizado += 1
+        }
         
         dismiss()
         appState.seleccion = .serviciosEnProceso

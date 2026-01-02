@@ -457,6 +457,11 @@ struct EnProcesoView: View {
             queryUsuario: "Scheduler de Programados"
         )
         modelContext.insert(registro)
+        
+        // NUEVO: Incrementar contador Top 5
+        if let serv = servicios.first(where: { $0.nombre == ticket.nombreServicio }) {
+            serv.vecesRealizado += 1
+        }
     }
     
     // MARK: - Acciones Programados (manual)
@@ -550,6 +555,11 @@ struct EnProcesoView: View {
             queryUsuario: "Inicio manual de ticket programado"
         )
         modelContext.insert(registro)
+        
+        // NUEVO: Incrementar contador Top 5
+        if let serv = servicios.first(where: { $0.nombre == ticket.nombreServicio }) {
+            serv.vecesRealizado += 1
+        }
     }
     
     private func cancelarTicket(_ ticket: ServicioEnProceso) {
@@ -1143,6 +1153,9 @@ fileprivate struct CierreServicioModalView: View {
     @State private var observaciones = ""
     @State private var mostrandoConfirmacion = false
     
+    // NUEVO: Ganancias acumuladas
+    @AppStorage("gananciaServiciosAcumulada") private var gananciaServiciosAcumulada: Double = 0.0
+    
     var body: some View {
         VStack(spacing: 18) {
             // Header
@@ -1285,6 +1298,9 @@ fileprivate struct CierreServicioModalView: View {
                     queryUsuario: "Cierre de Servicio"
                 )
                 modelContext.insert(registroComision)
+                
+                // NUEVO: Incrementar Ganancia Global (Revenue/Venta)
+                gananciaServiciosAcumulada += servicioCatalogo.precioFinalAlCliente
             } else {
                 let registroAviso = DecisionRecord(
                     fecha: Date(),

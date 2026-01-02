@@ -691,6 +691,9 @@ class Servicio {
     
     // Estado de actividad
     var activo: Bool
+    
+    // Nuevo: Contador de realizaciones para Top 5
+    var vecesRealizado: Int = 0
 
     init(nombre: String,
          descripcion: String = "",
@@ -716,7 +719,8 @@ class Servicio {
          isrPorcentajeEstimado: Double = 10.0,
          precioFinalAlCliente: Double? = nil,
          precioModificadoManualmente: Bool = false,
-         activo: Bool = true)
+         activo: Bool = true,
+         vecesRealizado: Int = 0)
     {
         self.nombre = nombre
         self.descripcion = descripcion
