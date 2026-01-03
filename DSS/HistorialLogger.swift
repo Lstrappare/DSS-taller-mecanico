@@ -67,4 +67,33 @@ struct HistorialLogger {
         }
         return nil
     }
+
+    // Helper para generar diff de fechas (ignorando hora si es solo fecha)
+    static func generarDiffFecha(campo: String, ant: Date, nue: Date, includeTime: Bool = false) -> String? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = includeTime ? "dd/MM/yyyy HH:mm" : "dd/MM/yyyy"
+        let antStr = formatter.string(from: ant)
+        let nueStr = formatter.string(from: nue)
+        
+        guard antStr != nueStr else { return nil }
+        return "- \(campo): \(antStr) -> \(nueStr)"
+    }
+    
+    // Helper para generar diff de Arrays (ej. Especialidades, Días)
+    static func generarDiffArray(campo: String, ant: [String], nue: [String]) -> String? {
+        let antSet = Set(ant)
+        let nueSet = Set(nue)
+        
+        if antSet == nueSet { return nil }
+        
+        var parts: [String] = []
+        let agregados = nueSet.subtracting(antSet).sorted()
+        if !agregados.isEmpty { parts.append("Agregado: [\(agregados.joined(separator: ", "))]") }
+        
+        let eliminados = antSet.subtracting(nueSet).sorted()
+        if !eliminados.isEmpty { parts.append("Eliminado: [\(eliminados.joined(separator: ", "))]") }
+        
+        if parts.isEmpty { return nil }
+        return "- \(campo): \(parts.joined(separator: "; "))"
+    }
 }

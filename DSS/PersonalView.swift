@@ -1359,7 +1359,10 @@ struct PersonalFormView: View {
                                 personName: nombre,
                                 onDelete: { deleteCurrentFile(&ineAdjuntoPath) },
                                 onReveal: { revealInFinder(ineAdjuntoPath) },
-                                onDroppedAndSaved: { newPath in ineAdjuntoPath = newPath }
+                                onDroppedAndSaved: { newPath in 
+                                    ineAdjuntoPath = newPath 
+                                    HistorialLogger.logAutomatico(context: modelContext, titulo: "Documento Actualizado", detalle: "Se subió o actualizó el INE de \(nombre).", categoria: .personal, entidadAfectada: nombre)
+                                }
                             )
                             DocumentDropField(
                                 title: "Comprobante de domicilio (PDF/Word/Img)",
@@ -1369,7 +1372,10 @@ struct PersonalFormView: View {
                                 personName: nombre, // Nuevo
                                 onDelete: { deleteCurrentFile(&comprobanteDomicilioPath) },
                                 onReveal: { revealInFinder(comprobanteDomicilioPath) },
-                                onDroppedAndSaved: { newPath in comprobanteDomicilioPath = newPath }
+                                onDroppedAndSaved: { newPath in 
+                                    comprobanteDomicilioPath = newPath 
+                                    HistorialLogger.logAutomatico(context: modelContext, titulo: "Documento Actualizado", detalle: "Se subió o actualizó el Comprobante de Domicilio de \(nombre).", categoria: .personal, entidadAfectada: nombre)
+                                }
                             )
                             DocumentDropField(
                                 title: "Comprobante de estudios (PDF/Word/Img)",
@@ -1379,7 +1385,10 @@ struct PersonalFormView: View {
                                 personName: nombre, // Nuevo
                                 onDelete: { deleteCurrentFile(&comprobanteEstudiosPath) },
                                 onReveal: { revealInFinder(comprobanteEstudiosPath) },
-                                onDroppedAndSaved: { newPath in comprobanteEstudiosPath = newPath }
+                                onDroppedAndSaved: { newPath in 
+                                    comprobanteEstudiosPath = newPath 
+                                    HistorialLogger.logAutomatico(context: modelContext, titulo: "Documento Actualizado", detalle: "Se subió o actualizó el Comprobante de Estudios de \(nombre).", categoria: .personal, entidadAfectada: nombre)
+                                }
                             )
                             DocumentDropField(
                                 title: "Contrato (PDF/Word/Img)", // Nuevo campo
@@ -1389,7 +1398,10 @@ struct PersonalFormView: View {
                                 personName: nombre, // Nuevo
                                 onDelete: { deleteCurrentFile(&contratoAdjuntoPath) },
                                 onReveal: { revealInFinder(contratoAdjuntoPath) },
-                                onDroppedAndSaved: { newPath in contratoAdjuntoPath = newPath }
+                                onDroppedAndSaved: { newPath in 
+                                    contratoAdjuntoPath = newPath 
+                                    HistorialLogger.logAutomatico(context: modelContext, titulo: "Documento Actualizado", detalle: "Se subió o actualizó el Contrato de \(nombre).", categoria: .personal, entidadAfectada: nombre)
+                                }
                             )
                         }
                         Text("Arrastra archivos aquí. Se copiarán a Application Support/MercedesTaller/Personal/<RFC>/")
@@ -1996,9 +2008,33 @@ struct PersonalFormView: View {
             if let d = HistorialLogger.generarDiffCambioTexto(campo: "Nombre", ant: mec.nombre, nue: nombreNormalizado) { diffs.append(d) }
             if let d = HistorialLogger.generarDiffCambioTexto(campo: "Rol", ant: mec.rol.rawValue, nue: rol.rawValue) { diffs.append(d) }
             if let d = HistorialLogger.generarDiffCambioTexto(campo: "Email", ant: mec.email, nue: email.trimmingCharacters(in: .whitespacesAndNewlines)) { diffs.append(d) }
-            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Salario Ref", ant: mec.salarioMinimoReferencia, nue: salarioDiarioBase) { diffs.append(d) }
-            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Tipo Salario", ant: mec.tipoSalario.rawValue, nue: tipoSalario.rawValue) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Teléfono", ant: mec.telefono, nue: telefono.trimmingCharacters(in: .whitespacesAndNewlines)) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioBool(campo: "Teléfono Activo", ant: mec.telefonoActivo, nue: telefonoActivo) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffFecha(campo: "Fecha Ingreso", ant: mec.fechaIngreso, nue: fechaIngreso) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Contrato", ant: mec.tipoContrato.rawValue, nue: tipoContrato.rawValue) { diffs.append(d) }
             
+            // Horario
+            let horarioAnt = "\(mec.horaEntrada):00 - \(mec.horaSalida):00"
+            let horarioNue = "\(horaEntrada):00 - \(horaSalida):00"
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Horario", ant: horarioAnt, nue: horarioNue) { diffs.append(d) }
+            
+            if let d = HistorialLogger.generarDiffArray(campo: "Días Laborales", ant: mec.diasLaborales.map(String.init), nue: Array(diasLaborales).sorted().map(String.init)) { diffs.append(d) }
+            
+            // Financiero
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Salario Ref", ant: mec.salarioMinimoReferencia, nue: salarioDiarioBase) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Factor Integración", ant: mec.factorIntegracion, nue: factorIntegracionValor) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Tipo Salario", ant: mec.tipoSalario.rawValue, nue: tipoSalario.rawValue) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Frecuencia Pago", ant: mec.frecuenciaPago.rawValue, nue: frecuenciaPago.rawValue) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioBool(campo: "Prestaciones Mínimas", ant: mec.prestacionesMinimas, nue: prestacionesMinimas) { diffs.append(d) }
+            
+            // Comisiones (solo si no es minimo)
+            if !isMinSalary {
+                if let d = HistorialLogger.generarDiffCambioNumero(campo: "Comisiones Acum.", ant: mec.comisiones, nue: comisionesValor) { diffs.append(d) }
+            }
+            
+            // Especialidades
+            if let d = HistorialLogger.generarDiffArray(campo: "Especialidades", ant: mec.especialidades, nue: especialidadesArray) { diffs.append(d) }
+
             if !diffs.isEmpty {
                  HistorialLogger.logAutomatico(context: modelContext, 
                                                titulo: "Actualización de Personal: \(mec.nombre)",
@@ -2187,6 +2223,8 @@ struct PersonalFormView: View {
             dismiss()
         case .markAbsence:
             marcarAusenciaDiaCompleto()
+            let nombreMec = mecanicoAEditar?.nombre ?? "Desconocido"
+            HistorialLogger.logAutomatico(context: modelContext, titulo: "Ausencia Registrada", detalle: "Se marcó inasistencia (falta) del día para \(nombreMec).", categoria: .personal, entidadAfectada: nombreMec)
         case .unlockComisiones:
             isComisionesUnlocked = true
         }
