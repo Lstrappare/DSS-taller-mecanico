@@ -1644,11 +1644,28 @@ struct ProductFormView: View {
             // Log Edición
             var diffs: [String] = []
             if let d = HistorialLogger.generarDiffCambioTexto(campo: "Nombre", ant: producto.nombre, nue: trimmedNombre) { diffs.append(d) }
-            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Costo", ant: producto.costo, nue: costo) { diffs.append(d) }
-            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Precio Venta", ant: producto.precioVenta, nue: finalEditable) { diffs.append(d) }
-            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Stock", ant: producto.cantidad, nue: cantidad) { diffs.append(d) }
             if let d = HistorialLogger.generarDiffCambioTexto(campo: "Categoría", ant: producto.categoria, nue: categoria) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Unidad", ant: producto.unidadDeMedida, nue: unidadDeMedida) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Contenido", ant: producto.contenidoNeto, nue: Double(contenidoNetoString.replacingOccurrences(of: ",", with: ".")) ?? 0) { diffs.append(d) }
             if let d = HistorialLogger.generarDiffCambioTexto(campo: "Proveedor", ant: producto.proveedor, nue: proveedor) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Lote", ant: producto.lote, nue: lote) { diffs.append(d) }
+            
+            // Caducidad
+            if producto.fechaCaducidad != fechaCaducidad {
+                let antStr = producto.fechaCaducidad?.formatted(date: .numeric, time: .omitted) ?? "N/A"
+                let nueStr = fechaCaducidad?.formatted(date: .numeric, time: .omitted) ?? "N/A"
+                diffs.append("- Caducidad: \(antStr) -> \(nueStr)")
+            }
+
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Costo", ant: producto.costo, nue: costo) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Stock", ant: producto.cantidad, nue: cantidad) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Información", ant: producto.informacion, nue: informacion) { diffs.append(d) }
+            
+            // Financieros (% y Precios)
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "% Margen", ant: producto.porcentajeMargenSugerido, nue: pMargen) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "% G. Admin", ant: producto.porcentajeGastosAdministrativos, nue: pAdmin) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "% ISR", ant: producto.isrPorcentajeEstimado, nue: pISR) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Precio Final", ant: producto.precioVenta, nue: finalEditable) { diffs.append(d) }
             
             if !diffs.isEmpty {
                  HistorialLogger.logAutomatico(
