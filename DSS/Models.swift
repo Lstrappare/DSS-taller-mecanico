@@ -10,6 +10,20 @@ enum Rol: String, CaseIterable, Codable {
     case ayudante = "Ayudante"
 }
 
+// MARK: - Enums Historial Decisiones
+enum TipoDecision: String, Codable, CaseIterable {
+    case manual = "Manual"
+    case automaticoSistema = "Automático (Sistema)"
+}
+
+enum CategoriaDecision: String, Codable, CaseIterable {
+    case general = "General"
+    case personal = "Personal"
+    case inventario = "Inventario"
+    case servicio = "Servicio"
+    case programacion = "Programación/Flujo"
+}
+
 // Disponibilidad operacional (UI de asignaciones)
 enum EstadoEmpleado: String, CaseIterable, Codable {
     case disponible = "Disponible"
@@ -764,12 +778,32 @@ class DecisionRecord {
     var titulo: String
     var razon: String
     var queryUsuario: String
+    
+    // Nuevos campos para historial rico
+    var tipo: TipoDecision = TipoDecision.manual
+    var categoria: CategoriaDecision = CategoriaDecision.general
+    var entidadAfectada: String? // Nombre o ID de lo que cambió
 
-    init(fecha: Date, titulo: String, razon: String, queryUsuario: String) {
+    init(fecha: Date, 
+         titulo: String, 
+         razon: String, 
+         queryUsuario: String,
+         tipo: TipoDecision = TipoDecision.manual,
+         categoria: CategoriaDecision = CategoriaDecision.general,
+         entidadAfectada: String? = nil) {
+        
         self.fecha = fecha
         self.titulo = titulo
         self.razon = razon
         self.queryUsuario = queryUsuario
+        self.tipo = tipo
+        self.categoria = categoria
+        self.entidadAfectada = entidadAfectada
+        
+        // Retrocompatibilidad para datos existentes al init (lógica de negocio si fuera necesario)
+        if queryUsuario.lowercased().contains("manual") {
+            self.tipo = .manual
+        }
     }
 }
 
@@ -910,3 +944,4 @@ class Cliente {
         self.email = email
     }
 }
+

@@ -1587,6 +1587,12 @@ struct PersonalFormView: View {
                     .buttonStyle(.plain)
                     .alert(activo ? "¿Dar de baja?" : "¿Reactivar?", isPresented: $showingStatusAlert) {
                         Button(activo ? "Dar de baja" : "Reactivar", role: .destructive) {
+                            // Log Cambio de Estatus
+                            let nombreMec = mecanicoAEditar?.nombre ?? "Desconocido"
+                            let tituloLog = activo ? "Baja de Personal" : "Reactivación de Personal"
+                            let detalleLog = activo ? "El empleado \(nombreMec) fue dado de baja manual." : "El empleado \(nombreMec) fue reactivado."
+                            HistorialLogger.logAutomatico(context: modelContext, titulo: tituloLog, detalle: detalleLog, categoria: .personal, entidadAfectada: nombreMec)
+                            
                             if activo {
                                 activo = false
                                 fechaBaja = Date()
@@ -1985,6 +1991,22 @@ struct PersonalFormView: View {
         horasSemanalesRequeridas = 48
         
         if let mec = mecanicoAEditar {
+            // Log de Edición (Diffs)
+            var diffs: [String] = []
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Nombre", ant: mec.nombre, nue: nombreNormalizado) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Rol", ant: mec.rol.rawValue, nue: rol.rawValue) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Email", ant: mec.email, nue: email.trimmingCharacters(in: .whitespacesAndNewlines)) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Salario Ref", ant: mec.salarioMinimoReferencia, nue: salarioDiarioBase) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Tipo Salario", ant: mec.tipoSalario.rawValue, nue: tipoSalario.rawValue) { diffs.append(d) }
+            
+            if !diffs.isEmpty {
+                 HistorialLogger.logAutomatico(context: modelContext, 
+                                               titulo: "Actualización de Personal: \(mec.nombre)",
+                                               detalle: "Cambios realizados:\n" + diffs.joined(separator: "\n"),
+                                               categoria: .personal,
+                                               entidadAfectada: mec.nombre)
+            }
+            
             mec.nombre = nombreNormalizado
             mec.email = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             mec.telefono = telefono.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2036,6 +2058,13 @@ struct PersonalFormView: View {
             horasSemanalesRequeridas = mec.horasSemanalesRequeridas
             manoDeObraSugerida = mec.manoDeObraSugerida
         } else {
+            // Log de Creación
+            HistorialLogger.logAutomatico(context: modelContext, 
+                                          titulo: "Nuevo Personal Registrado",
+                                          detalle: "Se dio de alta a \(nombreNormalizado) con el rol \(rolSeleccion?.rawValue ?? "N/A").",
+                                          categoria: .personal,
+                                          entidadAfectada: nombreNormalizado)
+
             let finalRFC = rfc.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             if let temp = tempFolderID, temp.hasPrefix("TEMP-"), finalRFC != temp {
                 moveAllDocsIfNeeded(fromTemp: temp, toRFC: finalRFC)
@@ -2151,6 +2180,8 @@ struct PersonalFormView: View {
             isRFCUnlocked = true
         case .deleteEmployee:
             if case .edit(let mecanico) = mode {
+                let nombreMec = mecanico.nombre
+                HistorialLogger.logAutomatico(context: modelContext, titulo: "Personal Eliminado", detalle: "Se eliminó definitivamente al empleado \(nombreMec) del sistema.", categoria: .personal, entidadAfectada: nombreMec)
                 modelContext.delete(mecanico)
             }
             dismiss()

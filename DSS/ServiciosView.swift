@@ -1102,13 +1102,13 @@ struct ProgramarServicioModal: View {
         modelContext.insert(ticket)
         
         let accion = empezarAhora ? "Iniciado (Inmediato)" : "Programado"
-        let registro = DecisionRecord(
-            fecha: Date(),
+        HistorialLogger.logAutomatico(
+            context: modelContext,
             titulo: "\(accion): \(servicio.nombre)",
-            razon: "Asignado a \(candidato.nombre) para vehículo [\(vehiculo.placas)].",
-            queryUsuario: "Programación/Asignación desde Modal Unificado"
+            detalle: "Asignado a \(candidato.nombre) para vehículo [\(vehiculo.placas)].",
+            categoria: .programacion,
+            entidadAfectada: servicio.nombre
         )
-        modelContext.insert(registro)
         
         // NUEVO: Incrementar contador Top 5 si empieza ahora
         if empezarAhora {
@@ -1905,6 +1905,16 @@ struct ServicioFormView: View {
         }
         .alert(activo ? "¿Quitar temporalmente?" : "¿Devolver al inventario?", isPresented: $showingStatusAlert) {
             Button(activo ? "Quitar temporalmente" : "Devolver al inventario", role: .destructive) {
+                if let s = servicioAEditar {
+                     let nuevoEstado = !activo
+                     HistorialLogger.logAutomatico(
+                        context: modelContext,
+                        titulo: nuevoEstado ? "Servicio Reactivado" : "Baja Temporal de Servicio",
+                        detalle: "El servicio \(s.nombre) cambió a estado \(nuevoEstado ? "Activo" : "Inactivo (Baja)").",
+                        categoria: .servicio,
+                        entidadAfectada: s.nombre
+                     )
+                }
                 activo.toggle()
             }
             Button("Cancelar", role: .cancel) { }
@@ -2080,6 +2090,25 @@ struct ServicioFormView: View {
             servicio.aplicarISR = aplicarISR
             servicio.isrPorcentajeEstimado = pISR
             
+            // Log de Actualización
+            var diffs: [String] = []
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Nombre", ant: servicio.nombre, nue: trimmedNombre) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Descripción", ant: servicio.descripcion, nue: descripcion) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Precio Final", ant: servicio.precioFinalAlCliente, nue: final) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Duración", ant: servicio.duracionHoras, nue: duracion) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Rol", ant: servicio.rolRequerido.rawValue, nue: rol.rawValue) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Ganancia", ant: servicio.gananciaDeseada, nue: ganancia) { diffs.append(d) }
+
+            if !diffs.isEmpty {
+                HistorialLogger.logAutomatico(
+                    context: modelContext,
+                    titulo: "Actualización de Servicio: \(servicio.nombre)",
+                    detalle: "Cambios realizados:\n" + diffs.joined(separator: "\n"),
+                    categoria: .servicio,
+                    entidadAfectada: servicio.nombre
+                )
+            }
+            
             servicio.precioFinalAlCliente = final
            if nombreInvalido || duracionInvalida || costoMOInvalido || gananciaInvalida || gastosAdminInvalido || costoRefInvalido || pISRInvalido || especialidadRequerida.isEmpty || rolRequerido == nil {
             errorMsg = "Por favor corrige los campos marcados en rojo."
@@ -2116,11 +2145,26 @@ struct ServicioFormView: View {
                 activo: activo
             )
             modelContext.insert(nuevoServicio)
+            
+            HistorialLogger.logAutomatico(
+                context: modelContext,
+                titulo: "Nuevo Servicio Creado",
+                detalle: "Se registró el servicio \(trimmedNombre) (Precio: $\(final), Duración: \(duracion)h).",
+                categoria: .servicio,
+                entidadAfectada: trimmedNombre
+            )
         }
         dismiss()
     }
     
     func eliminarServicio(_ servicio: Servicio) {
+        HistorialLogger.logAutomatico(
+            context: modelContext,
+            titulo: "Servicio Eliminado",
+            detalle: "Se eliminó definitivamente el servicio \(servicio.nombre).",
+            categoria: .servicio,
+            entidadAfectada: servicio.nombre
+        )
         modelContext.delete(servicio)
         dismiss()
     }

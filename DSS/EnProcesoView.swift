@@ -572,13 +572,13 @@ struct EnProcesoView: View {
         // Usar la lógica de horario laboral para calcular el fin estimado real
         ticket.horaFinEstimada = mecanico.calcularFechaFin(inicio: ahora, duracionHoras: ticket.duracionHoras)
         
-        let registro = DecisionRecord(
-            fecha: Date(),
+        HistorialLogger.logAutomatico(
+            context: modelContext,
             titulo: "Auto-iniciado: \(ticket.nombreServicio)",
-            razon: "Ticket programado iniciado para [\(ticket.vehiculo?.placas ?? "N/A")] por \(mecanico.nombre).",
-            queryUsuario: "Scheduler de Programados"
+            detalle: "Ticket programado iniciado para [\(ticket.vehiculo?.placas ?? "N/A")] por \(mecanico.nombre).",
+            categoria: .programacion,
+            entidadAfectada: ticket.nombreServicio
         )
-        modelContext.insert(registro)
         
         // NUEVO: Incrementar contador Top 5
         if let serv = servicios.first(where: { $0.nombre == ticket.nombreServicio }) {
@@ -670,13 +670,13 @@ struct EnProcesoView: View {
         // Usar la lógica de horario laboral para calcular el fin estimado real
         ticket.horaFinEstimada = mecanico.calcularFechaFin(inicio: ahora, duracionHoras: ticket.duracionHoras)
         
-        let registro = DecisionRecord(
-            fecha: Date(),
+        HistorialLogger.logAutomatico(
+            context: modelContext,
             titulo: "Iniciado: \(ticket.nombreServicio)",
-            razon: "Ticket iniciado para [\(ticket.vehiculo?.placas ?? "N/A")] por \(mecanico.nombre).",
-            queryUsuario: "Inicio manual de ticket programado"
+            detalle: "Ticket iniciado para [\(ticket.vehiculo?.placas ?? "N/A")] por \(mecanico.nombre).",
+            categoria: .programacion,
+            entidadAfectada: ticket.nombreServicio
         )
-        modelContext.insert(registro)
         
         // NUEVO: Incrementar contador Top 5
         if let serv = servicios.first(where: { $0.nombre == ticket.nombreServicio }) {
@@ -686,13 +686,13 @@ struct EnProcesoView: View {
     
     private func cancelarTicket(_ ticket: ServicioEnProceso) {
         ticket.estado = .cancelado
-        let registro = DecisionRecord(
-            fecha: Date(),
+        HistorialLogger.logAutomatico(
+            context: modelContext,
             titulo: "Cancelado: \(ticket.nombreServicio)",
-            razon: "Se canceló el ticket programado para [\(ticket.vehiculo?.placas ?? "N/A")].",
-            queryUsuario: "Cancelación de ticket"
+            detalle: "Se canceló el ticket programado para [\(ticket.vehiculo?.placas ?? "N/A")].",
+            categoria: .programacion,
+            entidadAfectada: ticket.nombreServicio
         )
-        modelContext.insert(registro)
     }
     
     // MARK: - UI Helpers
@@ -1095,13 +1095,13 @@ fileprivate struct ProgramarTicketModal: View {
         ticket.rfcMecanicoSugerido = candidato.rfc
         ticket.nombreMecanicoSugerido = candidato.nombre
         
-        let registro = DecisionRecord(
-            fecha: Date(),
+        HistorialLogger.logAutomatico(
+            context: modelContext,
             titulo: "Reprogramado: \(ticket.nombreServicio)",
-            razon: "Sugerido para \(candidato.nombre) el \(fechaInicio.formatted(date: .abbreviated, time: .shortened)) para vehículo [\(ticket.vehiculo?.placas ?? "N/A")].",
-            queryUsuario: "Reprogramación de Ticket"
+            detalle: "Sugerido para \(candidato.nombre) el \(fechaInicio.formatted(date: .abbreviated, time: .shortened)) para vehículo [\(ticket.vehiculo?.placas ?? "N/A")].",
+            categoria: .programacion,
+            entidadAfectada: ticket.nombreServicio
         )
-        modelContext.insert(registro)
         dismiss()
     }
 }
@@ -1474,13 +1474,13 @@ fileprivate struct CierreServicioModalView: View {
                 mecanico.comisiones += montoMO
                 mecanico.recalcularYActualizarSnapshots()
                 
-                let registroComision = DecisionRecord(
-                    fecha: Date(),
+                HistorialLogger.logAutomatico(
+                    context: modelContext,
                     titulo: "Comisión sumada: \(servicioCatalogo.nombre)",
-                    razon: "Se sumaron $\(String(format: "%.2f", montoMO)) de mano de obra al empleado \(mecanico.nombre) (RFC \(mecanico.rfc)).",
-                    queryUsuario: "Cierre de Servicio"
+                    detalle: "Se sumaron $\(String(format: "%.2f", montoMO)) de mano de obra al empleado \(mecanico.nombre) (RFC \(mecanico.rfc)).",
+                    categoria: .personal,
+                    entidadAfectada: mecanico.nombre
                 )
-                modelContext.insert(registroComision)
                 
                 // NUEVO: Incrementar servicios realizados para el Top 5
                 mecanico.serviciosRealizados += 1
@@ -1498,17 +1498,17 @@ fileprivate struct CierreServicioModalView: View {
             }
         }
         
-        let registro = DecisionRecord(
-            fecha: Date(),
+        HistorialLogger.logAutomatico(
+            context: modelContext,
             titulo: "Completado: \(servicio.nombreServicio)",
-            razon: """
+            detalle: """
             Vehículo: [\(servicio.vehiculo?.placas ?? "N/A")] - \(servicio.vehiculo?.cliente?.nombre ?? "N/A")
             Asignado a: \(servicio.nombreMecanicoAsignado)
             Observaciones: \(observaciones.isEmpty ? "Sin observaciones." : observaciones)
             """,
-            queryUsuario: "Cierre de Servicio"
+            categoria: .servicio,
+            entidadAfectada: servicio.nombreServicio
         )
-        modelContext.insert(registro)
         modelContext.delete(servicio)
         dismiss()
     }

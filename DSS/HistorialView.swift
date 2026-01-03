@@ -77,9 +77,9 @@ struct HistorialView: View {
         case .todas:
             break // No filtrar nada extra
         case .automaticas:
-            base = base.filter { !$0.queryUsuario.lowercased().contains("manual") }
+            base = base.filter { $0.tipo == .automaticoSistema }
         case .manuales:
-            base = base.filter { $0.queryUsuario.lowercased().contains("manual") }
+            base = base.filter { $0.tipo == .manual }
         case .byDateRange:
             break // Se mezcla con todas, el rango aplica a todo
         }
@@ -100,7 +100,8 @@ struct HistorialView: View {
             base = base.filter { r in
                 r.titulo.lowercased().contains(q) ||
                 r.razon.lowercased().contains(q) ||
-                r.queryUsuario.lowercased().contains(q)
+                r.queryUsuario.lowercased().contains(q) ||
+                (r.entidadAfectada?.lowercased().contains(q) ?? false)
             }
         }
         
@@ -652,8 +653,17 @@ fileprivate struct HistorialCard: View {
     let onCopy: () -> Void
     
     private var isManual: Bool {
-        let q = registro.queryUsuario.lowercased()
-        return q.contains("manual")
+        return registro.tipo == .manual
+    }
+    
+    private var categoriaInfo: (icon: String, color: Color) {
+        switch registro.categoria {
+        case .general: return ("doc.text.fill", .gray)
+        case .personal: return ("person.2.fill", .blue)
+        case .inventario: return ("shippingbox.fill", .orange)
+        case .servicio: return ("wrench.and.screwdriver.fill", .purple)
+        case .programacion: return ("calendar.badge.clock", Color("MercedesPetrolGreen"))
+        }
     }
     
     var body: some View {
@@ -662,10 +672,22 @@ fileprivate struct HistorialCard: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
-                        badge(text: isManual ? "Decisión Manual" : "Automática", systemImage: isManual ? "pencil" : "bolt.fill")
-                        Text(registro.titulo)
-                            .font(.headline).fontWeight(.semibold)
+                        // Badge categoría
+                        badge(text: registro.categoria.rawValue, systemImage: categoriaInfo.icon, color: categoriaInfo.color)
+                        
+                        // Badge tipo
+                        if isManual {
+                            badge(text: "Manual", systemImage: "pencil", color: .yellow)
+                        } else {
+                            // Opcional: Badge Auto
+                            // badge(text: "Auto", systemImage: "gearshape.2", color: .gray)
+                        }
                     }
+                    
+                    Text(registro.titulo)
+                        .font(.headline).fontWeight(.semibold)
+                        .foregroundColor(.white)
+                    
                     // Fecha
                     HStack(spacing: 8) {
                         Label(registro.fecha.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
@@ -706,7 +728,7 @@ fileprivate struct HistorialCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(registro.razon)
                     .font(.body)
-                    .foregroundColor(.gray)
+                    .foregroundColor(Color(white: 0.9)) // Texto más claro para legibilidad
                     .lineLimit(isExpanded ? nil : 3)
                 Button(isExpanded ? "Ver menos" : "Ver más") {
                     onToggleExpand()
@@ -716,18 +738,20 @@ fileprivate struct HistorialCard: View {
                 .foregroundColor(Color("MercedesPetrolGreen"))
             }
             
-            // Origen / Consulta original
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: "quote.opening")
-                        .foregroundColor(.gray)
-                    Text("Origen")
-                        .font(.caption).foregroundColor(.gray)
+            // Origen / Consulta original (Mostrar solo si es relevante o diferente a "Sistema")
+            if !registro.queryUsuario.isEmpty && registro.queryUsuario != "Sistema Automático" && registro.queryUsuario != "N/A (Manual)" {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "quote.opening")
+                            .foregroundColor(.gray)
+                        Text("Origen")
+                            .font(.caption).foregroundColor(.gray)
+                    }
+                    Text(registro.queryUsuario)
+                        .font(.footnote)
+                        .foregroundColor(.gray.opacity(0.9))
+                        .italic()
                 }
-                Text(registro.queryUsuario.isEmpty ? "Sin consulta original registrada." : registro.queryUsuario)
-                    .font(.footnote)
-                    .foregroundColor(.gray.opacity(0.9))
-                    .italic()
             }
             
         }
@@ -744,16 +768,16 @@ fileprivate struct HistorialCard: View {
         .shadow(color: .black.opacity(0.1), radius: 6, x: 0, y: 3)
     }
     
-    private func badge(text: String, systemImage: String) -> some View {
+    private func badge(text: String, systemImage: String, color: Color) -> some View {
         HStack(spacing: 6) {
             Image(systemName: systemImage)
             Text(text)
         }
         .font(.caption2)
         .padding(.horizontal, 8).padding(.vertical, 4)
-        .background(Color("MercedesBackground"))
+        .background(color.opacity(0.2))
         .cornerRadius(6)
-        .foregroundColor(.white)
+        .foregroundColor(color)
     }
 }
 

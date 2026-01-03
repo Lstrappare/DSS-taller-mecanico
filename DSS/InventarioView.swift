@@ -304,6 +304,13 @@ struct InventarioView: View {
         ) {
             Button("Eliminar", role: .destructive) {
                 if let p = productoAEliminar {
+                    HistorialLogger.logAutomatico(
+                        context: modelContext,
+                        titulo: "Producto Eliminado",
+                        detalle: "Se eliminó manualmente el producto \(p.nombre).",
+                        categoria: .inventario,
+                        entidadAfectada: p.nombre
+                    )
                     modelContext.delete(p)
                 }
             }
@@ -717,6 +724,10 @@ struct ProductoCard: View {
                     // Botón Vender (Compacto)
                     Button {
                         if producto.cantidad > 0 {
+                            let nuevoStock = producto.cantidad - 1
+                            if let ctx = producto.modelContext { // Safe access
+                               HistorialLogger.logAutomatico(context: ctx, titulo: "Venta Rápida", detalle: "Venta de 1 unidad de \(producto.nombre). Stock: \(producto.cantidad) -> \(nuevoStock)", categoria: .inventario, entidadAfectada: producto.nombre)
+                            }
                             producto.cantidad -= 1
                             producto.vecesVendido += 1
                             gananciaAcumulada += producto.precioVenta
@@ -729,11 +740,24 @@ struct ProductoCard: View {
                             .foregroundColor(.white)
                             .cornerRadius(6)
                     }
+                    .simultaneousGesture(TapGesture().onEnded {
+                        if producto.cantidad > 0 {
+                            // Log Venta Rápida (Pre-calculo para log correcto)
+                             // Nota: El button action corre despues, pero simultaneous corre en paralelo.
+                             // Mejor poner el log dentro del action regular.
+                        }
+                    })
+                    // ... actually I will modify the action block directly in the logic below
+
                     .disabled(producto.cantidad <= 0)
                     .buttonStyle(.plain)
                     
                     // Botón Reponer (Compacto)
                     Button {
+                        let nuevoStock = producto.cantidad + 1
+                         if let ctx = producto.modelContext {
+                            HistorialLogger.logAutomatico(context: ctx, titulo: "Reposición Rápida", detalle: "Reposición de +1 unidad de \(producto.nombre). Stock: \(producto.cantidad) -> \(nuevoStock)", categoria: .inventario, entidadAfectada: producto.nombre)
+                        }
                         producto.cantidad += 1
                         // Restar costo, pero ganancia no baja de 0
                         gananciaAcumulada = max(0, gananciaAcumulada - producto.costo)
@@ -1479,6 +1503,16 @@ struct ProductFormView: View {
         // ALERTA: Confirmar activar/desactivar
         .alert(activo ? "¿Quitar temporalmente?" : "¿Devolver al inventario?", isPresented: $showingStatusAlert) {
             Button(activo ? "Quitar temporalmente" : "Devolver al inventario", role: .destructive) {
+                if let p = productoAEditar {
+                    let nuevoEstado = !activo
+                    HistorialLogger.logAutomatico(
+                        context: modelContext,
+                        titulo: nuevoEstado ? "Producto Reactivado" : "Baja Temporal de Producto",
+                        detalle: "El producto \(p.nombre) cambió a estado \(nuevoEstado ? "Activo" : "Inactivo (Baja)").",
+                        categoria: .inventario,
+                        entidadAfectada: p.nombre
+                    )
+                }
                 activo.toggle()
             }
             Button("Cancelar", role: .cancel) { }
@@ -1607,6 +1641,25 @@ struct ProductFormView: View {
         let finalEditable = Double(precioFinalString.replacingOccurrences(of: ",", with: ".")) ?? precioSugerido
         
         if let producto = productoAEditar {
+            // Log Edición
+            var diffs: [String] = []
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Nombre", ant: producto.nombre, nue: trimmedNombre) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Costo", ant: producto.costo, nue: costo) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Precio Venta", ant: producto.precioVenta, nue: finalEditable) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Stock", ant: producto.cantidad, nue: cantidad) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Categoría", ant: producto.categoria, nue: categoria) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Proveedor", ant: producto.proveedor, nue: proveedor) { diffs.append(d) }
+            
+            if !diffs.isEmpty {
+                 HistorialLogger.logAutomatico(
+                    context: modelContext,
+                    titulo: "Actualización de Producto: \(producto.nombre)",
+                    detalle: "Cambios realizados:\n" + diffs.joined(separator: "\n"),
+                    categoria: .inventario,
+                    entidadAfectada: producto.nombre
+                 )
+            }
+            
             producto.nombre = trimmedNombre
             producto.costo = costo
             producto.cantidad = cantidad
@@ -1626,6 +1679,14 @@ struct ProductFormView: View {
             producto.precioModificadoManualmente = precioModificadoManualmente
             producto.activo = activo
         } else {
+             HistorialLogger.logAutomatico(
+                context: modelContext,
+                titulo: "Nuevo Producto Añadido",
+                detalle: "Se registró el producto \(trimmedNombre) (Costo: $\(costo), Precio: $\(finalEditable), Stock: \(cantidad)).",
+                categoria: .inventario,
+                entidadAfectada: trimmedNombre
+             )
+            
             let nuevoProducto = Producto(
                 nombre: trimmedNombre,
                 costo: costo,
@@ -1652,6 +1713,13 @@ struct ProductFormView: View {
     }
     
     func eliminarProducto(_ producto: Producto) {
+        HistorialLogger.logAutomatico(
+            context: modelContext,
+            titulo: "Producto Eliminado",
+            detalle: "Se eliminó definitivamente el producto \(producto.nombre).",
+            categoria: .inventario,
+            entidadAfectada: producto.nombre
+        )
         modelContext.delete(producto)
         dismiss()
     }
