@@ -2070,6 +2070,50 @@ struct ServicioFormView: View {
         let final = Double(precioFinalString.replacingOccurrences(of: ",", with: ".")) ?? desglose.precioFinal
         
         if let servicio = servicioAEditar {
+            // Log de Actualización (Moved BEFORE assignments to capture old state)
+            var diffs: [String] = []
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Nombre", ant: servicio.nombre, nue: trimmedNombre) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Descripción", ant: servicio.descripcion, nue: descripcion) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Precio Final", ant: servicio.precioFinalAlCliente, nue: final) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Duración", ant: servicio.duracionHoras, nue: duracion) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Rol", ant: servicio.rolRequerido.rawValue, nue: rol.rawValue) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Especialidad", ant: servicio.especialidadRequerida, nue: especialidadRequerida) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Ganancia", ant: servicio.gananciaDeseada, nue: ganancia) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Gastos Admin", ant: servicio.gastosAdministrativos, nue: gastosAdmin) { diffs.append(d) }
+            
+            // Costos
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Costo Mano Obra", ant: servicio.costoManoDeObra, nue: costoMO) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioBool(campo: "Requiere Refacciones", ant: servicio.requiereRefacciones, nue: requiereRefacciones) { diffs.append(d) }
+            if requiereRefacciones {
+               if let d = HistorialLogger.generarDiffCambioNumero(campo: "Costo Refacciones", ant: servicio.costoRefacciones, nue: costoRef) { diffs.append(d) }
+            }
+            
+            // Impuestos
+            if let d = HistorialLogger.generarDiffCambioBool(campo: "Aplica IVA", ant: servicio.aplicarIVA, nue: aplicarIVA) { diffs.append(d) }
+            if let d = HistorialLogger.generarDiffCambioBool(campo: "Aplica ISR", ant: servicio.aplicarISR, nue: aplicarISR) { diffs.append(d) }
+            if aplicarISR {
+                if let d = HistorialLogger.generarDiffCambioNumero(campo: "% ISR", ant: servicio.isrPorcentajeEstimado, nue: pISR) { diffs.append(d) }
+            }
+            
+            // Ingredientes (Complejo)
+            let antIng = servicio.ingredientes.map { "\($0.nombreProducto): \($0.cantidadUsada)" }
+            let nueIng = ingredientesArray.map { "\($0.nombreProducto): \($0.cantidadUsada)" }
+            if let d = HistorialLogger.generarDiffArray(campo: "Productos Inventario", ant: antIng, nue: nueIng) { diffs.append(d) }
+            
+            // Costo Inventario (Calculado)
+            let costoInventarioAnterior = PricingHelpers.costoIngredientes(servicio: servicio, productos: productos)
+            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Costo Inventario", ant: costoInventarioAnterior, nue: costoIngredientes) { diffs.append(d) }
+
+            if !diffs.isEmpty {
+                HistorialLogger.logAutomatico(
+                    context: modelContext,
+                    titulo: "Actualización de Servicio: \(servicio.nombre)",
+                    detalle: "Cambios realizados:\n" + diffs.joined(separator: "\n"),
+                    categoria: .servicio,
+                    entidadAfectada: servicio.nombre
+                )
+            }
+
             // Actualiza todos los campos
             servicio.nombre = trimmedNombre
             servicio.descripcion = descripcion
@@ -2089,25 +2133,6 @@ struct ServicioFormView: View {
             servicio.aplicarIVA = aplicarIVA
             servicio.aplicarISR = aplicarISR
             servicio.isrPorcentajeEstimado = pISR
-            
-            // Log de Actualización
-            var diffs: [String] = []
-            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Nombre", ant: servicio.nombre, nue: trimmedNombre) { diffs.append(d) }
-            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Descripción", ant: servicio.descripcion, nue: descripcion) { diffs.append(d) }
-            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Precio Final", ant: servicio.precioFinalAlCliente, nue: final) { diffs.append(d) }
-            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Duración", ant: servicio.duracionHoras, nue: duracion) { diffs.append(d) }
-            if let d = HistorialLogger.generarDiffCambioTexto(campo: "Rol", ant: servicio.rolRequerido.rawValue, nue: rol.rawValue) { diffs.append(d) }
-            if let d = HistorialLogger.generarDiffCambioNumero(campo: "Ganancia", ant: servicio.gananciaDeseada, nue: ganancia) { diffs.append(d) }
-
-            if !diffs.isEmpty {
-                HistorialLogger.logAutomatico(
-                    context: modelContext,
-                    titulo: "Actualización de Servicio: \(servicio.nombre)",
-                    detalle: "Cambios realizados:\n" + diffs.joined(separator: "\n"),
-                    categoria: .servicio,
-                    entidadAfectada: servicio.nombre
-                )
-            }
             
             servicio.precioFinalAlCliente = final
            if nombreInvalido || duracionInvalida || costoMOInvalido || gananciaInvalida || gastosAdminInvalido || costoRefInvalido || pISRInvalido || especialidadRequerida.isEmpty || rolRequerido == nil {
