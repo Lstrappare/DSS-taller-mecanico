@@ -726,16 +726,20 @@ fileprivate struct HistorialCard: View {
             
             // Razón (colapsable)
             VStack(alignment: .leading, spacing: 6) {
+                let shouldTruncate = registro.razon.count > 180
                 Text(registro.razon)
                     .font(.body)
-                    .foregroundColor(Color(white: 0.9)) // Texto más claro para legibilidad
+                    .foregroundColor(Color(white: 0.9))
                     .lineLimit(isExpanded ? nil : 3)
-                Button(isExpanded ? "Ver menos" : "Ver más") {
-                    onToggleExpand()
+                
+                if shouldTruncate {
+                    Button(isExpanded ? "Ver menos" : "Ver más") {
+                        onToggleExpand()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
                 }
-                .buttonStyle(.plain)
-                .font(.caption)
-                .foregroundColor(Color("MercedesPetrolGreen"))
             }
             
             // Origen / Consulta original (Mostrar solo si es relevante o diferente a "Sistema")
