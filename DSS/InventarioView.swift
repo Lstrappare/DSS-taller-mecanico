@@ -278,17 +278,6 @@ struct InventarioView: View {
                         .foregroundColor(.white)
                 }
                 Spacer()
-                // Ganancias (Badge)
-                HStack(spacing: 4) {
-                    Image(systemName: "dollarsign.circle.fill")
-                        .foregroundColor(Color("MercedesPetrolGreen"))
-                    Text("Ganancias Aproximadas: $\(gananciaAcumulada, specifier: "%.2f")")
-                        .font(.caption).fontWeight(.bold)
-                        .foregroundColor(Color("MercedesPetrolGreen"))
-                }
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(Color.white.opacity(0.9))
-                .cornerRadius(6)
             }
             .padding(.horizontal, 4)
 
