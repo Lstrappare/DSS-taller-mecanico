@@ -500,14 +500,33 @@ struct AccountSettingsView: View {
         }
         
         do {
+            // Eliminar Modelos Principales
             try modelContext.delete(model: Personal.self)
             try modelContext.delete(model: Producto.self)
             try modelContext.delete(model: Servicio.self)
             try modelContext.delete(model: DecisionRecord.self)
+            
+            // Eliminar Clientes y Vehículos (NUEVO)
+            try modelContext.delete(model: Cliente.self)
+            try modelContext.delete(model: Vehiculo.self)
+            
+            // Eliminar Historial y Memoria de IA (NUEVO)
+            try modelContext.delete(model: ChatMessage.self)
+            
+            // Eliminar Servicios en Proceso y Configuraciones (NUEVO)
+            try modelContext.delete(model: ServicioEnProceso.self)
+            try modelContext.delete(model: AsistenciaDiaria.self)
+            //try modelContext.delete(model: PayrollSettings.self)
+            
         } catch {
             print("Error al borrar la base de datos: \(error)")
         }
         
+        // Resetear Ganancias Aproximadas (Inventario y Servicios) a 0
+        UserDefaults.standard.set(0.0, forKey: "gananciaAcumulada")
+        UserDefaults.standard.set(0.0, forKey: "gananciaServiciosAcumulada")
+        
+        // Resetear Credenciales y Estado
         userName = ""
         userRfc = ""
         userPassword = ""
