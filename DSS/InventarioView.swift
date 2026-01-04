@@ -110,6 +110,11 @@ struct InventarioView: View {
     @State private var mostrandoConfirmacionBorrado = false
     @State private var showingDependencyAlert = false
     @State private var dependencyAlertMessage = ""
+
+    // NUEVO: Estado para reposición personalizada
+    @State private var showingReplenishAlert = false
+    @State private var productToReplenish: Producto?
+    @State private var replenishQuantityString = ""
     
     // NUEVO: Filtro de activos
     @State private var incluirInactivos = false
@@ -276,6 +281,11 @@ struct InventarioView: View {
                                         productoAEliminar = producto
                                         mostrandoConfirmacionBorrado = true
                                     }
+                                },
+                                onReplenish: {
+                                    productToReplenish = producto
+                                    replenishQuantityString = ""
+                                    showingReplenishAlert = true
                                 }
                             )
                             .transition(.opacity.combined(with: .move(edge: .top)))
@@ -322,6 +332,44 @@ struct InventarioView: View {
             Button("Entendido", role: .cancel) { }
         } message: {
             Text(dependencyAlertMessage)
+        }
+        .alert("Reponer Stock", isPresented: $showingReplenishAlert) {
+            TextField("Cantidad a sumar", text: $replenishQuantityString)
+            Button("Cancelar", role: .cancel) {
+                productToReplenish = nil
+                replenishQuantityString = ""
+            }
+            Button("Reponer") {
+                if let producto = productToReplenish, let qty = Double(replenishQuantityString.replacingOccurrences(of: ",", with: ".")), qty > 0 {
+                    let costoTotal = qty * producto.costo
+                    let nuevoStock = producto.cantidad + qty
+                    
+                    // Actualizar stock
+                    producto.cantidad = nuevoStock
+                    
+                    // Descontar de ganancias
+                    gananciaAcumulada = max(0, gananciaAcumulada - costoTotal)
+                    
+                    // Log
+                    if let ctx = producto.modelContext {
+                        HistorialLogger.logAutomatico(
+                            context: ctx,
+                            titulo: "Reposición de Stock",
+                            detalle: "Se agregaron \(qty) unidades a \(producto.nombre). Costo total descontado: $\(String(format: "%.2f", costoTotal)). Nuevo stock: \(nuevoStock).",
+                            categoria: .inventario,
+                            entidadAfectada: producto.nombre
+                        )
+                    }
+                }
+                productToReplenish = nil
+                replenishQuantityString = ""
+            }
+        } message: {
+            if let p = productToReplenish {
+                Text("Ingresa la cantidad a sumar al stock actual de \(p.nombre).\nSe descontará el costo unitario ($\(String(format: "%.2f", p.costo))) por cada unidad de las ganancias acumuladas.")
+            } else {
+                Text("Ingresa la cantidad a sumar.")
+            }
         }
     }
     
@@ -611,6 +659,7 @@ struct ProductoCard: View {
     let lowStockThreshold: Double
     var onEdit: () -> Void
     var onDelete: () -> Void
+    var onReplenish: () -> Void
     
     // Acceso a Ganancias Globales
     @AppStorage("gananciaAcumulada") private var gananciaAcumulada: Double = 0.0
@@ -752,17 +801,11 @@ struct ProductoCard: View {
                     .disabled(producto.cantidad <= 0)
                     .buttonStyle(.plain)
                     
-                    // Botón Reponer (Compacto)
+                    // Botón Reponer (Personalizado)
                     Button {
-                        let nuevoStock = producto.cantidad + 1
-                         if let ctx = producto.modelContext {
-                            HistorialLogger.logAutomatico(context: ctx, titulo: "Reposición Rápida", detalle: "Reposición de +1 unidad de \(producto.nombre). Stock: \(producto.cantidad) -> \(nuevoStock)", categoria: .inventario, entidadAfectada: producto.nombre)
-                        }
-                        producto.cantidad += 1
-                        // Restar costo, pero ganancia no baja de 0
-                        gananciaAcumulada = max(0, gananciaAcumulada - producto.costo)
+                        onReplenish()
                     } label: {
-                        Label("Reponer (+1)", systemImage: "shippingbox.fill")
+                        Label("Reponer", systemImage: "shippingbox.fill")
                             .font(.caption)
                             .padding(.horizontal, 10).padding(.vertical, 5)
                             .background(Color("MercedesCard"))
@@ -778,11 +821,6 @@ struct ProductoCard: View {
                     Spacer()
                 }
                 
-                // Leyenda de reponer
-                Text("Usa Editar para reponer mayores cantidades.")
-                    .font(.caption2)
-                    .foregroundColor(.gray.opacity(0.7))
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.top, 4)
             
@@ -976,7 +1014,7 @@ struct ProductFormView: View {
     }
     private var cantidadInvalida: Bool {
         guard let v = Double(cantidadString.replacingOccurrences(of: ",", with: ".")) else { return true }
-        return v <= 0
+        return v < 0 // Permitir 0, pero no negativo
     }
     private var contenidoInvalido: Bool {
         guard let v = Double(contenidoNetoString.replacingOccurrences(of: ",", with: ".")) else { return true }
@@ -1241,15 +1279,29 @@ struct ProductFormView: View {
                                 }
                                 .validationHint(isInvalid: costoInvalido, message: "Debe ser mayor a 0.")
                                 .help("Costo unitario de adquisición")
-                            FormField(title: "• Cantidad en stock", placeholder: "0", text: $cantidadString)
-                                .onChange(of: cantidadString) { _, newValue in
-                                    let filtered = newValue.filter { "0123456789.,".contains($0) }
-                                    if filtered != newValue {
-                                        cantidadString = filtered
+                                .help("Costo unitario de adquisición")
+                            
+                            // Cantidad en Stock: Editable solo al crear (o si se requiere desbloquear lógica futura)
+                            // Requerimiento: Bloquear en edición. Solo reponer desde botón externo.
+                            VStack(alignment: .leading, spacing: 2) {
+                                FormField(title: "• Cantidad en stock", placeholder: "0", text: $cantidadString)
+                                    .disabled(productoAEditar != nil) // Bloqueado si es edición
+                                    .opacity(productoAEditar != nil ? 0.6 : 1.0)
+                                    .onChange(of: cantidadString) { _, newValue in
+                                        let filtered = newValue.filter { "0123456789.,".contains($0) }
+                                        if filtered != newValue {
+                                            cantidadString = filtered
+                                        }
                                     }
+                                    .validationHint(isInvalid: cantidadInvalida, message: "No puede ser negativo.")
+                                    .help(productoAEditar != nil ? "Usa el botón 'Reponer' en la lista para añadir stock." : "Cantidad inicial")
+                                
+                                if productoAEditar != nil {
+                                    Text("Para sumar stock, usa el botón 'Reponer' en la lista.")
+                                        .font(.caption2)
+                                        .foregroundColor(.orange)
                                 }
-                                .validationHint(isInvalid: cantidadInvalida, message: "Debe ser mayor a 0.")
-                                .help("Cantidad actual disponible")
+                            }
                         }
                         
                         FormField(title: "Información (opcional)", placeholder: "Notas adicionales...", text: $informacion, characterLimit: 51)
