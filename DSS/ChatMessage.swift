@@ -99,6 +99,7 @@ struct ConsultaView: View {
             VStack(spacing: 2) {
                 Text("La IA puede cometer errores. Por favor verifica las respuestas.")
                 Text("Entre más interactúes, el asistente responderá de manera más inteligente.")
+                Text("El historial de chat se borra al cerrar la app, pero la IA mantiene todo su contexto y aprendizaje.")
             }
             .font(.caption2)
             .foregroundColor(.gray)

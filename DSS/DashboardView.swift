@@ -439,7 +439,7 @@ struct EmptyStateHistoryCard: View {
                     Text("Historial de Decisiones")
                         .font(.title3).fontWeight(.bold).foregroundColor(.white)
                     if historialCount == 0 {
-                        Text("Aún no hay registros. Toma decisiones desde el asistente o al asignar servicios.")
+                        Text("Aún no hay registros. Toma decisiones automáticas al usar el sistema.")
                             .font(.subheadline).foregroundColor(.gray)
                     } else {
                         Text("Tienes \(historialCount) registro\(historialCount == 1 ? "" : "s").")
@@ -462,7 +462,7 @@ struct EmptyStateHistoryCard: View {
             HStack(spacing: 8) {
                 Image(systemName: "lightbulb.min")
                     .foregroundColor(Color("MercedesPetrolGreen"))
-                Text("Usa el asistente estratégico para generar decisiones informadas.")
+                Text("Usa el asistente estratégico para orientarte en el sistema.")
                     .font(.caption).foregroundColor(.gray)
             }
         }
