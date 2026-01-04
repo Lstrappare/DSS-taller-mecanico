@@ -57,8 +57,15 @@ struct ConsultaView: View {
     @State private var showingNotFoundError = false
     @State private var notFoundItemName = ""
 
+    // --- AUTENTICACIÓN (Protección de Limpiar Contexto) ---
+    @AppStorage("user_password") private var userPassword = ""
+    @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
     
-    // Límite de caracteres para el input del usuario
+    @State private var showingAuthModal = false
+    @State private var authError = ""
+    @State private var passwordAttempt = ""
+    // State para la alerta de confirmación
+    @State private var showResetConfirmAlert = false
     private let maxUserChars = 500
     
     // Tipos de Acción Detectados
@@ -150,6 +157,21 @@ struct ConsultaView: View {
         } message: {
             Text("Esta acción eliminará el historial de esta conversación.")
         }
+        // Alerta de advertencia para Limpiar Contexto (Reset Total)
+        .alert("¿Reiniciar Contexto de IA?", isPresented: $showResetConfirmAlert) {
+            Button("Continuar", role: .destructive) {
+                // Proceder a autenticación
+                showingAuthModal = true
+            }
+            Button("Cancelar", role: .cancel) { }
+        } message: {
+             Text("ADVERTENCIA: Al refrescarse el contexto se eliminará todo lo aprendido durante esta sesión y la IA volverá a aprender de cero.\n\nSe requiere autenticación para continuar.")
+        }
+        // Modal de Autenticación
+        .sheet(isPresented: $showingAuthModal) {
+            authModalView
+                .presentationDetents([.height(380), .medium])
+        }
         // Sheets para Acciones
         .sheet(item: $productModalMode) { mode in
             ProductFormView(mode: $productModalMode, initialMode: mode)
@@ -231,9 +253,10 @@ struct ConsultaView: View {
                             Label("Limpiar conversación", systemImage: "trash")
                         }
                         Button {
-                            Task { await service.refreshMasterContext(modelContext: modelContext) }
+                            // Ahora Limpiar Contexto es el Reset Total protegido
+                            showResetConfirmAlert = true
                         } label: {
-                            Label("Refrescar contexto", systemImage: "arrow.clockwise")
+                            Label("Limpiar Contexto (Reiniciar)", systemImage: "arrow.triangle.2.circlepath")
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -865,6 +888,92 @@ struct ConsultaView: View {
     private func clearConversation() {
         for m in messages {
             modelContext.delete(m)
+        }
+    }
+    
+    // MARK: - Authentication & Reset Logic
+    
+    // Vista del Modal de Autenticación
+    private var authModalView: some View {
+        ZStack {
+            Color("MercedesBackground").ignoresSafeArea()
+            VStack(spacing: 16) {
+                Text("Autorización Requerida").font(.title).fontWeight(.bold)
+                Text("Ingresa credenciales para reiniciar la IA.")
+                    .font(.callout)
+                    .foregroundColor(.gray)
+                
+                if isTouchIDEnabled {
+                    Button { Task { await authenticateWithTouchID() } } label: {
+                        Label("Usar Huella (Touch ID)", systemImage: "touchid")
+                            .font(.headline).padding().frame(maxWidth: .infinity)
+                            .background(Color("MercedesPetrolGreen")).foregroundColor(.white).cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    Text("o").foregroundColor(.gray)
+                }
+                
+                Text("Contraseña de administrador:").font(.subheadline)
+                SecureField("Contraseña", text: $passwordAttempt)
+                    .padding(10).background(Color("MercedesCard")).cornerRadius(8)
+                
+                if !authError.isEmpty {
+                    Text(authError).font(.caption2).foregroundColor(.red)
+                }
+                
+                Button { authenticateWithPassword() } label: {
+                    Label("Autorizar", systemImage: "lock.fill")
+                        .font(.headline).padding().frame(maxWidth: .infinity)
+                        .background(Color.gray.opacity(0.4)).foregroundColor(.white).cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                
+                Button("Cancelar") {
+                    showingAuthModal = false
+                    passwordAttempt = ""
+                    authError = ""
+                }
+                .padding(.top, 4)
+            }
+            .padding(28)
+        }
+        .preferredColorScheme(.dark)
+        .onAppear { authError = ""; passwordAttempt = "" }
+    }
+    
+    private func authenticateWithTouchID() async {
+        let context = LAContext()
+        do {
+            if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
+                let success = try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "Autoriza para reiniciar el contexto de la IA")
+                if success { await MainActor.run { performContextReset() } }
+            }
+        } catch { await MainActor.run { authError = "Huella no reconocida." } }
+    }
+    
+    private func authenticateWithPassword() {
+        if passwordAttempt == userPassword {
+            performContextReset()
+        } else {
+            authError = "Contraseña incorrecta."
+            passwordAttempt = ""
+        }
+    }
+    
+    private func performContextReset() {
+        showingAuthModal = false
+        passwordAttempt = ""
+        authError = ""
+        
+        // 1. Borrar historial
+        clearConversation()
+        
+        // 2. Refrescar prompt maestro y Reiniciar saludo
+        Task {
+            await service.refreshMasterContext(modelContext: modelContext)
+            await MainActor.run {
+                insertAssistantMessage("Contexto reiniciado exitosamente. He olvidado la conversación anterior y recargado los datos del negocio. ¿Cómo empezamos?")
+            }
         }
     }
     
