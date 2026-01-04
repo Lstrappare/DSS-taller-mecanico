@@ -93,9 +93,9 @@ final class AIStrategistService: ObservableObject {
         let clientes: [Cliente] = (try? modelContext.fetch(FetchDescriptor<Cliente>())) ?? []
         let tickets: [ServicioEnProceso] = (try? modelContext.fetch(FetchDescriptor<ServicioEnProceso>())) ?? []
         
-        // Últimas 50 decisiones
+        // Últimas 20 decisiones
         var decFetch = FetchDescriptor<DecisionRecord>(sortBy: [SortDescriptor(\.fecha, order: .reverse)])
-        decFetch.fetchLimit = 50
+        decFetch.fetchLimit = 20
         let decisiones: [DecisionRecord] = (try? modelContext.fetch(decFetch)) ?? []
         
         // Reducir y sintetizar
@@ -368,7 +368,7 @@ final class AIStrategistService: ObservableObject {
     
     private func buildHistorialSummary(_ arr: [DecisionRecord]) -> String {
         if arr.isEmpty { return "- Sin historial." }
-        return arr.prefix(50).map { "- \($0.fecha.formatted(date: .numeric, time: .omitted)): \($0.titulo)" }.joined(separator: "\n")
+        return arr.prefix(5).map { "- \($0.fecha.formatted(date: .numeric, time: .omitted)): \($0.titulo)" }.joined(separator: "\n")
     }
     
     // MARK: - Chat

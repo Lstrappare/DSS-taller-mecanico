@@ -42,7 +42,7 @@ struct HistorialView: View {
     @State private var showingDatePicker = false
     
     // Ordenamiento
-    @State private var sortAscending: Bool = true // Por defecto fechas recientes primero (Descendente en Fecha)
+    @State private var sortAscending: Bool = false // Por defecto fechas recientes primero (Descendente en Fecha)
     enum SortOption: String, CaseIterable, Identifiable {
         case fecha = "Fecha"
         case titulo = "Título"
