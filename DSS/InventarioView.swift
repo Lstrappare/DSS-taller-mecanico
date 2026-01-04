@@ -115,7 +115,8 @@ struct InventarioView: View {
     @State private var showingReplenishAlert = false
     @State private var productToReplenish: Producto?
     @State private var replenishQuantityString = ""
-    
+
+
     // NUEVO: Filtro de activos
     @State private var incluirInactivos = false
 
@@ -131,6 +132,14 @@ struct InventarioView: View {
     }
     @State private var sortOption: SortOption = .nombre
     @State private var sortAscending: Bool = true
+    
+    // NUEVO: Estados de Autenticación
+    @AppStorage("user_password") private var userPassword = ""
+    @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
+    @State private var showingAuthModal = false
+    @State private var passwordAttempt = ""
+    @State private var authError = ""
+    @State private var pendingAuthAction: (() -> Void)? = nil
     
     // Configuración de UI
     private let lowStockThreshold: Double = 2.0
@@ -218,6 +227,44 @@ struct InventarioView: View {
         return nil
     }
 
+
+
+    // MARK: - Helper de Autenticación
+    private func authenticateUser(reason: String, onSuccess: @escaping () -> Void) {
+        if isTouchIDEnabled {
+            let context = LAContext()
+            var error: NSError?
+            
+            if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+                context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, authenticationError in
+                    DispatchQueue.main.async {
+                        if success {
+                            onSuccess()
+                        } else {
+                            // Si falla TouchID, mostrar modal de contraseña
+                            self.pendingAuthAction = onSuccess
+                            self.passwordAttempt = ""
+                            self.authError = ""
+                            self.showingAuthModal = true
+                        }
+                    }
+                }
+            } else {
+                // No hay TouchID, ir directo a contraseña
+                self.pendingAuthAction = onSuccess
+                self.passwordAttempt = ""
+                self.authError = ""
+                self.showingAuthModal = true
+            }
+        } else {
+            // TouchID deshabilitado, ir a contraseña
+            self.pendingAuthAction = onSuccess
+            self.passwordAttempt = ""
+            self.authError = ""
+            self.showingAuthModal = true
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Header compacto
@@ -302,6 +349,68 @@ struct InventarioView: View {
             LinearGradient(colors: [Color("MercedesBackground"), Color("MercedesBackground").opacity(0.9)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
         )
+        // Modal de Contraseña
+        .sheet(isPresented: $showingAuthModal) {
+            VStack(spacing: 20) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 48))
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                
+                Text("Autenticación Requerida")
+                    .font(.title2).fontWeight(.bold)
+                
+                Text("Ingresa tu contraseña para continuar.")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                
+                SecureField("Contraseña", text: $passwordAttempt)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .padding()
+                    .background(Color("MercedesBackground"))
+                    .cornerRadius(8)
+                    .onSubmit {
+                        if passwordAttempt == userPassword {
+                            showingAuthModal = false
+                            pendingAuthAction?()
+                            pendingAuthAction = nil
+                        } else {
+                            authError = "Contraseña incorrecta"
+                        }
+                    }
+                
+                if !authError.isEmpty {
+                    Text(authError)
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
+                
+                HStack {
+                    Button("Cancelar") {
+                        showingAuthModal = false
+                        pendingAuthAction = nil
+                    }
+                    .foregroundColor(.red)
+                    
+                    Spacer()
+                    
+                    Button("Verificar") {
+                        if passwordAttempt == userPassword {
+                            showingAuthModal = false
+                            pendingAuthAction?()
+                            pendingAuthAction = nil
+                        } else {
+                            authError = "Contraseña incorrecta"
+                        }
+                    }
+                    .fontWeight(.bold)
+                    .foregroundColor(Color("MercedesPetrolGreen"))
+                }
+                .padding(.top)
+            }
+            .padding(32)
+            .frame(width: 350)
+            .presentationDetents([.height(350)])
+        }
         .sheet(item: $modalMode) { mode in
             ProductFormView(mode: $modalMode, initialMode: mode)
                 .environment(\.modelContext, modelContext)
@@ -371,6 +480,7 @@ struct InventarioView: View {
                 Text("Ingresa la cantidad a sumar.")
             }
         }
+
     }
     
     private var header: some View {
@@ -760,6 +870,12 @@ struct ProductoCard: View {
                 chip(text: producto.unidadDeMedida, icon: "cube.box.fill")
                 if !producto.proveedor.isEmpty { chip(text: producto.proveedor, icon: "building.2.fill") }
                 if !producto.lote.isEmpty { chip(text: "Lote \(producto.lote)", icon: "number") }
+                
+                // Ventas
+                HStack(spacing: 4) {
+                    chip(text: "Ventas: \(producto.vecesVendido)", icon: "chart.bar.fill", color: .gray)
+                }
+                
                 if isLowStock {
                     chip(text: "Reponer", icon: "exclamationmark.triangle.fill", color: .red)
                 }
@@ -826,21 +942,16 @@ struct ProductoCard: View {
             
             // Footer acciones
             HStack(alignment: .bottom) {
-                // Info Stock
-                Text("Cantidad en Stock: \(producto.cantidad, specifier: "%.2f")")
-                    .font(.caption2).foregroundColor(.gray)
-                
                 Spacer()
                 
-                // Precio (Arriba) y Fecha (Abajo) en esquina inferior derecha
+                // Precio (Arriba), Stock (Medio) y Fecha (Abajo) en esquina inferior derecha
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("Precio de venta: $\(producto.precioVenta, specifier: "%.2f")")
                         .font(.headline).fontWeight(.bold)
                         .foregroundColor(.white)
-                    // Mostrar costo discreto debajo del precio o al lado? El usuario prioriza precio.
-                    // Lo pondré pequeño si cabe, o solo precio. "El precio lo puedes poner arriba de la fecha".
-                    // Voy a omitir costo aquí para no saturar, o ponerlo muy pequeño.
-                    // Mejor solo precio y fecha como pidió explicitamente.
+                    
+                    Text("Cantidad en Stock: \(producto.cantidad, specifier: "%.2f")")
+                        .font(.caption2).foregroundColor(.gray)
                     
                     if let cad = producto.fechaCaducidad {
                         HStack(spacing: 4) {
@@ -944,10 +1055,14 @@ struct ProductFormView: View {
     @State private var showingStatusAlert = false
     @State private var showingDependencyAlert = false
     @State private var dependencyAlertMessage = ""
+
+    // NUEVO: Edición de Ventas
+    @State private var vecesVendidoString = ""
+    @State private var isSalesUnlocked = false
     
     // Enum para la razón de la autenticación
     private enum AuthReason {
-        case unlockNombre, deleteProduct
+        case unlockNombre, deleteProduct, unlockSales
     }
     @State private var authReason: AuthReason = .unlockNombre
     
@@ -1093,7 +1208,7 @@ struct ProductFormView: View {
             // Título y guía
             VStack(spacing: 4) {
                 Text(formTitle).font(.title).fontWeight(.bold)
-                Text("Completa los datos básicos. IVA 16% fijo.")
+                Text("Completa los datos. Los campos marcados con '•' son obligatorios.")
                     .font(.footnote).foregroundColor(.gray)
             }
             .padding(16)
@@ -1426,6 +1541,53 @@ struct ProductFormView: View {
                         }
                     }
                     
+                    // Sección 4: Ventas (Protegido)
+                    VStack(alignment: .leading, spacing: 16) {
+                        SectionHeader(title: "4. Historial de Ventas", subtitle: "Ajuste manual (Protegido)")
+                        
+                        HStack(spacing: 16) {
+                            FormField(title: "Ventas Totales", placeholder: "0", text: $vecesVendidoString)
+                                .disabled(!isSalesUnlocked)
+                                .opacity(isSalesUnlocked ? 1.0 : 0.6)
+                                .onChange(of: vecesVendidoString) { _, newValue in
+                                    let filtered = newValue.filter { "0123456789".contains($0) }
+                                    if filtered != newValue {
+                                        vecesVendidoString = filtered
+                                    }
+                                }
+                                .help("Número total de veces que se ha vendido este producto.")
+                            
+                            if !isSalesUnlocked {
+                                Button {
+                                    authReason = .unlockSales
+                                    showingAuthModal = true
+                                } label: {
+                                    Text("Desbloquear")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.red)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.red.opacity(0.1))
+                                        .cornerRadius(4)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Desbloquear edición de ventas")
+                            } else {
+                                Image(systemName: "lock.open.fill")
+                                    .foregroundColor(.green)
+                                    .padding(.horizontal, 8)
+                                    .help("Edición habilitada")
+                            }
+                        }
+                        
+                        Text("Asegurate de colocar las ventas reales de este producto para que el sistema pueda ser más preciso")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Divider().background(Color.gray.opacity(0.3))
+
                     // Zona de Peligro
                     if let currentMode = mode, case .edit = currentMode {
                         Divider().background(Color.red.opacity(0.3))
@@ -1465,6 +1627,9 @@ struct ProductFormView: View {
             .onAppear {
                 if productoAEditar == nil {
                     precioFinalString = String(format: "%.2f", precioSugerido)
+                } else if let p = productoAEditar {
+                     // Cargar ventas
+                     vecesVendidoString = "\(p.vecesVendido)"
                 }
             }
             .onChange(of: costoString) { _, _ in syncFinalIfNotManual() }
@@ -1608,9 +1773,18 @@ struct ProductFormView: View {
     // --- VISTA: Modal de Autenticación ---
     @ViewBuilder
     func authModalView() -> some View {
-        let prompt = (authReason == .unlockNombre) ?
-            "Autoriza para editar el Nombre del Producto." :
-            "Autoriza para ELIMINAR este producto."
+        let prompt: String = {
+            switch authReason {
+            case .unlockNombre:
+                return "Autoriza para editar el Nombre del Producto."
+            case .deleteProduct:
+                return "Autoriza para ELIMINAR este producto."
+            case .unlockSales:
+                return "Autoriza para editar el Historial de Ventas."
+            @unknown default:
+                return "Autorización requerida."
+            }
+        }()
         
         ZStack {
             Color("MercedesBackground").ignoresSafeArea()
@@ -1746,6 +1920,22 @@ struct ProductFormView: View {
             // Precio final
             producto.precioVenta = finalEditable
             producto.precioModificadoManualmente = precioModificadoManualmente
+            
+            // Actualizar ventas si cambió (validando que sea Int)
+            if let newSales = Int(vecesVendidoString.trimmingCharacters(in: .whitespaces)), newSales >= 0 {
+                // Log en historial si hubo cambio
+                 if producto.vecesVendido != newSales {
+                    HistorialLogger.logAutomatico(
+                        context: modelContext,
+                        titulo: "Ajuste Manual de Ventas (Formulario)",
+                        detalle: "Se ajustaron las ventas de \(producto.nombre) de \(producto.vecesVendido) a \(newSales).",
+                        categoria: .inventario,
+                        entidadAfectada: producto.nombre
+                    )
+                     producto.vecesVendido = newSales
+                 }
+            }
+            
             producto.activo = activo
         } else {
              HistorialLogger.logAutomatico(
@@ -1796,7 +1986,12 @@ struct ProductFormView: View {
     // --- Lógica de Autenticación ---
     func authenticateWithTouchID() async {
         let context = LAContext()
-        let reason = (authReason == .unlockNombre) ? "Autoriza la edición del Nombre." : "Autoriza la ELIMINACIÓN del producto."
+        var reason = ""
+        switch authReason {
+            case .unlockNombre: reason = "Autoriza la edición del Nombre."
+            case .deleteProduct: reason = "Autoriza la ELIMINACIÓN del producto."
+            case .unlockSales: reason = "Autoriza la edición de Ventas."
+        }
         do {
             if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) {
                 let success = try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason)
@@ -1822,6 +2017,10 @@ struct ProductFormView: View {
             if let currentMode = mode, case .edit(let producto) = currentMode {
                 eliminarProducto(producto)
             }
+        case .unlockSales:
+            isSalesUnlocked = true
+        @unknown default:
+            break
         }
         showingAuthModal = false
         authError = ""

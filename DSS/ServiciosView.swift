@@ -1409,7 +1409,7 @@ struct ServicioFormView: View {
             // Título y guía
             VStack(spacing: 4) {
                 Text(formTitle).font(.title).fontWeight(.bold)
-                Text("Completa los datos. Los campos marcados con • son obligatorios.")
+                Text("Completa los datos. Los campos marcados con '•' son obligatorios.")
                     .font(.footnote).foregroundColor(.gray)
             }
             .padding(16)

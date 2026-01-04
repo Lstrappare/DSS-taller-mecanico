@@ -590,7 +590,7 @@ struct ClienteConVehiculoFormView: View {
             // Título y guía
             VStack(spacing: 4) {
                 Text("Añadir Cliente y Vehículo").font(.title).fontWeight(.bold)
-                Text("Completa los datos. Los campos marcados con • son obligatorios.")
+                Text("Completa los datos. Los campos marcados con '•' son obligatorios.")
                     .font(.footnote).foregroundColor(.gray)
             }
             .padding(16)
@@ -926,7 +926,7 @@ struct ClienteFormView: View {
             // Título y guía
             VStack(spacing: 4) {
                 Text("Editar Cliente").font(.title).fontWeight(.bold)
-                Text("Autoriza para editar el teléfono si es necesario.")
+                Text("Completa los datos. Los campos marcados con '•' son obligatorios.")
                     .font(.footnote).foregroundColor(.gray)
             }
             .padding(16)
