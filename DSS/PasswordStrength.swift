@@ -1,3 +1,10 @@
+//
+//  PasswordStrength.swift
+//  DSS
+//
+// Copyright © 2026 José Manuel Cisneros Valero
+// Licensed under the Apache License, Version 2.0
+
 import SwiftUI
 
 // Calcula un puntaje de 0 a 4 para la contraseña

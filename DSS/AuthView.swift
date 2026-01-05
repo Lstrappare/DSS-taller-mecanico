@@ -2,8 +2,8 @@
 //  AuthView.swift
 //  DSS
 //
-//  Created by Jose Cisneros on 04/11/25.
-//
+// Copyright © 2026 José Manuel Cisneros Valero
+// Licensed under the Apache License, Version 2.0
 
 import SwiftUI
 

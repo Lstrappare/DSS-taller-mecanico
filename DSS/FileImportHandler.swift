@@ -2,8 +2,8 @@
 //  FileImportHandler.swift
 //  DSS
 //
-//  Created by AI Agent on 02/01/26.
-//
+// Copyright © 2026 José Manuel Cisneros Valero
+// Licensed under the Apache License, Version 2.0
 
 import Foundation
 import UniformTypeIdentifiers
