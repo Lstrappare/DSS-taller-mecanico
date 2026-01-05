@@ -43,7 +43,7 @@ fileprivate enum ViewMode: Equatable {
     }
 }
 
-// Helper de validación de nombre de cliente
+    // Helper de validación de nombre de cliente
 fileprivate func isNombreClienteValido(_ raw: String) -> Bool {
     // Reglas:
     // - Al menos 3 palabras
@@ -62,6 +62,26 @@ fileprivate func isNombreClienteValido(_ raw: String) -> Bool {
     // Además, que el nombre completo no contenga dígitos (redundante pero explícito)
     if raw.rangeOfCharacter(from: .decimalDigits) != nil { return false }
     return true
+}
+
+// Helper para verificar duplicidad de placas
+fileprivate func isPlacaDuplicada(_ placas: String, en clientes: [Cliente], ignorando vehiculoID: PersistentIdentifier? = nil) -> Bool {
+    let placasLimpias = placas.trimmingCharacters(in: .whitespaces).uppercased()
+    if placasLimpias.isEmpty { return false }
+    
+    for cliente in clientes {
+        for vehiculo in cliente.vehiculos {
+            // Si estamos ignorando un vehículo específico (edición), saltarlo
+            if let ignorar = vehiculoID, vehiculo.persistentModelID == ignorar {
+                continue
+            }
+            // Comparación no depende de ID, sino de contenido si no hay ID persistente aun (casos nuevos)
+            if vehiculo.placas.uppercased() == placasLimpias {
+                return true
+            }
+        }
+    }
+    return false
 }
 
 // --- VISTA PRINCIPAL (alineada a InventarioView) ---
@@ -571,6 +591,11 @@ struct ClienteConVehiculoFormView: View {
     private var placasInvalidas: Bool {
         placas.trimmingCharacters(in: .whitespaces).isEmpty
     }
+    // Nueva validación de duplicidad
+    private var placaDuplicada: Bool {
+        isPlacaDuplicada(placas, en: allClientes)
+    }
+    
     private var anioInvalido: Bool {
         guard let anio = Int(anioString) else { return true }
         let currentYear = Calendar.current.component(.year, from: Date())
@@ -707,6 +732,8 @@ struct ClienteConVehiculoFormView: View {
                                     }
                                 }
                                 .validationHint(isInvalid: placasInvalidas, message: "Requerido.")
+                                .validationHint(isInvalid: !placasInvalidas && placaDuplicada, message: "Esta placa ya está registrada.", color: .red)
+
                             FormField(title: "• Año", placeholder: "ej. 2020", text: $anioString, characterLimit: 4)
                                 .onChange(of: anioString) { _, newValue in
                                     let filtered = newValue.filter { $0.isNumber }
@@ -805,8 +832,8 @@ struct ClienteConVehiculoFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas)
-                .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas) ? 0.6 : 1.0)
+                .disabled(nombreInvalido || telefonoInvalido || placasInvalidas || placaDuplicada || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas)
+                .opacity((nombreInvalido || telefonoInvalido || placasInvalidas || placaDuplicada || anioInvalido || emailInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
@@ -1266,6 +1293,7 @@ struct ClienteFormView: View {
 struct VehiculoFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Query private var allClientes: [Cliente]
     
     @AppStorage("user_password") private var userPassword = ""
     @AppStorage("isTouchIDEnabled") private var isTouchIDEnabled = true
@@ -1291,6 +1319,12 @@ struct VehiculoFormView: View {
     // Bools de Validación
     private var placasInvalida: Bool {
         vehiculo.placas.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+    // Nueva validación de duplicidad
+    private var placaDuplicada: Bool {
+        // En edición, ignoramos el vehículo actual (vehiculo.persistentModelID)
+        let idIgnorar = esModoEdicion ? vehiculo.persistentModelID : nil
+        return isPlacaDuplicada(vehiculo.placas, en: allClientes, ignorando: idIgnorar)
     }
     private var anioInvalido: Bool {
         let currentYear = Calendar.current.component(.year, from: Date())
@@ -1411,6 +1445,7 @@ struct VehiculoFormView: View {
                                 }
                             }
                             .validationHint(isInvalid: placasInvalida, message: "Las placas son obligatorias.")
+                            .validationHint(isInvalid: !placasInvalida && placaDuplicada, message: "Esta placa ya está registrada.", color: .red)
                         }
                         
                         HStack(spacing: 16) {
@@ -1541,8 +1576,8 @@ struct VehiculoFormView: View {
                         .shadow(color: Color("MercedesPetrolGreen").opacity(0.3), radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(.plain)
-                .disabled(placasInvalida || anioInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas)
-                .opacity((placasInvalida || anioInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas) ? 0.6 : 1.0)
+                .disabled(placasInvalida || placaDuplicada || anioInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas)
+                .opacity((placasInvalida || placaDuplicada || anioInvalido || marcaInvalida || modeloInvalido || colorInvalido || observacionesInvalidas) ? 0.6 : 1.0)
             }
             .padding(20)
             .background(Color("MercedesCard"))
