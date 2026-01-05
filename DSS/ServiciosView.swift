@@ -483,8 +483,6 @@ fileprivate struct ServicioCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Label("\(productosCount) producto\(productosCount == 1 ? "" : "s")", systemImage: "shippingbox.fill")
-                    Spacer()
-                    Label("Costo insumos: $\(costoEstimado, specifier: "%.2f")", systemImage: "creditcard")
                 }
                 .font(.caption2)
                 .foregroundColor(.gray)
