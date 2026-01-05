@@ -43,7 +43,7 @@ Basado en los módulos del sistema, la aplicación ofrece:
 
 ## 🚀 Instalación
 
-1. Descarga el instalador `.dmg` desde la sección de [Releases](link-a-releases).
+1. Descarga el instalador `.dmg` desde la [página web](https://resplendent-crumble-dcd475.netlify.app): https://resplendent-crumble-dcd475.netlify.app
 2. Arrastra el icono de la aplicación a tu carpeta de **Aplicaciones**.
 3. Ejecuta la aplicación.
    * *Nota: Al ser una herramienta interna, asegúrate de tener los permisos necesarios en tu Mac.*
